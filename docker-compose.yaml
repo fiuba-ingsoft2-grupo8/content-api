@@ -25,9 +25,7 @@ services:
       start_period: 30s
 
   content-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: content-api:latest
     container_name: content-api
     restart: unless-stopped
     environment:

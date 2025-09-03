@@ -4,7 +4,7 @@ PWD := $(shell pwd)
 all:
 
 build-system:
-	docker build -f ./Dockerfile -t "api:latest" .
+	docker build -f ./Dockerfile -t "content-api:latest" .
 .PHONY: build-system
 
 up: build-system
