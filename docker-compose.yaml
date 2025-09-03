@@ -1,0 +1,54 @@
+name: melodia-content-api
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: db
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+      - ./src/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - melodia-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      interval: 30s
+      start_period: 30s
+
+  content-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: content-api
+    restart: unless-stopped
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      ENVIRONMENT: "production"
+      LOG_LEVEL: "INFO"
+      DATABASE_HOST: "mysql"
+      DATABASE_NAME: "db"
+      DATABASE_PORT: "3306"
+      DATABASE_USER: "user"
+      DATABASE_PASSWORD: "password"      
+      DATABASE_URL: mysql+pymysql://user:password@mysql:3306/db
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - melodia-network
+
+networks:
+  melodia-network:
+    driver: bridge
