@@ -1,3 +1,2 @@
-CREATE DATABASE IF NOT EXISTS db;
-USE db;
-ALTER DATABASE db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- PostgreSQL initialization script
+-- The database is already created by the container, just ensure proper encoding

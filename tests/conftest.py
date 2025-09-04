@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from testcontainers.mysql import MySqlContainer
+from testcontainers.postgres import PostgresContainer
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
@@ -14,15 +14,14 @@ from db.database import Base, get_db
 
 
 @pytest.fixture(scope="session")
-def mysql_container():
-    with MySqlContainer("mysql:8.0") as mysql:
-        yield mysql
+def postgres_container():
+    with PostgresContainer("postgres:15") as postgres:
+        yield postgres
 
 
 @pytest.fixture(scope="session")
-def engine(mysql_container):
-    dsn = mysql_container.get_connection_url()
-    dsn = dsn.replace("mysql://", "mysql+pymysql://")
+def engine(postgres_container):
+    dsn = postgres_container.get_connection_url()
     engine = create_engine(dsn, pool_pre_ping=True, future=True)
     Base.metadata.create_all(bind=engine)
     yield engine
@@ -46,15 +45,15 @@ def db(engine):
         session.close()
         transaction.rollback()
         
-        # Reset auto-increment counters to ensure consistent test behavior
+        # Reset sequence counters to ensure consistent test behavior
         # This prevents IDs from accumulating across tests
         try:
             with engine.connect() as reset_conn:
-                reset_conn.execute(text("ALTER TABLE songs AUTO_INCREMENT = 1"))
-                reset_conn.execute(text("ALTER TABLE playlists AUTO_INCREMENT = 1"))
+                reset_conn.execute(text("ALTER SEQUENCE songs_id_seq RESTART WITH 1"))
+                reset_conn.execute(text("ALTER SEQUENCE playlists_id_seq RESTART WITH 1"))
                 reset_conn.commit()
         except Exception as e:
-            print(f"Warning: Failed to reset auto-increment counters: {e}")
+            print(f"Warning: Failed to reset sequence counters: {e}")
         
         connection.close()
 

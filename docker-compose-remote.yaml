@@ -1,0 +1,26 @@
+name: melodia-content-api
+
+services:
+  content-api:
+    image: content-api:latest
+    container_name: content-api
+    restart: unless-stopped
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      ENVIRONMENT: "production"
+      LOG_LEVEL: "INFO"
+      DATABASE_HOST: "${DATABASE_HOST}"
+      DATABASE_NAME: "${DATABASE_NAME}"
+      DATABASE_PORT: "${DATABASE_PORT}"
+      DATABASE_USER: "${DATABASE_USER}"
+      DATABASE_PASSWORD: "${DATABASE_PASSWORD}"
+      DATABASE_SSLMODE: "${DATABASE_SSLMODE}"
+    ports:
+      - "8080:8080"
+    networks:
+      - melodia-network
+
+networks:
+  melodia-network:
+    driver: bridge

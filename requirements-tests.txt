@@ -3,4 +3,4 @@ pytest-asyncio==1.0.0
 pytest-cov==6.2.0
 pytest-mock==3.14.0
 httpx==0.28.0
-testcontainers[mysql]==4.10.0
+testcontainers[postgres]==4.10.0
