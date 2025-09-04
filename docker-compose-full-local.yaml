@@ -38,7 +38,6 @@ services:
       DATABASE_PORT: "3306"
       DATABASE_USER: "user"
       DATABASE_PASSWORD: "password"      
-      DATABASE_URL: mysql+pymysql://user:password@mysql:3306/db
     ports:
       - "8080:8080"
     depends_on:
