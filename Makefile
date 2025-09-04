@@ -8,19 +8,19 @@ build-system:
 .PHONY: build-system
 
 up-local: build-system
-	docker compose -f docker-compose-full-local.yaml up -d --build --remove-orphans
+	docker compose -f docker-compose-local.yaml up -d --build --remove-orphans
 .PHONY: up
 
 up-remote: build-system
-	docker compose -f docker-compose-remote-db.yaml up -d --build --remove-orphans
+	docker compose -f docker-compose-remote.yaml up -d --build --remove-orphans
 .PHONY: up-remote-db
 
 down-local:
-	docker compose -f docker-compose-full-local.yaml down
+	docker compose -f docker-compose-local.yaml down
 .PHONY: down-local
 
 down-remote:
-	docker compose -f docker-compose-remote-db.yaml down
+	docker compose -f docker-compose-remote.yaml down
 .PHONY: down-remote
 
 test:

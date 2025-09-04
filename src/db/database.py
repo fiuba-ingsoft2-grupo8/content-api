@@ -15,10 +15,11 @@ DATABASE_NAME = os.getenv("DATABASE_NAME", "postgres")
 DATABASE_PORT = os.getenv("DATABASE_PORT", "5432")
 DATABASE_USER = os.getenv("DATABASE_USER", "postgres")
 DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD", "password")
+DATABASE_SSLMODE = os.getenv("DATABASE_SSLMODE", "disable")
 
 DATABASE_URL = f"postgresql://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300, echo=False, pool_size=5, max_overflow=0, connect_args={"sslmode": "require"})
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300, echo=False, pool_size=5, max_overflow=0, connect_args={"sslmode": DATABASE_SSLMODE})
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

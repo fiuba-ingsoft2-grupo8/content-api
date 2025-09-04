@@ -1,24 +1,23 @@
 name: melodia-content-api
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: mysql
+  postgres:
+    image: postgres:15
+    container_name: postgres
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: db
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - ./mysql_data:/var/lib/mysql
+      - ./postgres_data:/var/lib/postgresql/data
       - ./src/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - melodia-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       timeout: 20s
       retries: 10
       interval: 30s
@@ -33,15 +32,16 @@ services:
       PORT: "8080"
       ENVIRONMENT: "production"
       LOG_LEVEL: "INFO"
-      DATABASE_HOST: "mysql"
-      DATABASE_NAME: "db"
-      DATABASE_PORT: "3306"
-      DATABASE_USER: "user"
-      DATABASE_PASSWORD: "password"      
+      DATABASE_HOST: "postgres"
+      DATABASE_NAME: "postgres"
+      DATABASE_PORT: "5432"
+      DATABASE_USER: "postgres"
+      DATABASE_PASSWORD: "password"
+      DATABASE_SSLMODE: "disable"
     ports:
       - "8080:8080"
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
     networks:
       - melodia-network
