@@ -2,38 +2,36 @@ from sqlalchemy import desc
 from datetime import datetime, timezone
 from db import models
 from resources.logger import logger
+from pymongo import DESCENDING
 
 def create_playlist(db, name, description):
     try:
         publish_time = datetime.now(timezone.utc)
-        db_playlist = models.Playlist(
-            name=name,
-            description=description,
-            is_published=True,
-            published_at=publish_time,
-        )
-        logger.debug(f"Created playlist model with published_at={publish_time}")
-        db.add(db_playlist)
-        logger.debug("Added playlist to database session")
-        db.commit()
-        logger.debug("Committed playlist to database")
-        db.refresh(db_playlist)
-        logger.info(f"Successfully created playlist with id={db_playlist.id}")
-
-        return (db_playlist, None)
+        playlist_doc = {
+            "name": name,
+            "description": description,
+            "is_published": True,
+            "published_at": publish_time,
+        }
+        result = db.playlists.insert_one(playlist_doc)
+        playlist_doc["id"] = result.inserted_id
+        logger.info(f"Successfully created playlist with id={playlist_doc['id']}")
+        return (playlist_doc, None)
     except Exception as e:
-        db.rollback()
+        logger.error(f"Failed to create playlist: {str(e)}")
         return (None, e)
     
 def get_all_playlists(db):
-    playlists = (
-        db.query(models.Playlist)
-        .filter(models.Playlist.is_published == True)
-        .order_by(desc(models.Playlist.published_at), desc(models.Playlist.id))
-        .all()
-    )
-    logger.info(f"Retrieved {len(playlists)} published playlists from database")
-    return playlists
+    try:
+        playlists = list(
+            db.playlists.find({"is_published": True})
+            .sort([("published_at", DESCENDING), ("id", DESCENDING)])
+        )
+        logger.info(f"Retrieved {len(playlists)} published playlists from database")
+        return playlists
+    except Exception as e:
+        logger.error(f"Failed to retrieve playlists: {str(e)}")
+        return []
 
 def add_song_to_playlist(db, song_id, playlist_id):
     try:
@@ -45,15 +43,13 @@ def add_song_to_playlist(db, song_id, playlist_id):
         db.commit()
         db.refresh(playlist_song)
         logger.info(f"Successfully added song {song_id} to playlist {playlist_id}")
-        
         return playlist_song
     except:
         db.rollback()
-
         return None
 
 def get_playlist(db, id):
-    playlist = db.query(models.Playlist).filter(models.Playlist.id == id).first()
+    playlist = db.playlists.find_one({"id": id})
     if playlist is None:
         logger.warning(f"Playlist with id={id} not found")
         return None
@@ -62,13 +58,11 @@ def get_playlist(db, id):
 
 def delete_playlist(db, existing_playlist):
     try:
-        db.delete(existing_playlist)
-        logger.debug("Marked playlist for deletion")
-        db.commit()
-        logger.info(f"Successfully deleted playlist with id={existing_playlist.id}")
+        result = db.playlists.delete_one({"id": existing_playlist["id"]})
+        if result.deleted_count > 0:
+            logger.info(f"Successfully deleted playlist with id={existing_playlist.id}")
+        else:
+            logger.warning(f"Playlist with id={id} not found")
         return None
     except Exception as e:
         logger.error(f"Failed to delete playlist with id={existing_playlist.id}: {str(e)}")
-        db.rollback()
-        logger.debug("Database transaction rolled back")
-        return None

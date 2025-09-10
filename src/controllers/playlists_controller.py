@@ -3,7 +3,6 @@ import databases.songs_database as songs_db
 import schemas
 from fastapi import Depends
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
 from db.database import get_db
 from resources.logger import logger
 from fastapi import APIRouter
@@ -12,7 +11,7 @@ from common.utils import create_error_response, serialize_playlist
 router = APIRouter()
 
 @router.post("/", status_code=201, response_model=schemas.PlaylistResponse)
-def create_playlist(playlist: schemas.CreatePlaylistRequest, db: Session = Depends(get_db)):
+def create_playlist(playlist: schemas.CreatePlaylistRequest, db = Depends(get_db)):
     """
     Create a new playlist in the database.
     
@@ -42,7 +41,7 @@ def create_playlist(playlist: schemas.CreatePlaylistRequest, db: Session = Depen
 
 
 @router.get("/", response_model=schemas.PlaylistsResponse)
-def get_published_playlists(db: Session = Depends(get_db)):
+def get_published_playlists(db = Depends(get_db)):
     """
     Retrieve all published playlists with their songs.
     
@@ -62,7 +61,7 @@ def get_published_playlists(db: Session = Depends(get_db)):
 
 
 @router.get("/{id}", response_model=schemas.PlaylistResponse)
-def get_playlist(id: int, db: Session = Depends(get_db)):
+def get_playlist(id: int, db = Depends(get_db)):
     """
     Retrieve a specific playlist by its ID with all songs.
     
@@ -95,7 +94,7 @@ def get_playlist(id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{id}", status_code=204)
-def delete_playlist(id: int, db: Session = Depends(get_db)):
+def delete_playlist(id: int, db = Depends(get_db)):
     """
     Delete a playlist from the database.
     
@@ -124,7 +123,7 @@ def delete_playlist(id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{id}/songs", response_model=schemas.PlaylistResponse)
-def add_song_to_playlist( id: int, request: schemas.AddSongToPlaylistRequest, db: Session = Depends(get_db)):
+def add_song_to_playlist( id: int, request: schemas.AddSongToPlaylistRequest, db = Depends(get_db)):
     """
     Add an existing song to a playlist.
     

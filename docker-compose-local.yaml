@@ -1,50 +1,36 @@
-name: melodia-content-api
+name: melodia-user-api
 
 services:
-  postgres:
-    image: postgres:15
-    container_name: postgres
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
     restart: unless-stopped
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin_password
+      MONGO_INITDB_DATABASE: userdb
+      URI: ${URI}
+      DATABASE_HOST: ${DATABASE_HOST}
+      DATABASE_USER: ${DATABASE_USER}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      DATABASE_APPNAME: ${DATABASE_APPNAME}
+      URI_TEST: ${URI_TEST}
+
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
-      - ./src/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mongodb_data:/data/db
     networks:
       - melodia-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
-      timeout: 20s
-      retries: 10
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      timeout: 10s
+      retries: 5
       interval: 30s
       start_period: 30s
-
-  content-api:
-    image: content-api:latest
-    container_name: content-api
-    restart: unless-stopped
-    environment:
-      HOST: "0.0.0.0"
-      PORT: "8080"
-      ENVIRONMENT: "production"
-      LOG_LEVEL: "INFO"
-      DATABASE_HOST: "postgres"
-      DATABASE_NAME: "postgres"
-      DATABASE_PORT: "5432"
-      DATABASE_USER: "postgres"
-      DATABASE_PASSWORD: "password"
-      DATABASE_SSLMODE: "disable"
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - melodia-network
+      
+volumes:
+  mongodb_data:
 
 networks:
   melodia-network:
