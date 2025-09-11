@@ -41,7 +41,7 @@ class Song(SongBase):
     Extends SongBase with the database ID field. Used for API responses
     when returning song data from the database.
     """
-    id: int
+    _id: str
 
     class Config:
         from_attributes = True

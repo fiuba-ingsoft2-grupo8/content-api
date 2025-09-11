@@ -35,3 +35,7 @@ def serialize_playlist(playlist: models.Playlist) -> schemas.Playlist:
             for ps in playlist.playlist_songs
         ],
     )
+
+def serialize_song(song):
+    song["_id"] = str(song["_id"])
+    return song
