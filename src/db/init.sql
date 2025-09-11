@@ -1,2 +1,0 @@
--- PostgreSQL initialization script
--- The database is already created by the container, just ensure proper encoding

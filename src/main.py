@@ -1,39 +1,23 @@
+import os
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
-
-import os
-import logging
-import uvicorn
 from dotenv import load_dotenv
-
 from resources.logger import logger, LOGGING_CONFIG
-from db.database import init_db, close_db, wait_for_db
 from controllers import songs_controller, playlists_controller
 from common.utils import create_error_response
 
 logger.info("Load configurations")
 load_dotenv()
 
+MONGO_URL = os.getenv("MONGO_URL", "")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Waiting for database")
-    await wait_for_db()          
-    logger.info("Initializing database client")
-    await init_db()
-    try:
-        yield
-    finally:
-        logger.info("Closing database client")
-        await close_db()
-
 logger.info("Initializing FastAPI application")
-app = FastAPI(title="Melodia API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Melodia API", version="1.0.0")
 logger.info("FastAPI application initialized")
 
 # Routers
