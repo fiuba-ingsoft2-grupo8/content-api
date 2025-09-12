@@ -1,4 +1,3 @@
-from db import models
 from resources.logger import logger
 from db.database import get_db
 from bson import ObjectId

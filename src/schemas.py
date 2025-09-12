@@ -54,7 +54,7 @@ class PlaylistSong(SongBase):
     Extends SongBase with additional metadata specific to songs within playlists,
     including when the song was added to the playlist.
     """
-    id: int
+    id: str
     addedAt: datetime
 
     class Config:
@@ -90,7 +90,7 @@ class Playlist(PlaylistBase):
     and the list of songs in the playlist. Used for API responses when
     returning complete playlist data.
     """
-    id: int
+    id: str
     isPublished: bool
     publishedAt: datetime
     songs: List[PlaylistSong] = []
@@ -106,7 +106,7 @@ class AddSongToPlaylistRequest(BaseModel):
     Used for POST /playlists/{id}/songs endpoint to validate the request
     to add a specific song to a playlist.
     """
-    songId: int
+    songId: str
 
 
 class SongResponse(BaseModel):
