@@ -17,21 +17,24 @@ def create_error_response(status_code: int, title: str, detail: str, instance: s
         "instance": instance,
     }
 
-
-def serialize_playlist(playlist: models.Playlist) -> schemas.Playlist:
+def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
     return schemas.Playlist(
-        id=playlist.id,
-        name=playlist.name,
-        description=playlist.description,
-        isPublished=playlist.is_published,
-        publishedAt=playlist.published_at,
+        id=str(playlist["_id"]),
+        name=playlist["name"],
+        description=playlist["description"],
+        isPublished=playlist["is_published"],
+        publishedAt=playlist["published_at"],
         songs=[
             schemas.PlaylistSong(
-                id=ps.song.id,
-                title=ps.song.title,
-                artist=ps.song.artist,
-                addedAt=ps.added_at,
+                id=str(song["_id"]),
+                title=song["title"],
+                artist=song["artist"],
+                addedAt=song["added_at"],
             )
-            for ps in playlist.playlist_songs
+            for song in songs
         ],
     )
+
+def serialize_song(song):
+    song["_id"] = str(song["_id"])
+    return song

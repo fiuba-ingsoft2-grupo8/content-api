@@ -1,0 +1,47 @@
+name: melodia-content-api
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin_password
+      MONGO_INITDB_DATABASE: userdb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - melodia-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      timeout: 10s
+      retries: 5
+      interval: 30s
+      start_period: 30s
+
+  content-api:
+    image: content-api:latest
+    container_name: content-api
+    restart: unless-stopped
+    environment:
+      GIN_MODE: "release"
+      PORT: "8081"
+      MONGO_URI: "mongodb://admin:admin_password@mongodb:27017/userdb?authSource=admin"
+      MONGO_DATABASE: "userdb"
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - melodia-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  melodia-network:
+    driver: bridge
