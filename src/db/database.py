@@ -4,9 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-URI = os.getenv("URI", "")
+MONGO_URL = os.getenv("MONGO_URL", "")
 
 def get_db():
-    client = MongoClient(URI)
+    client = MongoClient(MONGO_URL)
     return client.content_db
     

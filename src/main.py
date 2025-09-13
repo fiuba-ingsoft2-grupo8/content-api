@@ -11,7 +11,6 @@ from common.utils import create_error_response
 logger.info("Load configurations")
 load_dotenv()
 
-MONGO_URL = os.getenv("MONGO_URL", "")
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
