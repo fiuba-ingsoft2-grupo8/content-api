@@ -8,16 +8,12 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "8080"
-      ENVIRONMENT: "production"
-      LOG_LEVEL: "INFO"
-      DATABASE_HOST: "${DATABASE_HOST}"
-      DATABASE_NAME: "${DATABASE_NAME}"
-      DATABASE_PORT: "${DATABASE_PORT}"
-      DATABASE_USER: "${DATABASE_USER}"
-      DATABASE_PASSWORD: "${DATABASE_PASSWORD}"
-      DATABASE_SSLMODE: "${DATABASE_SSLMODE}"
+      MONGO_URL: "${DATABASE_URL}"
     ports:
       - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
     networks:
       - melodia-network
 
