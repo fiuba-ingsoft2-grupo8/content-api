@@ -31,11 +31,5 @@ jobs:
       - name: Run docker container
         run: |
           docker run -d -p 8080:8080 --name content-api \
-            -e DATABASE_HOST=${{ secrets.DATABASE_HOST }} \
-            -e DATABASE_APPNAME=${{ secrets.DATABASE_APPNAME }} \
-            -e DATABASE_USER=${{ secrets.DATABASE_USER }} \
-            -e DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }} \
             -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
-            -e DOCKER_PASSWORD=${{ secrets.DOCKER_PASSWORD }} \
-            -e DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} \
             jandresen99/content-api:latest
