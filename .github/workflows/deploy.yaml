@@ -17,20 +17,20 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
       - name: Build docker image
-        run: docker build -t jandresen99/fiuba-melodia .
+        run: docker build -t jandresen99/content-api .
       - name: Push image to docker hub
-        run: docker push jandresen99/fiuba-melodia:latest
+        run: docker push jandresen99/content-api:latest
   deploy:
     needs: build
     runs-on: [self-hosted, user-api]
     steps:
       - name: Pull docker image
-        run: docker pull jandresen99/fiuba-melodia:latest
+        run: docker pull jandresen99/content-api:latest
       - name: Delete old container
-        run: docker rm -f user-api  
+        run: docker rm -f content-api
       - name: Run docker container
         run: |
-          docker run -d -p 8080:8080 --name user-api \
+          docker run -d -p 8080:8080 --name content-api \
             -e DATABASE_HOST=${{ secrets.DATABASE_HOST }} \
             -e DATABASE_APPNAME=${{ secrets.DATABASE_APPNAME }} \
             -e DATABASE_USER=${{ secrets.DATABASE_USER }} \
@@ -38,4 +38,4 @@ jobs:
             -e DATABASE_URL=${{ secrets.DATABASE_URL }} \
             -e DOCKER_PASSWORD=${{ secrets.DOCKER_PASSWORD }} \
             -e DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} \
-            jandresen99/fiuba-melodia:latest
+            jandresen99/content-api:latest
