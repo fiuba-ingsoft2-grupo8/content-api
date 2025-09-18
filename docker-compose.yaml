@@ -1,4 +1,4 @@
-name: melodia-user-api
+name: melodia-content-api
 
 services:
   mongodb:
@@ -9,13 +9,6 @@ services:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: admin_password
       MONGO_INITDB_DATABASE: userdb
-      URI: ${URI}
-      DATABASE_HOST: ${DATABASE_HOST}
-      DATABASE_USER: ${DATABASE_USER}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
-      DATABASE_APPNAME: ${DATABASE_APPNAME}
-      URI_TEST: ${URI_TEST}
-
     ports:
       - "27017:27017"
     volumes:
@@ -28,7 +21,24 @@ services:
       retries: 5
       interval: 30s
       start_period: 30s
-      
+
+  content-api:
+    image: content-api:latest
+    container_name: content-api
+    restart: unless-stopped
+    environment:
+      GIN_MODE: "release"
+      PORT: "8081"
+      MONGO_URI: "mongodb://admin:admin_password@mongodb:27017/userdb?authSource=admin"
+      MONGO_DATABASE: "userdb"
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - melodia-network
+
 volumes:
   mongodb_data:
 

@@ -1,51 +1,72 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Table
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from db.database import Base
+from datetime import datetime
+from typing import Optional, Annotated
+from pydantic import BaseModel, PlainSerializer, Field
+from pydantic.functional_validators import BeforeValidator
+from bson import ObjectId
+
 
 # Association table for many-to-many relationship between playlists and songs
 # This table tracks when each song was added to each playlist
-playlist_songs = Table(
-    "playlist_songs",
-    Base.metadata,
-    Column("playlist_id", Integer, ForeignKey("playlists.id"), primary_key=True),
-    Column("song_id", Integer, ForeignKey("songs.id"), primary_key=True),
-    Column("added_at", DateTime(timezone=True), server_default=func.now()),  # Timestamp when song was added to playlist
-)
+# playlist_songs = Table(
+#     "playlist_songs",
+#     Base.metadata,
+#     Column("playlist_id", Integer, ForeignKey("playlists.id"), primary_key=True),
+#     Column("song_id", Integer, ForeignKey("songs.id"), primary_key=True),
+#     Column("added_at", DateTime(timezone=True), server_default=func.now()),  # Timestamp when song was added to playlist
+# )
+
+def _parse_objectid(v):
+    if isinstance(v, ObjectId):
+        return v
+    if v is None:
+        return None
+    return ObjectId(str(v))
+
+# Tipo “ObjectId serializable” para Pydantic v2
+ObjectIdStr = Annotated[
+    ObjectId,
+    BeforeValidator(_parse_objectid),
+    PlainSerializer(lambda v: str(v), return_type=str, when_used="json"),
+]
 
 
-class Song(Base):
-    """
-    SQLAlchemy model representing a song in the music database.
-    
-    A song represents a musical track with a title and artist. Songs can be
-    added to multiple playlists through the many-to-many relationship.
-    """
-    __tablename__ = "songs"
+# Helper para manejar ObjectId en Pydantic
+class PyObjectId(ObjectId):
 
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255), nullable=False)
-    artist = Column(String(255), nullable=False)
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
 
-    playlists = relationship(
-        "Playlist", secondary=playlist_songs, back_populates="songs"
-    )
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid ObjectId")
+        return ObjectId(v)
 
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
 
-class Playlist(Base):
-    """
-    SQLAlchemy model representing a music playlist.
-    
-    A playlist is a collection of songs that can be published or kept private.
-    It contains metadata about when it was created/published and maintains
-    a many-to-many relationship with songs.
-    """
-    __tablename__ = "playlists"
+class Song(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    title: str
+    artist: str
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
-    description = Column(String(1000))
-    is_published = Column(Boolean, default=True, nullable=False)
-    published_at = Column(DateTime(timezone=True), server_default=func.now())
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
-    songs = relationship("Song", secondary=playlist_songs, back_populates="playlists")
+class Playlist(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    name: str
+    description: str | None = None
+    is_published: bool = True
+    published_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class PlaylistSong(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    playlist_id: ObjectIdStr
+    song_id: ObjectIdStr
+    added_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
