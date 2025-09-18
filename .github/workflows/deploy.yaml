@@ -22,7 +22,7 @@ jobs:
         run: docker push jandresen99/content-api:latest
   deploy:
     needs: build
-    runs-on: [self-hosted, user-api]
+    runs-on: [self-hosted, content-api]
     steps:
       - name: Pull docker image
         run: docker pull jandresen99/content-api:latest
