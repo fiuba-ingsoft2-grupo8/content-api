@@ -1,4 +1,5 @@
 import os
+import sys
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -17,20 +18,30 @@ HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8080"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
+def is_testing():
+    """Check if we're currently running tests."""
+    return "pytest" in sys.modules or os.getenv("TESTING") == "true"
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events."""
-    # Startup
-    logger.info("Initializing database connection pool...")
-    Database.initialize()
-    logger.info("Database connection pool initialized successfully")
+    # Startup - Skip database initialization during tests
+    if not is_testing():
+        logger.info("Initializing database connection pool...")
+        Database.initialize()
+        logger.info("Database connection pool initialized successfully")
+    else:
+        logger.info("Skipping database initialization during tests")
     
     yield
     
-    # Shutdown
-    logger.info("Closing database connection pool...")
-    Database.close()
-    logger.info("Database connection pool closed successfully")
+    # Shutdown - Skip database cleanup during tests
+    if not is_testing():
+        logger.info("Closing database connection pool...")
+        Database.close()
+        logger.info("Database connection pool closed successfully")
+    else:
+        logger.info("Skipping database cleanup during tests")
 
 logger.info("Initializing FastAPI application")
 app = FastAPI(title="Melodia API", version="1.0.0", lifespan=lifespan)
