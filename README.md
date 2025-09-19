@@ -58,6 +58,22 @@ DATABASE_SSLMODE=require
 
 **📝 Nota:** Las credenciales de las bases de datos remotas están disponibles en Notion.
 
+## Documentación
+Para correr la documentación se utiliza en este repositorio FastAPI, por lo que para ver información sobre los endpoints, basta con acceder a la documentación de localhost. Pasos:
+```bash
+# Levantar Docker local
+make-up local
+
+# Correr el servicio
+python src/main.py
+
+# Acceder por buscador a la FastAPI
+localhost:8080/docs
+```
+
+
+
+
 ## Testing
 
 ### Configuración para Tests
