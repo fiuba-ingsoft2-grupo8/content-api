@@ -24,5 +24,5 @@ down-remote:
 .PHONY: down-remote
 
 test:
-	python3 -m pytest tests/test_main.py -v
+	python -m pytest tests/test_main.py -v
 .PHONY: test
