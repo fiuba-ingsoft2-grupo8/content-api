@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MONGO_URL = os.getenv("MONGO_URL", "")
+MONGO_URL = os.getenv("DATABASE_URL", "")
 
 class Database:
     _client = None
