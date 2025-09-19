@@ -3,7 +3,6 @@ import databases.songs_database as songs_db
 import schemas
 from fastapi import Depends
 from fastapi.responses import JSONResponse
-from db.database import get_db
 from resources.logger import logger
 from fastapi import APIRouter
 from common.utils import create_error_response, serialize_playlist
@@ -39,6 +38,29 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
 
 
 @router.get("/")
+async def get_all_playlists():
+    """
+    Retrieve all playlists with their songs.
+    
+    This endpoint fetches all playlists, ordered by publication date
+    (newest first) and includes all songs in each playlist with
+    their metadata.
+    """
+    logger.info("Fetching all published playlists")
+    try:
+        playlists = await playlists_db.get_playlists(False)
+        serialized_playlists = []
+        for playlist in playlists:
+            songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
+            serialized_playlists.append(serialize_playlist(playlist, songs))
+        return {"data": serialized_playlists}
+
+    except Exception as e:
+        logger.error(f"Failed to fetch published playlists: {str(e)}")
+        raise
+
+
+@router.get("/")
 async def get_published_playlists():
     """
     Retrieve all published playlists with their songs.
@@ -50,7 +72,7 @@ async def get_published_playlists():
     """
     logger.info("Fetching all published playlists")
     try:
-        playlists = await playlists_db.get_all_playlists()
+        playlists = await playlists_db.get_playlists(True)
         serialized_playlists = []
         for playlist in playlists:
             songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
@@ -126,7 +148,7 @@ async def delete_playlist(id: str):
 
 
 @router.post("/{id}/songs")
-async def add_song_to_playlist(id: str, request: schemas.AddSongToPlaylistRequest):
+async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistRequest):
     """
     Add an existing song to a playlist.
 
@@ -159,8 +181,8 @@ async def add_song_to_playlist(id: str, request: schemas.AddSongToPlaylistReques
                 ),
             )
 
-        result = playlists_db.add_song_to_playlist(request.songId, id)
-        if not result:
+        added = await playlists_db.add_song_to_playlist(request.songId, id)
+        if not added:
             return JSONResponse(
                 status_code=400,
                 content=create_error_response(
@@ -171,7 +193,8 @@ async def add_song_to_playlist(id: str, request: schemas.AddSongToPlaylistReques
             )
 
         updated_playlist = await playlists_db.get_playlist(id)
-        return {"data": serialize_playlist(updated_playlist)}
+        songs = await playlists_db.get_songs_from_playlist(id)
+        return {"data": serialize_playlist(updated_playlist, songs)}
 
     except Exception as e:
         logger.error(f"Failed to add song {request.songId} to playlist {id}: {str(e)}")
@@ -180,3 +203,137 @@ async def add_song_to_playlist(id: str, request: schemas.AddSongToPlaylistReques
             content=create_error_response(400, "Bad Request", str(e), f"/playlists/{id}/songs"),
         )
 
+
+@router.delete("/{id}/songs")
+async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlaylistRequest):
+    """
+    Remove a song from a playlist.
+
+    This endpoint removes a song (identified by song_id) from an existing playlist.
+    It validates that both the playlist and song exist, and that the song is currently
+    in the playlist. If found, the song is removed and the updated playlist is returned.
+    """
+
+    logger.info(f"Removing song {request.songId} from playlist {id}")
+    try:
+        playlist = await playlists_db.get_playlist(id)
+        if not playlist:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404, "Not Found",
+                    f"Playlist with id {id} not found",
+                    f"/playlists/{id}/songs/{request.songId}"
+                ),
+            )
+
+        song = await songs_db.get_song(request.songId)
+        if not song:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404, "Not Found",
+                    f"Song with id {request.songId} not found",
+                    f"/playlists/{id}/songs/{request.songId}"
+                ),
+            )
+
+        removed = await playlists_db.remove_song_from_playlist(request.songId, id)
+        if not removed:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404, "Not Found",
+                    f"Song {request.songId} not found in playlist {id}",
+                    f"/playlists/{id}/songs/{request.songId}"
+                ),
+            )
+
+        updated_playlist = await playlists_db.get_playlist(id)
+        songs = await playlists_db.get_songs_from_playlist(id)
+        return {"data": serialize_playlist(updated_playlist, songs)}
+
+    except Exception as e:
+        logger.error(f"Failed to remove song {request.songId} from playlist {id}: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(
+                400, "Bad Request",
+                str(e),
+                f"/playlists/{id}/songs/{request.songId}"
+            ),
+        )
+
+
+@router.post("/{id}/publish")
+async def publish_playlist(id: str):
+    """
+    Make a playlist public.
+
+    This endpoint marks the specified playlist, identified by it's unique ID, as published (is_published = True).
+    It first verifies that the playlist exists.
+    """
+    logger.info(f"Publishing playlist with id {id}")
+    playlist = await playlists_db.get_playlist(id)
+    if not playlist:
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                404, "Not Found",
+                f"Playlist with id {id} not found",
+                f"/playlists/{id}/songs"
+            ),
+        )
+    try:
+        published = await playlists_db.change_playlist_state(playlist, True)
+        if not published:
+            logger.error(f"Failed to publish playlist with id {id}")
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(400, "Bad Request", "", f"/playlists/{id}/songs"),
+            )
+        logger.info(f"Successfully published playlist {id}")
+        return {"data": published}
+    except Exception as e:
+        logger.error(f"Failed to publish playlist with id {id}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(400, "Bad Request", "", f"/playlists/{id}/songs"),
+        )
+
+
+@router.post("/{id}/private")
+async def private_playlist(id: str):
+    """
+    Make a playlist private.
+
+    This endpoint marks the specified playlist, identified by it's unique ID, as private (is_published = True).
+    It first verifies that the playlist exists.
+    """
+    logger.info(f"Making playlist with id {id} private")
+    playlist = await playlists_db.get_playlist(id)
+    if not playlist:
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                404, "Not Found",
+                f"Playlist with id {id} not found",
+                f"/playlists/{id}/songs"
+            ),
+        )
+    try:
+        private = await playlists_db.change_playlist_state(playlist, False)
+        if not private:
+            logger.error(f"Failed to make playlist with id {id} private")
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(400, "Bad Request", "", f"/playlists/{id}/songs"),
+            )
+        logger.info(f"Successfully made playlist {id} private")
+        return {"data": private}
+    except Exception as e:
+        logger.error(f"Failed to make playlist with id {id} private")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(400, "Bad Request", {str(e)}, f"/playlists/{id}/songs"),
+        )

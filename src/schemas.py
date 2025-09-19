@@ -99,7 +99,7 @@ class Playlist(PlaylistBase):
         from_attributes = True
 
 
-class AddSongToPlaylistRequest(BaseModel):
+class ModifySongInPlaylistRequest(BaseModel):
     """
     Request schema for adding a song to an existing playlist.
     
