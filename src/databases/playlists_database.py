@@ -3,7 +3,6 @@ from resources.logger import logger
 from pymongo import DESCENDING
 from db.database import get_db
 from db.models import PlaylistSong
-import databases.songs_database as songs_db
 from bson import ObjectId
 
 async def create_playlist(name, description):
@@ -13,7 +12,7 @@ async def create_playlist(name, description):
         playlist_doc = {
             "name": name,
             "description": description,
-            "is_published": True,
+            "is_published": False,
             "published_at": publish_time,
             "songs": []
         }
@@ -25,14 +24,20 @@ async def create_playlist(name, description):
         logger.error(f"Failed to create playlist: {str(e)}")
         return (None, e)
     
-async def get_all_playlists():
+async def get_playlists(published: bool):
     db = get_db()
     try:
-        playlists = list(
-            db.playlists.find({"is_published": True})
-            .sort([("published_at", DESCENDING), ("_id", DESCENDING)])
-        )
-        logger.info(f"Retrieved {len(playlists)} published playlists from database")
+        if published:
+            playlists = list(
+                db.playlists.find({"is_published": True})
+                .sort([("published_at", DESCENDING), ("_id", DESCENDING)])
+            )
+        else:
+            playlists = list(
+                db.playlists.find()
+                .sort([("published_at", DESCENDING), ("_id", DESCENDING)])
+            )
+        logger.info(f"Retrieved {len(playlists)} playlists from database")
         return playlists
     except Exception as e:
         logger.error(f"Failed to retrieve playlists: {str(e)}")
@@ -47,6 +52,24 @@ async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
     db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
     logger.info(f"Added song {song_id} to playlist {playlist_id}")
     return True
+
+async def remove_song_from_playlist(song_id: str, playlist_id: str) -> bool:
+    db = get_db()
+
+    song_oid = ObjectId(song_id)
+    playlist_oid = ObjectId(playlist_id)
+
+    result = db.playlist_songs.delete_one({
+            "song_id": song_oid,
+            "playlist_id": playlist_oid
+        })
+
+    if result.deleted_count > 0:
+        logger.info(f"Removed song {song_id} from playlist {playlist_id}")
+        return True
+    else:
+        logger.warning(f"Song {song_id} not found in playlist {playlist_id}")
+        return False
 
 async def get_songs_from_playlist(playlist_id: str):
     db = get_db()
@@ -92,3 +115,11 @@ async def delete_playlist(existing_playlist):
         return None
     except Exception as e:
         logger.error(f"Failed to delete playlist with id={existing_playlist['_id']}: {str(e)}")
+
+async def change_playlist_state(existing_playist, state):
+    db = get_db()
+    result = db.playlists.update_one(
+        {"_id": existing_playist["_id"]},
+        {"$set": {"is_published": state}}
+    )
+    return result.modified_count > 0

@@ -2,71 +2,34 @@ import os
 import sys
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from unittest.mock import patch
+import mongomock
 
-from testcontainers.postgres import PostgresContainer
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from main import app
-from db.database import Base, get_db
+from db.database import get_db
 
 
-@pytest.fixture(scope="session")
-def postgres_container():
-    with PostgresContainer("postgres:15") as postgres:
-        yield postgres
-
-
-@pytest.fixture(scope="session")
-def engine(postgres_container):
-    dsn = postgres_container.get_connection_url()
-    engine = create_engine(dsn, pool_pre_ping=True, future=True)
-    Base.metadata.create_all(bind=engine)
-    yield engine
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
+@pytest.fixture(scope="function")
+def mock_db():
+    """Create a fresh MongoDB mock for each test."""
+    client = mongomock.MongoClient()
+    db = client.content_db
+    yield db
+    client.close()
 
 
 @pytest.fixture()
-def db(engine):
-    connection = engine.connect()
-    transaction = connection.begin()
+def client(mock_db):
+    """Create a test client with mocked database."""
+    def _get_test_db():
+        return mock_db
 
-    TestingSessionLocal = sessionmaker(
-        bind=connection, autoflush=False, autocommit=False, future=True
-    )
-    session = TestingSessionLocal()
-
-    try:
-        yield session
-    finally:
-        session.close()
-        transaction.rollback()
-        
-        # Reset sequence counters to ensure consistent test behavior
-        # This prevents IDs from accumulating across tests
-        try:
-            with engine.connect() as reset_conn:
-                reset_conn.execute(text("ALTER SEQUENCE songs_id_seq RESTART WITH 1"))
-                reset_conn.execute(text("ALTER SEQUENCE playlists_id_seq RESTART WITH 1"))
-                reset_conn.commit()
-        except Exception as e:
-            print(f"Warning: Failed to reset sequence counters: {e}")
-        
-        connection.close()
-
-
-@pytest.fixture()
-def client(db):
-    def _get_db():
-        try:
-            yield db
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = _get_db
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+    # Mock the get_db function to return our test database
+    with patch("db.database.get_db", side_effect=_get_test_db):
+        # Also patch in the database modules that import get_db
+        with patch("databases.songs_database.get_db", side_effect=_get_test_db), \
+             patch("databases.playlists_database.get_db", side_effect=_get_test_db):
+            with TestClient(app) as test_client:
+                yield test_client
