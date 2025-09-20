@@ -38,7 +38,6 @@ async def get_all_songs():
     logger.info("Fetching all songs")
     try:
         songs = await songs_db.get_all_songs()
-        print([serialize_song(song) for song in songs])
         return { "data": [serialize_song(song) for song in songs] }
     except Exception as e:
         logger.error(f"Failed to fetch all songs: {str(e)}")

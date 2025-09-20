@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MONGO_URL = os.getenv("DATABASE_URL", "")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 class Database:
     _client = None
@@ -15,7 +15,7 @@ class Database:
         """Initialize the database connection pool at application startup."""
         if cls._client is None:
             cls._client = MongoClient(
-                MONGO_URL,
+                DATABASE_URL,
                 maxPoolSize=50,          # Maximum number of connections in the pool
                 minPoolSize=5,           # Minimum number of connections in the pool
                 maxIdleTimeMS=30000,     # Close connections after 30 seconds of inactivity
@@ -24,7 +24,6 @@ class Database:
                 socketTimeoutMS=20000,   # 20 second timeout for socket operations
             )
             cls._db = cls._client.content_db
-            print("Database connection pool initialized")
     
     @classmethod
     def get_db(cls):
@@ -40,7 +39,6 @@ class Database:
             cls._client.close()
             cls._client = None
             cls._db = None
-            print("Database connection pool closed")
 
 def get_db():
     return Database.get_db()
