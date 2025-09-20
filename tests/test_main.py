@@ -12,6 +12,13 @@ def sample_song_data():
 def sample_playlist_data():
     return {"name": "Test Playlist", "description": "A test playlist"}
 
+@pytest.fixture
+def sample_playlist_data():
+    return {
+        "name": "Chill Vibes",
+        "description": "Lo-fi and chill songs for studying"
+    }
+
 
 class TestSongEndpoints:
     """Test suite for song-related API endpoints."""
@@ -26,21 +33,225 @@ class TestSongEndpoints:
         assert data["data"]["title"] == sample_song_data["title"]
         assert data["data"]["artist"] == sample_song_data["artist"]
         assert "_id" in data["data"]
-        # Verify the returned ID is a valid ObjectId string
         assert ObjectId.is_valid(data["data"]["_id"])
+
 
     def test_create_song_validation_error(self, client):
         """Test validation errors when creating a song with invalid data."""
-        # Test missing request body
         response = client.post("/songs")
         assert response.status_code == 400
         assert response.json()["title"] == "Bad Request"
         assert response.json()["detail"] == "Invalid request body"
 
-        # Test missing artist field
         response = client.post("/songs", json={"title": "Test Song"})
         assert response.status_code == 400
 
-        # Test invalid data types
         response = client.post("/songs", json={"title": 123, "artist": "Test Artist"})
         assert response.status_code == 400
+
+    def test_get_empty_song_list(self, client):
+        """Should return empty song list initially."""
+        response = client.get("/songs")
+        assert response.status_code == 200
+        data = response.json()
+        assert "data" in data
+        assert isinstance(data["data"], list)
+        assert len(data["data"]) == 0
+
+    def test_create_song_success(self, client, sample_song_data):
+        """Test successful creation of a new song."""
+        response = client.post("/songs", json=sample_song_data)
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "data" in data
+        assert data["data"]["title"] == sample_song_data["title"]
+        assert data["data"]["artist"] == sample_song_data["artist"]
+        assert "_id" in data["data"]
+        assert ObjectId.is_valid(data["data"]["_id"])
+
+    def test_get_song_by_id(self, client, sample_song_data):
+        """Should fetch song by ID after creation."""
+        created = client.post("/songs", json=sample_song_data).json()["data"]
+
+        response = client.get(f"/songs/{created['_id']}")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["_id"] == created["_id"]
+        assert data["title"] == sample_song_data["title"]
+
+    def test_update_song(self, client, sample_song_data):
+        """Should update existing song fields."""
+        created = client.post("/songs", json=sample_song_data).json()["data"]
+
+        update_data = {"title": "Fortnight", "artist": "Taylor Swift ft. Post Malone"}
+        response = client.put(f"/songs/{created['_id']}", json=update_data)
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["title"] == "Fortnight"
+        assert data["artist"] == "Taylor Swift ft. Post Malone"
+
+    def test_delete_song(self, client, sample_song_data):
+        """Should delete a song and return 404 on fetch."""
+        created = client.post("/songs", json=sample_song_data).json()["data"]
+
+        response = client.delete(f"/songs/{created['_id']}")
+        assert response.status_code == 204
+
+        check = client.get(f"/songs/{created['_id']}")
+        assert check.status_code == 404
+
+    def test_create_song_missing_title(self, client):
+        """Should not create a song if title is missing."""
+        response = client.post("/songs", json={"artist": "Taylor Swift"})
+        assert response.status_code == 400
+
+    def test_create_song_missing_artist(self, client):
+        """Should not create a song if artist is missing."""
+        response = client.post("/songs", json={"title": "Fortnight"})
+        assert response.status_code == 400
+
+    def test_get_nonexistent_song(self, client):
+        """Should return 404 when song ID does not exist."""
+        response = client.get("/songs/68ceb28af48aee23d3c773ea")
+        assert response.status_code == 404
+
+    # ---------- Playlists --------------------------------------------------------------------------------
+
+    def test_create_playlist_success(self, client, sample_playlist_data):
+        """Test successful creation of a playlist."""
+        response = client.post("/playlists", json=sample_playlist_data)
+        assert response.status_code == 201
+
+        data = response.json()
+        assert "data" in data
+        playlist = data["data"]
+
+        assert "id" in playlist
+        assert ObjectId.is_valid(playlist["id"])
+        assert playlist["name"] == sample_playlist_data["name"]
+        assert playlist["description"] == sample_playlist_data["description"]
+        assert playlist["isPublished"] is False
+        assert playlist["songs"] == []
+        # publishedAt should be a valid date string
+        assert datetime.fromisoformat(playlist["publishedAt"])
+
+    def test_get_playlists_ordered_by_published_date(self, client):
+        """Should return playlists ordered by publishedAt (desc)."""
+        # Create two playlists
+        playlist1 = client.post("/playlists", json={
+            "name": "Folklore",
+            "description": "Primera playlist!!!" * 10,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat()
+        }).json()["data"]
+
+        playlist2 = client.post("/playlists", json={
+            "name": "Evermore",
+            "description": "Segunda playlist!!!" * 10,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat()
+        }).json()["data"]
+
+        response = client.get("/playlists")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert len(data) >= 2
+
+        first_published = datetime.fromisoformat(data[0]["publishedAt"]).timestamp()
+        second_published = datetime.fromisoformat(data[1]["publishedAt"]).timestamp()
+        assert first_published > second_published
+
+    def test_get_playlist_by_id(self, client):
+        """Fetch a playlist by its ID."""
+        playlist = client.post("/playlists", json={
+            "name": "Piano Bar",
+            "description": "charles" * 15,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat()
+        }).json()["data"]
+
+        response = client.get(f"/playlists/{playlist['id']}")
+        assert response.status_code == 200
+        data = response.json()["data"]
+
+        assert data["id"] == playlist["id"]
+        assert data["name"] == "Piano Bar"
+        assert data["songs"] == []
+
+    def test_add_song_to_playlist(self, client, sample_song_data):
+        """Add a song to a playlist."""
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        playlist = client.post("/playlists", json={
+            "name": "Monos Árticos",
+            "description": "monk" * 20,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat()
+        }).json()["data"]
+
+        response = client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song["_id"]})
+        assert response.status_code == 200
+
+        data = response.json()["data"]
+        assert len(data["songs"]) == 1
+        added = data["songs"][0]
+        assert added["id"] == song["_id"]
+        assert added["title"] == sample_song_data["title"]
+        assert added["artist"] == sample_song_data["artist"]
+        assert datetime.fromisoformat(added["addedAt"])
+
+    def test_delete_playlist(self, client):
+        """Delete a playlist and verify 404 afterwards."""
+        playlist = client.post("/playlists", json={
+            "name": "The Strokes",
+            "description": "omg gordo mantecolero!!!" * 10,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat()
+        }).json()["data"]
+
+        response = client.delete(f"/playlists/{playlist['id']}")
+        assert response.status_code == 204
+
+        check = client.get(f"/playlists/{playlist['id']}")
+        assert check.status_code == 404
+
+    def test_publish_playlist(self, client):
+        """Create a playlist and publish it."""
+        playlist = client.post("/playlists", json={
+            "name": "Folklore",
+            "description": "Primera playlist!!!" * 10,
+            "isPublished": False,
+            "publishedAt": None
+        }).json()["data"]
+
+        response = client.post(f"/playlists/{playlist['id']}/publish")
+        assert response.status_code == 200
+        data = response.json()["data"]
+
+        assert data == True
+
+    def test_delete_playlist_with_songs(self, client, sample_song_data):
+        """Delete a playlist that has songs inside it."""
+        playlist = client.post("/playlists", json={
+            "name": "Folklore",
+            "description": "Primera playlist!!!" * 10,
+            "isPublished": False,
+            "publishedAt": None
+        }).json()["data"]
+
+        song1 = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift"}).json()["data"]
+
+        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song1["_id"]})
+        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"]})
+
+        # Ensure playlist exists
+        check = client.get(f"/playlists/{playlist['id']}")
+        assert check.status_code == 200
+
+        # Delete playlist
+        response = client.delete(f"/playlists/{playlist['id']}")
+        assert response.status_code == 204
+
+        check_again = client.get(f"/playlists/{playlist['id']}")
+        assert check_again.status_code == 404
