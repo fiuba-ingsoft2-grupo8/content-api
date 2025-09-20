@@ -8,12 +8,9 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "8080"
-      MONGO_URL: "${DATABASE_URL}"
+      DATABASE_URL: "${DATABASE_URL}"
     ports:
       - "8080:8080"
-    depends_on:
-      mongodb:
-        condition: service_healthy
     networks:
       - melodia-network
 
