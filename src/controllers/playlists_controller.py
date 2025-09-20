@@ -28,7 +28,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
                 status_code=400,
                 content=create_error_response(400, "Bad Request", str(e), "/playlists"),
             )
-        return {"data": serialize_playlist(db_playlist)}
+        return {"data": serialize_playlist(db_playlist, [])}
     except Exception as e:
         logger.error(f"Failed to create playlist '{playlist.name}': {str(e)}")
         return JSONResponse(
@@ -109,8 +109,11 @@ async def get_playlist(id: str):
                 ),
             )
 
+        logger.info("\n\n00")
         songs = await playlists_db.get_songs_from_playlist(id)
+        logger.info("01")
         serialized_playlist = serialize_playlist(playlist, songs)
+        logger.info("02")
         logger.info(f"Successfully retrieved playlist {id} with {len(playlist['songs'])} songs")
         return {"data": serialized_playlist}
     except Exception as e:

@@ -74,16 +74,19 @@ async def remove_song_from_playlist(song_id: str, playlist_id: str) -> bool:
 async def get_songs_from_playlist(playlist_id: str):
     db = get_db()
 
-    playlist_songs = db.playlist_songs.find(
+    playlist_songs = list(db.playlist_songs.find(
         {"playlist_id": ObjectId(playlist_id)},
         {"song_id": 1, "added_at": 1} 
-    ).to_list(length=None)
+    ))
 
     if not playlist_songs:
         return []
 
     song_ids = [ps["song_id"] for ps in playlist_songs]
-    songs = db.songs.find({"_id": {"$in": song_ids}}).to_list(length=None)
+    if not song_ids:
+        return []
+
+    songs = list(db.songs.find({"_id": {"$in": song_ids}}))
     song_map = {song["_id"]: song for song in songs}
     return [
         {**song_map[ps["song_id"]], "added_at": ps["added_at"]}
