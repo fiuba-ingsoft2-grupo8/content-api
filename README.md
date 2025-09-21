@@ -136,26 +136,3 @@ export DATABASE_SSLMODE=disable
 
 python src/main.py
 ```
-
----
-
-
-# Arquitectura del proyecto:
-El proyecto sigue una arquitectura simple pero robusta, pensada para facilitar el desarrollo, la escalabilidad y el testing. Las principales decisiones tecnológicas son:
-
----
-#### Python (FastAPI):
-Se eligió Python como lenguaje base por su ecosistema maduro en el desarrollo de APIs, facilidad de integración con librerías de testing y data, y su curva de aprendizaje accesible. En particular, FastAPI permite construir endpoints de manera rápida y con tipado estático, lo que mejora la mantenibilidad y genera automáticamente documentación interactiva en /docs.
-
-
-#### MongoDB:
-Se utiliza MongoDB como base de datos NoSQL para aprovechar su flexibilidad en el manejo de documentos JSON, lo que se adapta muy bien al tipo de datos semiestructurados que maneja la API. A diferencia de un esquema rígido como PostgreSQL, MongoDB permite iterar rápidamente sobre el modelo de datos sin necesidad de migraciones complejas, lo cual resulta útil en un entorno académico y de experimentación.
-
-
-#### Docker y Docker Compose:
-Se emplea contenedorización para asegurar que el proyecto corra en cualquier entorno de manera consistente, reduciendo problemas de configuración local y facilitando el despliegue.
-
----
-
-Esta combinación de tecnologías proporciona un balance entre velocidad de desarrollo, flexibilidad de datos y portabilidad del entorno, asegurando que tanto en etapas de aprendizaje como de producción el sistema se mantenga estable y fácil de extender.
-
