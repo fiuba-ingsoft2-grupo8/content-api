@@ -58,6 +58,35 @@ DATABASE_SSLMODE=require
 
 **📝 Nota:** Las credenciales de las bases de datos remotas están disponibles en Notion.
 
+## Justificación del stack utilizado
+
+### ¿Por qué Python?
+
+Se eligió Python para la parte de gestión del contenido por ventajas como:
+
+- Facilidad y rapidez: ya es un lenguaje muy conocido por el equipo, lo que nos permitió empezar a desarrollar sin tener que invertir tiempo en aprender algo nuevo. Esto hizo que pudiéramos enfocarnos directamente en la lógica del servicio.
+
+- Ecosistema backend sólido: con frameworks como FastAPI es sencillo armar una API REST bien estructurada y con buen soporte de documentación, validación y testing.
+
+- Sintaxis clara y legible: escribir en Python es simple, y eso acelera el prototipado y facilita hacer cambios frecuentes durante el desarrollo.
+
+- Integración sencilla: Python se conecta fácilmente con distintos motores de base de datos y con otros servicios, lo que nos da flexibilidad para adaptar esta parte del sistema al resto del stack.
+
+### ¿Por qué MongoDB?
+
+En cuanto al almacenamiento, elegimos MongoDB por las siguientes razones:
+
+- Modelo flexible para colecciones: álbumes, singles y playlists pueden variar en estructura, tamaño y atributos. En MongoDB esto se representa naturalmente con documentos JSON, sin necesidad de un esquema fijo, lo que permite adaptabilidad y polimorfismo en el modelo de datos.
+
+- Consultas prácticas: permite traer toda la información del contenido en una sola consulta, reduciendo la complejidad en el backend.
+
+- Facilidad de evolución: si en el futuro se agregan nuevos campos, el modelo se puede extender sin migraciones complejas.
+
+- Escalabilidad natural: ofrece particionamiento y replicación nativos, lo que facilita crecer horizontalmente en escenarios con más usuarios o mayor volumen de datos.
+
+- Compatibilidad con Python: librerías como pymongo hacen que la integración sea directa y sin necesidad de configuraciones complejas.
+
+
 ## Documentación
 Para correr la documentación se utiliza en este repositorio FastAPI, por lo que para ver información sobre los endpoints, basta con acceder a la documentación de localhost. Pasos:
 ```bash
@@ -70,9 +99,6 @@ python src/main.py
 # Acceder por buscador a la FastAPI
 localhost:8080/docs
 ```
-
-
-
 
 ## Testing
 
