@@ -24,6 +24,7 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
         description=playlist["description"],
         isPublished=playlist["is_published"],
         publishedAt=playlist["published_at"],
+        userId=playlist["userId"],
         songs=[
             schemas.PlaylistSong(
                 id=str(song["_id"]),

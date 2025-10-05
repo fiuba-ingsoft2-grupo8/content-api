@@ -70,6 +70,7 @@ class PlaylistBase(BaseModel):
     """
     name: str
     description: str
+    userId: str
 
 
 class CreatePlaylistRequest(PlaylistBase):
@@ -107,6 +108,16 @@ class ModifySongInPlaylistRequest(BaseModel):
     to add a specific song to a playlist.
     """
     songId: str
+    userId: str
+
+class ModifyPlaylistRequest(BaseModel):
+    """
+    Request schema for modifying or deleting a playlist.
+    
+    Used for POST /playlists/{id}/publish, /playlists/{id}/private, or
+    DELETE /playlists/{id} endpoint.
+    """
+    userId: str
 
 
 class SongResponse(BaseModel):

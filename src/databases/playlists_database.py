@@ -5,8 +5,9 @@ from db.database import get_db
 from db.models import PlaylistSong
 from bson import ObjectId
 
-async def create_playlist(name, description):
+async def create_playlist(name, description, userId):
     db = get_db()
+    logger.info(f"user id={userId}")
     try:
         publish_time = datetime.now(timezone.utc)
         playlist_doc = {
@@ -14,6 +15,7 @@ async def create_playlist(name, description):
             "description": description,
             "is_published": False,
             "published_at": publish_time,
+            "userId": userId,
             "songs": []
         }
         result = db.playlists.insert_one(playlist_doc)
@@ -126,3 +128,11 @@ async def change_playlist_state(existing_playist, state):
         {"$set": {"is_published": state}}
     )
     return result.modified_count > 0
+
+async def playlist_belongs_to_user(playlist_id, userId):
+    db = get_db()
+    try:
+        found_playlist = db.playlists.find({"_id": playlist_id, "userId": userId})
+        return True if found_playlist else False
+    except Exception as e:
+        return False

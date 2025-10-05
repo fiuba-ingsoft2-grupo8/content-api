@@ -61,7 +61,7 @@ class Playlist(BaseModel):
     is_published: bool = True
     published_at: datetime = Field(default_factory=datetime.utcnow)
     cover_image: str
-    owner_id: str
+    userId: str
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 

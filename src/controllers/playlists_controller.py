@@ -1,7 +1,7 @@
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import schemas
-from fastapi import Depends
+from fastapi import Depends, Body
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
@@ -22,7 +22,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
         f"Creating playlist: name='{playlist.name}', description='{playlist.description}'"
     )
     try:
-        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description)
+        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, playlist.userId)
         if not db_playlist:
             return JSONResponse(
                 status_code=400,
@@ -122,7 +122,7 @@ async def get_playlist(id: str):
 
 
 @router.delete("/{id}", status_code=204)
-async def delete_playlist(id: str):
+async def delete_playlist(id: str, request: schemas.ModifyPlaylistRequest = Body(...)):
     """
     Delete a playlist from the database.
     
@@ -131,6 +131,19 @@ async def delete_playlist(id: str):
     The operation also removes all song associations from the playlist
     due to foreign key constraints, but the songs themselves remain in the database.
     """
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot delete")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}",
+            ),
+        )
+
     logger.info(f"Deleting playlist with id={id}")
 
     playlist = await playlists_db.get_playlist(id)
@@ -160,6 +173,19 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
     is not already in the playlist. The song is added with the current timestamp.
     """
 
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot add song")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/songs",
+            ),
+        )  
+
     logger.info(f"Adding song {request.songId} to playlist {id}")
     try:
         playlist = await playlists_db.get_playlist(id)
@@ -171,7 +197,7 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
                     f"Playlist with id {id} not found",
                     f"/playlists/{id}/songs"
                 ),
-            )
+            )      
 
         song = await songs_db.get_song(request.songId)
         if not song:
@@ -216,6 +242,19 @@ async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlayli
     It validates that both the playlist and song exist, and that the song is currently
     in the playlist. If found, the song is removed and the updated playlist is returned.
     """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot remove song")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/songs",
+            ),
+        )
 
     logger.info(f"Removing song {request.songId} from playlist {id}")
     try:
@@ -269,13 +308,27 @@ async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlayli
 
 
 @router.post("/{id}/publish")
-async def publish_playlist(id: str):
+async def publish_playlist(id: str, request: schemas.ModifyPlaylistRequest):
     """
     Make a playlist public.
 
     This endpoint marks the specified playlist, identified by it's unique ID, as published (is_published = True).
     It first verifies that the playlist exists.
     """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot publish")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/publish",
+            ),
+        )
+
     logger.info(f"Publishing playlist with id {id}")
     playlist = await playlists_db.get_playlist(id)
     if not playlist:
@@ -306,13 +359,27 @@ async def publish_playlist(id: str):
 
 
 @router.post("/{id}/private")
-async def private_playlist(id: str):
+async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
     """
     Make a playlist private.
 
     This endpoint marks the specified playlist, identified by it's unique ID, as private (is_published = True).
     It first verifies that the playlist exists.
     """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot make private")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/private",
+            ),
+        )
+
     logger.info(f"Making playlist with id {id} private")
     playlist = await playlists_db.get_playlist(id)
     if not playlist:

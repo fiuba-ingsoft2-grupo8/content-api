@@ -10,14 +10,7 @@ def sample_song_data():
 
 @pytest.fixture  
 def sample_playlist_data():
-    return {"name": "Test Playlist", "description": "A test playlist"}
-
-@pytest.fixture
-def sample_playlist_data():
-    return {
-        "name": "Chill Vibes",
-        "description": "Lo-fi and chill songs for studying"
-    }
+    return {"name": "Test Playlist", "description": "A test playlist", "userId": "uu8432"}
 
 
 class TestSongEndpoints:
@@ -143,14 +136,16 @@ class TestSongEndpoints:
             "name": "Folklore",
             "description": "Primera playlist!!!" * 10,
             "isPublished": True,
-            "publishedAt": datetime.utcnow().isoformat()
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
         }).json()["data"]
 
         playlist2 = client.post("/playlists", json={
             "name": "Evermore",
             "description": "Segunda playlist!!!" * 10,
             "isPublished": True,
-            "publishedAt": datetime.utcnow().isoformat()
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
         }).json()["data"]
 
         response = client.get("/playlists")
@@ -168,8 +163,11 @@ class TestSongEndpoints:
             "name": "Piano Bar",
             "description": "charles" * 15,
             "isPublished": True,
-            "publishedAt": datetime.utcnow().isoformat()
-        }).json()["data"]
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
+        }).json()
+        print(playlist)
+        playlist = playlist["data"]
 
         response = client.get(f"/playlists/{playlist['id']}")
         assert response.status_code == 200
@@ -186,10 +184,11 @@ class TestSongEndpoints:
             "name": "Monos Árticos",
             "description": "monk" * 20,
             "isPublished": True,
-            "publishedAt": datetime.utcnow().isoformat()
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
         }).json()["data"]
 
-        response = client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song["_id"]})
+        response = client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song["_id"], "userId": "uu8432"})
         assert response.status_code == 200
 
         data = response.json()["data"]
@@ -206,10 +205,16 @@ class TestSongEndpoints:
             "name": "The Strokes",
             "description": "omg gordo mantecolero!!!" * 10,
             "isPublished": True,
-            "publishedAt": datetime.utcnow().isoformat()
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
         }).json()["data"]
 
-        response = client.delete(f"/playlists/{playlist['id']}")
+        response = client.request(
+            "DELETE",
+            f"/playlists/{playlist['id']}",
+            json={"userId": "uu8432"}
+        )
+
         assert response.status_code == 204
 
         check = client.get(f"/playlists/{playlist['id']}")
@@ -221,10 +226,11 @@ class TestSongEndpoints:
             "name": "Folklore",
             "description": "Primera playlist!!!" * 10,
             "isPublished": False,
-            "publishedAt": None
+            "publishedAt": None,
+            "userId": "uu8432"
         }).json()["data"]
 
-        response = client.post(f"/playlists/{playlist['id']}/publish")
+        response = client.post(f"/playlists/{playlist['id']}/publish", json={"userId": "uu8432"})
         assert response.status_code == 200
         data = response.json()["data"]
 
@@ -236,21 +242,27 @@ class TestSongEndpoints:
             "name": "Folklore",
             "description": "Primera playlist!!!" * 10,
             "isPublished": False,
-            "publishedAt": None
+            "publishedAt": None,
+            "userId": "uu8432"
         }).json()["data"]
 
         song1 = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift"}).json()["data"]
         song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift"}).json()["data"]
 
-        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song1["_id"]})
-        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"]})
+        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song1["_id"], "userId": "uu8432"})
+        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"], "userId": "uu8432"})
 
         # Ensure playlist exists
         check = client.get(f"/playlists/{playlist['id']}")
         assert check.status_code == 200
 
         # Delete playlist
-        response = client.delete(f"/playlists/{playlist['id']}")
+        response = client.request(
+            "DELETE",
+            f"/playlists/{playlist['id']}",
+            json={"userId": "uu8432"}
+        )
+        
         assert response.status_code == 204
 
         check_again = client.get(f"/playlists/{playlist['id']}")
