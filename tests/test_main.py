@@ -109,7 +109,9 @@ class TestSongEndpoints:
         response = client.get("/songs/68ceb28af48aee23d3c773ea")
         assert response.status_code == 404
 
-    # ---------- Playlists --------------------------------------------------------------------------------
+
+class TestPlaylistEndpoints:
+    """Test suite for playlist-related API endpoints."""
 
     def test_create_playlist_success(self, client, sample_playlist_data):
         """Test successful creation of a playlist."""
@@ -169,13 +171,31 @@ class TestSongEndpoints:
         print(playlist)
         playlist = playlist["data"]
 
-        response = client.get(f"/playlists/{playlist['id']}")
+        response = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert response.status_code == 200
         data = response.json()["data"]
 
         assert data["id"] == playlist["id"]
         assert data["name"] == "Piano Bar"
         assert data["songs"] == []
+
+    def test_get_private_playlist(self, client):
+        """Ensure private playlists are only accessible to their owner."""
+        playlist = client.post("/playlists", json={
+            "name": "Private playlist",
+            "description": "description",
+            "isPublished": False,
+            "userId": "uu8432"
+        }).json()["data"]
+
+        response_owner = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
+        assert response_owner.status_code == 200
+        data_owner = response_owner.json()["data"]
+        assert data_owner["id"] == playlist["id"]
+        assert data_owner["name"] == "Private playlist"
+
+        response_other = client.get(f"/playlists/{playlist['id']}?userId=other8432")
+        assert response_other.status_code == 404
 
     def test_add_song_to_playlist(self, client, sample_song_data):
         """Add a song to a playlist."""
@@ -217,14 +237,14 @@ class TestSongEndpoints:
 
         assert response.status_code == 204
 
-        check = client.get(f"/playlists/{playlist['id']}")
+        check = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert check.status_code == 404
 
     def test_publish_playlist(self, client):
         """Create a playlist and publish it."""
         playlist = client.post("/playlists", json={
             "name": "Folklore",
-            "description": "Primera playlist!!!" * 10,
+            "description": "Primera playlist!!!",
             "isPublished": False,
             "publishedAt": None,
             "userId": "uu8432"
@@ -253,7 +273,7 @@ class TestSongEndpoints:
         client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"], "userId": "uu8432"})
 
         # Ensure playlist exists
-        check = client.get(f"/playlists/{playlist['id']}")
+        check = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert check.status_code == 200
 
         # Delete playlist
@@ -265,5 +285,5 @@ class TestSongEndpoints:
         
         assert response.status_code == 204
 
-        check_again = client.get(f"/playlists/{playlist['id']}")
+        check_again = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert check_again.status_code == 404

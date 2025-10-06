@@ -38,7 +38,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
 
 
 @router.get("/")
-async def get_all_playlists():
+async def get_playlists(published: bool = False, userId: str = None):
     """
     Retrieve all playlists with their songs.
     
@@ -48,31 +48,7 @@ async def get_all_playlists():
     """
     logger.info("Fetching all published playlists")
     try:
-        playlists = await playlists_db.get_playlists(False)
-        serialized_playlists = []
-        for playlist in playlists:
-            songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
-            serialized_playlists.append(serialize_playlist(playlist, songs))
-        return {"data": serialized_playlists}
-
-    except Exception as e:
-        logger.error(f"Failed to fetch published playlists: {str(e)}")
-        raise
-
-
-@router.get("/")
-async def get_published_playlists():
-    """
-    Retrieve all published playlists with their songs.
-    
-    This endpoint fetches all playlists that are marked as published,
-    ordered by publication date (newest first) and includes all songs
-    in each playlist with their metadata. Only published playlists are
-    returned to maintain privacy of unpublished playlists.
-    """
-    logger.info("Fetching all published playlists")
-    try:
-        playlists = await playlists_db.get_playlists(True)
+        playlists = await playlists_db.get_playlists(published, userId)
         serialized_playlists = []
         for playlist in playlists:
             songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
@@ -85,7 +61,7 @@ async def get_published_playlists():
 
 
 @router.get("/{id}")
-async def get_playlist(id: str):
+async def get_playlist(id: str, userId: str = None):
     """
     Retrieve a specific playlist by its ID with all songs.
     
@@ -95,7 +71,7 @@ async def get_playlist(id: str):
     """
     logger.info(f"Fetching playlist with id={id}")
     try:
-        playlist = await playlists_db.get_playlist(id)
+        playlist = await playlists_db.get_playlist(id, userId)
 
         if playlist is None:
             logger.warning(f"Playlist with id={id} not found")
@@ -146,7 +122,7 @@ async def delete_playlist(id: str, request: schemas.ModifyPlaylistRequest = Body
 
     logger.info(f"Deleting playlist with id={id}")
 
-    playlist = await playlists_db.get_playlist(id)
+    playlist = await playlists_db.get_playlist(id, request.userId)
     if playlist is None:
         logger.warning(f"Playlist with id={id} not found for deletion")
         return JSONResponse(
@@ -188,7 +164,7 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
 
     logger.info(f"Adding song {request.songId} to playlist {id}")
     try:
-        playlist = await playlists_db.get_playlist(id)
+        playlist = await playlists_db.get_playlist(id, request.userId)
         if not playlist:
             return JSONResponse(
                 status_code=404,
@@ -221,7 +197,7 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
                 ),
             )
 
-        updated_playlist = await playlists_db.get_playlist(id)
+        updated_playlist = await playlists_db.get_playlist(id, request.userId)
         songs = await playlists_db.get_songs_from_playlist(id)
         return {"data": serialize_playlist(updated_playlist, songs)}
 
@@ -330,7 +306,7 @@ async def publish_playlist(id: str, request: schemas.ModifyPlaylistRequest):
         )
 
     logger.info(f"Publishing playlist with id {id}")
-    playlist = await playlists_db.get_playlist(id)
+    playlist = await playlists_db.get_playlist(id, request.userId)
     if not playlist:
         return JSONResponse(
             status_code=404,
@@ -381,7 +357,7 @@ async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
         )
 
     logger.info(f"Making playlist with id {id} private")
-    playlist = await playlists_db.get_playlist(id)
+    playlist = await playlists_db.get_playlist(id, request.userId)
     if not playlist:
         return JSONResponse(
             status_code=404,
@@ -407,3 +383,4 @@ async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
             status_code=400,
             content=create_error_response(400, "Bad Request", {str(e)}, f"/playlists/{id}/songs"),
         )
+

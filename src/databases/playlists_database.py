@@ -26,24 +26,43 @@ async def create_playlist(name, description, userId):
         logger.error(f"Failed to create playlist: {str(e)}")
         return (None, e)
     
-async def get_playlists(published: bool):
+async def get_playlists(published: bool, userId: str = None):
     db = get_db()
     try:
+        query = {}
         if published:
-            playlists = list(
-                db.playlists.find({"is_published": True})
-                .sort([("published_at", DESCENDING), ("_id", DESCENDING)])
-            )
-        else:
-            playlists = list(
-                db.playlists.find()
-                .sort([("published_at", DESCENDING), ("_id", DESCENDING)])
-            )
+            query["is_published"] = True
+        if userId:
+            query["userId"] = True
+
+        playlists = list(
+            db.playlists.find(query)
+            .sort([("published_at", DESCENDING), ("_id", DESCENDING)])
+        )
         logger.info(f"Retrieved {len(playlists)} playlists from database")
         return playlists
     except Exception as e:
         logger.error(f"Failed to retrieve playlists: {str(e)}")
         return []
+
+async def get_playlist(id, userId: str = None):
+    db = get_db()
+    try:
+        playlist = db.playlists.find_one({"_id": ObjectId(id)})
+        if playlist is None:
+            logger.warning(f"Playlist with id={id} not found")
+            return None
+
+        if not playlist.get("isPublished", False):
+            if userId is None or str(playlist.get("userId")) != str(userId):
+                logger.warning(f"Access denied to private playlist id={id} for user={userId}")
+                return None
+                
+        logger.info(f"Successfully retrieved playlist '{playlist['name']}'")
+        return playlist
+    except Exception as e:
+        logger.error(f"Failed to get playlist with id={id}: {str(e)}")
+        return None
 
 async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
     db = get_db()
@@ -95,19 +114,6 @@ async def get_songs_from_playlist(playlist_id: str):
         for ps in playlist_songs
         if ps["song_id"] in song_map
     ]
-
-async def get_playlist(id):
-    db = get_db()
-    try:
-        playlist = db.playlists.find_one({"_id": ObjectId(id)})
-        if playlist is None:
-            logger.warning(f"Playlist with id={id} not found")
-            return None
-        logger.info(f"Successfully retrieved playlist '{playlist['name']}'")
-        return playlist
-    except Exception as e:
-        logger.error(f"Failed to get playlist with id={id}: {str(e)}")
-        return None
 
 async def delete_playlist(existing_playlist):
     db = get_db()
