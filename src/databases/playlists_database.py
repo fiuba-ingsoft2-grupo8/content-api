@@ -25,6 +25,27 @@ async def create_playlist(name, description, userId):
     except Exception as e:
         logger.error(f"Failed to create playlist: {str(e)}")
         return (None, e)
+
+async def create_liked_songs_playlist(userId):
+    db = get_db()
+    logger.info(f"user id={userId}")
+    try:
+        publish_time = datetime.now(timezone.utc)
+        playlist_doc = {
+            "name": "Liked Songs",
+            "description": "",
+            "is_published": True,
+            "published_at": publish_time,
+            "userId": userId,
+            "songs": []
+        }
+        result = db.playlists.insert_one(playlist_doc)
+        logger.info(f"Successfully created Liked Songs playlist with id={result.inserted_id}")
+        playlist = db.playlists.find_one({"_id": result.inserted_id})
+        return (playlist, None)
+    except Exception as e:
+        logger.error(f"Failed to create Liked Songs playlist: {str(e)}")
+        return (None, e)
     
 async def get_playlists(published: bool, userId: str = None):
     db = get_db()

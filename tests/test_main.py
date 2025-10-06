@@ -256,7 +256,7 @@ class TestPlaylistEndpoints:
 
         assert data == True
 
-    def test_delete_playlist_with_songs(self, client, sample_song_data):
+    def test_delete_playlist_with_songs(self, client):
         """Delete a playlist that has songs inside it."""
         playlist = client.post("/playlists", json={
             "name": "Folklore",
@@ -272,11 +272,8 @@ class TestPlaylistEndpoints:
         client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song1["_id"], "userId": "uu8432"})
         client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"], "userId": "uu8432"})
 
-        # Ensure playlist exists
         check = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert check.status_code == 200
-
-        # Delete playlist
         response = client.request(
             "DELETE",
             f"/playlists/{playlist['id']}",
@@ -287,3 +284,25 @@ class TestPlaylistEndpoints:
 
         check_again = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert check_again.status_code == 404
+
+    def test_create_liked_songs_playlist(self, client):
+        """Create a 'Liked Songs' playlist for a user."""
+        response = client.post("/playlists/likedSongs", json={"userId": "uu8432"})
+
+        assert response.status_code == 201
+
+        data = response.json()["data"]
+
+        assert data["name"] == "Liked Songs"
+        assert data["description"] == ""
+        assert data["isPublished"] is True
+        assert data["userId"] == "uu8432"
+        assert isinstance(data["publishedAt"], str)
+        assert data["songs"] == []
+
+        playlist_id = data["id"]
+        get_response = client.get(f"/playlists/{playlist_id}?userId=uu8432")
+        assert get_response.status_code == 200
+        fetched = get_response.json()["data"]
+        assert fetched["name"] == "Liked Songs"
+        assert fetched["userId"] == "uu8432"

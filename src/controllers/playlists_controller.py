@@ -384,3 +384,20 @@ async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
             content=create_error_response(400, "Bad Request", {str(e)}, f"/playlists/{id}/songs"),
         )
 
+@router.post("/likedSongs", status_code=201)
+async def create_liked_songs_playlist(request: schemas.ModifyPlaylistRequest):
+    logger.info("Creating Liked Songs playlist")
+    try:
+        db_playlist, e = await playlists_db.create_liked_songs_playlist(request.userId)
+        if not db_playlist:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(400, "Bad Request", str(e), "/playlists"),
+            )
+        return {"data": serialize_playlist(db_playlist, [])}
+    except Exception as e:
+        logger.error(f"Failed to create Liked Songs playlist: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(400, "Bad Request", str(e), "/playlists"),
+        )
