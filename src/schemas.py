@@ -169,3 +169,14 @@ class ErrorResponse(BaseModel):
     status: int
     detail: str
     instance: str
+
+class ListeningHistory(BaseModel):
+    # to do - documentar
+    songId: str
+    userId: str
+    playedAt: datetime
+
+class ListeningHistoryRequest(BaseModel):
+    # to do - documentar
+    songId: str
+    userId: str

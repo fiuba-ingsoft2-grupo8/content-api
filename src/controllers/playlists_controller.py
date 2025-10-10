@@ -1,7 +1,7 @@
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import schemas
-from fastapi import Depends, Body
+from fastapi import Body
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter

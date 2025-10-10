@@ -1,6 +1,7 @@
 from resources.logger import logger
 from db.database import get_db
 from bson import ObjectId
+from datetime import datetime
 
 async def create_song(title, artist):
     db = get_db()
@@ -67,3 +68,14 @@ async def delete_song(existing_song):
         return None
     except Exception as e:
         logger.error(f"Failed to delete song with id={existing_song['_id']}: {str(e)}")
+
+async def add_to_history(songId, userId):
+    db = get_db()
+    try:
+        result = db.history.insert_one({"userId": userId, "songId": songId, "playedAt": datetime.now()})
+        return None
+    except Exception as e:
+        return e
+
+async def get_user_history(userId):
+    db = get_db()
