@@ -34,6 +34,7 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
             )
             for song in songs
         ],
+        coverUrl=playlist["coverUrl"]
     )
 
 def serialize_song(song):

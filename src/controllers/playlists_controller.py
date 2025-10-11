@@ -22,7 +22,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
         f"Creating playlist: name='{playlist.name}', description='{playlist.description}'"
     )
     try:
-        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, playlist.userId)
+        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, playlist.userId, playlist.coverUrl)
         if not db_playlist:
             return JSONResponse(
                 status_code=400,
@@ -38,7 +38,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
 
 
 @router.get("/")
-async def get_playlists(published: bool = False, userId: str = None):
+async def get_playlists(isPublished: bool = False, userId: str = None):
     """
     Retrieve all playlists with their songs.
     
@@ -46,9 +46,9 @@ async def get_playlists(published: bool = False, userId: str = None):
     (newest first) and includes all songs in each playlist with
     their metadata.
     """
-    logger.info("Fetching all published playlists")
+    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={userId})")
     try:
-        playlists = await playlists_db.get_playlists(published, userId)
+        playlists = await playlists_db.get_playlists(isPublished, userId)
         serialized_playlists = []
         for playlist in playlists:
             songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
@@ -85,11 +85,8 @@ async def get_playlist(id: str, userId: str = None):
                 ),
             )
 
-        logger.info("\n\n00")
         songs = await playlists_db.get_songs_from_playlist(id)
-        logger.info("01")
         serialized_playlist = serialize_playlist(playlist, songs)
-        logger.info("02")
         logger.info(f"Successfully retrieved playlist {id} with {len(playlist['songs'])} songs")
         return {"data": serialized_playlist}
     except Exception as e:

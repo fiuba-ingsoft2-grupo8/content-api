@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 
@@ -71,6 +71,7 @@ class PlaylistBase(BaseModel):
     name: str
     description: str
     userId: str
+    coverUrl: Optional[str] = None
 
 
 class CreatePlaylistRequest(PlaylistBase):
@@ -95,6 +96,7 @@ class Playlist(PlaylistBase):
     isPublished: bool
     publishedAt: datetime
     songs: List[PlaylistSong] = []
+    coverUrl: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -5,7 +5,7 @@ from db.database import get_db
 from db.models import PlaylistSong
 from bson import ObjectId
 
-async def create_playlist(name, description, userId):
+async def create_playlist(name, description, userId, coverUrl=None):
     db = get_db()
     logger.info(f"user id={userId}")
     try:
@@ -16,7 +16,8 @@ async def create_playlist(name, description, userId):
             "is_published": False,
             "published_at": publish_time,
             "userId": userId,
-            "songs": []
+            "songs": [],
+            "coverUrl": coverUrl or "default_cover.jpg"
         }
         result = db.playlists.insert_one(playlist_doc)
         logger.info(f"Successfully created playlist with id={result.inserted_id}")
@@ -37,7 +38,8 @@ async def create_liked_songs_playlist(userId):
             "is_published": True,
             "published_at": publish_time,
             "userId": userId,
-            "songs": []
+            "songs": [],
+            "coverUrl": "liked_songs.jpg",
         }
         result = db.playlists.insert_one(playlist_doc)
         logger.info(f"Successfully created Liked Songs playlist with id={result.inserted_id}")
@@ -54,7 +56,7 @@ async def get_playlists(published: bool, userId: str = None):
         if published:
             query["is_published"] = True
         if userId:
-            query["userId"] = True
+            query["userId"] = userId
 
         playlists = list(
             db.playlists.find(query)
