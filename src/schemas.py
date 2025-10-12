@@ -173,13 +173,12 @@ class ErrorResponse(BaseModel):
     instance: str
 
 class ListeningHistory(BaseModel):
-    # to do - documentar
     songId: str
     userId: str
     playedAt: datetime
     progress: int
 
 class ListeningHistoryRequest(BaseModel):
-    # to do - documentar
     songId: str
     userId: str
+    progress: Optional[int] = 0

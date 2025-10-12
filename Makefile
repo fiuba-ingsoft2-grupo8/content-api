@@ -24,5 +24,5 @@ down-remote:
 .PHONY: down-remote
 
 test:
-	python3 -m pytest --cov=src --cov-report=xml tests/test_main.py -v
+	python -m pytest --cov=src --cov-report=xml tests/test_main.py -v
 .PHONY: test
