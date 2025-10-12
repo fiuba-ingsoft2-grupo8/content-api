@@ -128,7 +128,7 @@ class TestPlaylistEndpoints:
         assert playlist["description"] == sample_playlist_data["description"]
         assert playlist["isPublished"] is False
         assert playlist["songs"] == []
-        # publishedAt should be a valid date string
+        assert playlist["isLikedSongs"] is False
         assert datetime.fromisoformat(playlist["publishedAt"])
 
     def test_get_playlists_ordered_by_published_date(self, client):
@@ -219,6 +219,25 @@ class TestPlaylistEndpoints:
         assert added["artist"] == sample_song_data["artist"]
         assert datetime.fromisoformat(added["addedAt"])
 
+    def test_add_song_to_nonexistent_playlist(self, client, sample_song_data):
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        res = client.post(f"/playlists/123/songs", json={"songId": song["_id"], "userId": "uu8432"})
+
+        assert res.status_code == 404
+
+    def test_add_nonexistent_song(self, client):
+        playlist = client.post("/playlists", json={
+            "name": "Monos Árticos",
+            "description": "monk" * 20,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
+        }).json()["data"]
+
+        res = client.post(f"/playlists/123/songs", json={"songId": "567", "userId": "uu8432"})
+
+        assert res.status_code == 404
+
     def test_delete_playlist(self, client):
         """Delete a playlist and verify 404 afterwards."""
         playlist = client.post("/playlists", json={
@@ -239,6 +258,34 @@ class TestPlaylistEndpoints:
 
         check = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert check.status_code == 404
+
+    def test_delete_playlist_not_belongs_to_user(self, client):
+        """Try deleting a playlist that belongs to another user."""
+        playlist = client.post("/playlists", json={
+            "name": "The Strokes",
+            "description": "omg gordo mantecolero!!!" * 10,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
+        }).json()["data"]
+
+        res = client.request(
+            "DELETE",
+            f"/playlists/{playlist['id']}",
+            json={"userId": "123"}
+        )
+
+        assert res.status_code == 404
+
+    def test_delete_nonexistent_playlist(self, client):
+        """Try deleting a non-existing playlist."""
+        res = client.request(
+            "DELETE",
+            f"/playlists/nonexistent",
+            json={"userId": "uu8432"}
+        )
+
+        assert res.status_code == 404
 
     def test_publish_playlist(self, client):
         """Create a playlist and publish it."""
@@ -285,9 +332,13 @@ class TestPlaylistEndpoints:
         check_again = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
         assert check_again.status_code == 404
 
+
+class TestLikedSongsEndpoints:
+    """Test suite for liked songs related API endpoints."""
+
     def test_create_liked_songs_playlist(self, client):
         """Create a 'Liked Songs' playlist for a user."""
-        response = client.post("/playlists/likedSongs", json={"userId": "uu8432"})
+        response = client.post("/likedSongs", json={"userId": "uu8432"})
 
         assert response.status_code == 201
 
@@ -299,10 +350,55 @@ class TestPlaylistEndpoints:
         assert data["userId"] == "uu8432"
         assert isinstance(data["publishedAt"], str)
         assert data["songs"] == []
+        assert data["isLikedSongs"] is True
 
         playlist_id = data["id"]
-        get_response = client.get(f"/playlists/{playlist_id}?userId=uu8432")
+        get_response = client.get(f"/likedSongs?userId=uu8432")
         assert get_response.status_code == 200
         fetched = get_response.json()["data"]
         assert fetched["name"] == "Liked Songs"
         assert fetched["userId"] == "uu8432"
+
+    def test_add_song_to_liked_songs(self, client):
+        """Add a song to the user's liked songs playlist."""
+        playlist_response = client.post("/likedSongs", json={"userId": "uu8432"})
+        assert playlist_response.status_code == 201
+        playlist_id = playlist_response.json()["data"]["id"]
+
+        song_response = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift"})
+        assert song_response.status_code == 201
+        song_id = song_response.json()["data"]["_id"]
+
+        add_response = client.post(
+            "/likedSongs/addSongs",
+            json={"userId": "uu8432", "songId": song_id},
+        )
+        assert add_response.status_code == 200
+        data = add_response.json()["data"]
+        assert data["id"] == playlist_id
+        assert len(data["songs"]) == 1
+        assert data["songs"][0]["id"] == song_id
+
+        get_response = client.get(f"/likedSongs?userId=uu8432")
+        assert get_response.status_code == 200
+        fetched = get_response.json()["data"]
+        assert any(song["id"] == song_id for song in fetched["songs"])
+
+    def test_remove_song_from_liked_songs(self, client):
+        """Remove a song from the user's liked songs playlist."""
+        playlist = client.post("/likedSongs", json={"userId": "uu8432"}).json()["data"]
+
+        song = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift"}).json()["data"]
+        client.post("/likedSongs/addSongs", json={"userId": "uu8432", "songId": song["_id"]})
+
+        response = client.request(
+            "DELETE",
+            "/likedSongs/",
+            json={"userId": "uu8432", "songId": song["_id"]},
+        )
+        assert response.status_code == 200
+
+        get_response = client.get(f"/likedSongs?userId=uu8432")
+        assert get_response.status_code == 200
+        data = get_response.json()["data"]
+        assert data["songs"] == []

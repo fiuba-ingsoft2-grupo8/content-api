@@ -22,7 +22,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
         f"Creating playlist: name='{playlist.name}', description='{playlist.description}'"
     )
     try:
-        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, False, playlist.userId, playlist.coverUrl)
+        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, False, playlist.userId, playlist.coverUrl, False)
         if not db_playlist:
             return JSONResponse(
                 status_code=400,

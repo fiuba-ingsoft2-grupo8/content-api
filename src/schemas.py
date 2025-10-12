@@ -72,7 +72,7 @@ class PlaylistBase(BaseModel):
     description: str
     userId: str
     coverUrl: Optional[str] = None
-    isLikedSongs: bool
+    isLikedSongs: Optional[bool] = False
 
 
 class CreatePlaylistRequest(PlaylistBase):
