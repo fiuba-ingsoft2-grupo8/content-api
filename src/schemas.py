@@ -72,6 +72,7 @@ class PlaylistBase(BaseModel):
     description: str
     userId: str
     coverUrl: Optional[str] = None
+    isLikedSongs: bool
 
 
 class CreatePlaylistRequest(PlaylistBase):
@@ -96,7 +97,6 @@ class Playlist(PlaylistBase):
     isPublished: bool
     publishedAt: datetime
     songs: List[PlaylistSong] = []
-    coverUrl: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -177,6 +177,7 @@ class ListeningHistory(BaseModel):
     songId: str
     userId: str
     playedAt: datetime
+    progress: int
 
 class ListeningHistoryRequest(BaseModel):
     # to do - documentar

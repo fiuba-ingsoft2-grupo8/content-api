@@ -126,23 +126,3 @@ async def delete_song(id: str):
 
     return await songs_db.delete_song(db_song)
 
-
-@router.post("/history")
-async def add_to_history(request: schemas.ListeningHistoryRequest):
-    logger.info(f"Adding song with id {request.songId} to user {request.userId}'s listening history")
-
-    result = await songs_db.add_to_history(request.songId, request.userId)
-    if not result:
-        logger.info(f"Succesfully logged song with id {id} to user {request.userId}'s listening history")
-
-    logger.info(f"Failed to log song with id {id} to user {request.userId}'s listening history")
-    return JSONResponse(
-        status_code=400,
-        content=create_error_response(400, "Bad Request", str(result), "/songs"),
-    )
-
-
-@router.get("/user/{userId}/history")
-async def get_user_history():
-    pass
-

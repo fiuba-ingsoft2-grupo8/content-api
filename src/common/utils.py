@@ -18,6 +18,15 @@ def create_error_response(status_code: int, title: str, detail: str, instance: s
     }
 
 def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
+    if "coverUrl" in playlist :
+        coverUrl = playlist["coverUrl"] 
+    else:
+        coverUrl = None
+
+    if "isLikedSongs" in playlist :
+        isLikedSongs = playlist["isLikedSongs"] 
+    else:
+        isLikedSongs = False 
     return schemas.Playlist(
         id=str(playlist["_id"]),
         name=playlist["name"],
@@ -34,7 +43,8 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
             )
             for song in songs
         ],
-        coverUrl=playlist["coverUrl"]
+        coverUrl=coverUrl,
+        isLikedSongs=isLikedSongs
     )
 
 def serialize_song(song):

@@ -5,7 +5,7 @@ from db.database import get_db
 from db.models import PlaylistSong
 from bson import ObjectId
 
-async def create_playlist(name, description, userId, coverUrl=None):
+async def create_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False):
     db = get_db()
     logger.info(f"user id={userId}")
     try:
@@ -13,11 +13,12 @@ async def create_playlist(name, description, userId, coverUrl=None):
         playlist_doc = {
             "name": name,
             "description": description,
-            "is_published": False,
+            "is_published": is_published,
             "published_at": publish_time,
             "userId": userId,
             "songs": [],
-            "coverUrl": coverUrl or "default_cover.jpg"
+            "coverUrl": coverUrl or "default_cover.png",
+            "isLikedSongs": isLikedSongs
         }
         result = db.playlists.insert_one(playlist_doc)
         logger.info(f"Successfully created playlist with id={result.inserted_id}")
@@ -25,28 +26,6 @@ async def create_playlist(name, description, userId, coverUrl=None):
         return (playlist, None)
     except Exception as e:
         logger.error(f"Failed to create playlist: {str(e)}")
-        return (None, e)
-
-async def create_liked_songs_playlist(userId):
-    db = get_db()
-    logger.info(f"user id={userId}")
-    try:
-        publish_time = datetime.now(timezone.utc)
-        playlist_doc = {
-            "name": "Liked Songs",
-            "description": "",
-            "is_published": True,
-            "published_at": publish_time,
-            "userId": userId,
-            "songs": [],
-            "coverUrl": "liked_songs.jpg",
-        }
-        result = db.playlists.insert_one(playlist_doc)
-        logger.info(f"Successfully created Liked Songs playlist with id={result.inserted_id}")
-        playlist = db.playlists.find_one({"_id": result.inserted_id})
-        return (playlist, None)
-    except Exception as e:
-        logger.error(f"Failed to create Liked Songs playlist: {str(e)}")
         return (None, e)
     
 async def get_playlists(published: bool, userId: str = None):
@@ -70,6 +49,7 @@ async def get_playlists(published: bool, userId: str = None):
 
 async def get_playlist(id, userId: str = None):
     db = get_db()
+    print(f"\nid: {id}\n")
     try:
         playlist = db.playlists.find_one({"_id": ObjectId(id)})
         if playlist is None:
@@ -88,6 +68,7 @@ async def get_playlist(id, userId: str = None):
         return None
 
 async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
+    print(f"\nid in add song to playlist: {playlist_id}\n")
     db = get_db()
     song_oid = ObjectId(song_id)
     playlist_oid = ObjectId(playlist_id)
@@ -165,3 +146,16 @@ async def playlist_belongs_to_user(playlist_id, userId):
         return True if found_playlist else False
     except Exception as e:
         return False
+
+async def get_liked_songs_playlist(userId):
+    db = get_db()
+    try:
+        playlist = db.playlists.find_one({"userId": userId, "isLikedSongs": True})
+        if playlist is None:
+            logger.warning(f"Liked songs for user{userId} not found")
+            return None                
+        logger.info(f"Successfully retrieved liked songs for user{userId}")
+        return playlist
+    except Exception as e:
+        logger.error(f"Failed to get liked songs for user{userId}: {str(e)}")
+        return None
