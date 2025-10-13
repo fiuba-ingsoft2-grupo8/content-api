@@ -10,6 +10,7 @@ from resources.logger import logger, LOGGING_CONFIG
 from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller
 from common.utils import create_error_response
 from db.database import Database
+from db.supabase import Supabase
 
 logger.info("Load configurations")
 load_dotenv()
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     if not is_testing():
         logger.info("Initializing database connection pool...")
         Database.initialize()
+        Supabase.initialize()
         logger.info("Database connection pool initialized successfully")
     else:
         logger.info("Skipping database initialization during tests")

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+from fastapi import UploadFile, File
 
 
 class SongBase(BaseModel):
@@ -157,6 +158,9 @@ class PlaylistsResponse(BaseModel):
     Provides consistent response format for endpoints returning a list of playlists.
     """
     data: List[Playlist]
+
+class PlaylistImageRequest(ModifyPlaylistRequest):
+    file: UploadFile = File(...) 
 
 
 class ErrorResponse(BaseModel):

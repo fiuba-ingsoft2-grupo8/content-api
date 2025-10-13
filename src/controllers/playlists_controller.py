@@ -1,11 +1,14 @@
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
+import databases.storage_database as storage_db
 import schemas
 from fastapi import Body
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
-from common.utils import create_error_response, serialize_playlist
+from fastapi import UploadFile, File, Form
+from common.utils import create_error_response, serialize_playlist, DEFAULT_COVERS
+import random
 
 router = APIRouter()
 
@@ -21,8 +24,13 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
     logger.info(
         f"Creating playlist: name='{playlist.name}', description='{playlist.description}'"
     )
+    if playlist.coverUrl:
+        cover_url = playlist.coverUrl
+    else:
+        cover_url = playlist.coverUrl or random.choice(DEFAULT_COVERS)
+
     try:
-        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, False, playlist.userId, playlist.coverUrl, False)
+        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, False, playlist.userId, cover_url, False)
         if not db_playlist:
             return JSONResponse(
                 status_code=400,
@@ -382,3 +390,66 @@ async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
         )
 
 
+@router.post("/{id}/upload-cover")
+async def upload_playlist_cover(id: str, userId: str = Form(...), file: UploadFile = File(...)):
+    """
+    Uploads a playlist cover image to Supabase Storage and updates the playlist document.
+    """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot upload cover")
+        return JSONResponse(
+            status_code=401,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                "Playlist does not belong to user",
+                f"/playlists/{id}/upload-cover",
+            ),
+        )
+
+
+    playlist = await playlists_db.get_playlist(id, userId)
+    if not playlist:
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                404,
+                "Not Found",
+                f"Playlist with id {id} not found",
+                f"/playlists/{id}/upload-cover"
+            ),
+        )
+
+    try:
+        result = await storage_db.upload_cover_image("playlists", userId, file)
+        cover_url = result["coverUrl"]
+
+        updated = await playlists_db.update_playlist_cover(playlist, cover_url)
+        if not updated:
+            logger.error(f"Failed to update playlist cover for id {id}")
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400,
+                    "Bad Request",
+                    "Failed to update playlist cover",
+                    f"/playlists/{id}/upload-cover"
+                ),
+            )
+
+        logger.info(f"Successfully updated playlist cover for {id}")
+        return {"coverUrl": cover_url}
+
+    except Exception as e:
+        logger.error(f"Failed to upload playlist cover: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                str(e),
+                f"/playlists/{id}/upload-cover"
+            ),
+        )

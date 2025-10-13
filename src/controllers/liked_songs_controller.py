@@ -12,8 +12,9 @@ router = APIRouter()
 @router.post("/", status_code=201)
 async def create_liked_songs_playlist(request: schemas.ModifyPlaylistRequest):
     logger.info("Creating Liked Songs playlist")
+    liked_songs_cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/liked-songs.png"
     try:
-        db_playlist, e = await playlists_db.create_playlist("Liked Songs", "", True, request.userId, "liked_songs.png", True)
+        db_playlist, e = await playlists_db.create_playlist("Liked Songs", "", True, request.userId, liked_songs_cover_url, True)
         if not db_playlist:
             return JSONResponse(
                 status_code=400,

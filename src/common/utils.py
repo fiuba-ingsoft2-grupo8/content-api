@@ -1,6 +1,11 @@
 from resources.logger import logger
-from db import models
 import schemas
+
+DEFAULT_COVERS = [
+    "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-green.png",
+    "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-orange.png",
+    "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-purple.png"
+]
 
 def create_error_response(status_code: int, title: str, detail: str, instance: str = ""):
     """

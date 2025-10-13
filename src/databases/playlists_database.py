@@ -28,6 +28,7 @@ async def create_playlist(name, description, is_published, userId, coverUrl=None
         logger.error(f"Failed to create playlist: {str(e)}")
         return (None, e)
     
+    
 async def get_playlists(published: bool, userId: str = None):
     db = get_db()
     try:
@@ -46,6 +47,7 @@ async def get_playlists(published: bool, userId: str = None):
     except Exception as e:
         logger.error(f"Failed to retrieve playlists: {str(e)}")
         return []
+
 
 async def get_playlist(id, userId: str = None):
     db = get_db()
@@ -67,6 +69,7 @@ async def get_playlist(id, userId: str = None):
         logger.error(f"Failed to get playlist with id={id}: {str(e)}")
         return None
 
+
 async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
     print(f"\nid in add song to playlist: {playlist_id}\n")
     db = get_db()
@@ -77,6 +80,7 @@ async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
     db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
     logger.info(f"Added song {song_id} to playlist {playlist_id}")
     return True
+
 
 async def remove_song_from_playlist(song_id: str, playlist_id: str) -> bool:
     db = get_db()
@@ -95,6 +99,7 @@ async def remove_song_from_playlist(song_id: str, playlist_id: str) -> bool:
     else:
         logger.warning(f"Song {song_id} not found in playlist {playlist_id}")
         return False
+
 
 async def get_songs_from_playlist(playlist_id: str):
     db = get_db()
@@ -119,6 +124,7 @@ async def get_songs_from_playlist(playlist_id: str):
         if ps["song_id"] in song_map
     ]
 
+
 async def delete_playlist(existing_playlist):
     db = get_db()
     try:
@@ -131,13 +137,24 @@ async def delete_playlist(existing_playlist):
     except Exception as e:
         logger.error(f"Failed to delete playlist with id={existing_playlist['_id']}: {str(e)}")
 
-async def change_playlist_state(existing_playist, state):
+
+async def change_playlist_state(existing_playlist, state):
     db = get_db()
     result = db.playlists.update_one(
-        {"_id": existing_playist["_id"]},
+        {"_id": existing_playlist["_id"]},
         {"$set": {"is_published": state}}
     )
     return result.modified_count > 0
+
+
+async def update_playlist_cover(existing_playlist: str, cover_url: str):
+    db = get_db()
+    result = db.playlists.update_one(
+        {"_id": existing_playlist["_id"]},
+        {"$set": {"coverUrl": cover_url}}
+    )
+    return result.modified_count > 0
+
 
 async def playlist_belongs_to_user(playlist_id, userId):
     db = get_db()
@@ -146,6 +163,7 @@ async def playlist_belongs_to_user(playlist_id, userId):
         return True if found_playlist else False
     except Exception as e:
         return False
+
 
 async def get_liked_songs_playlist(userId):
     db = get_db()
