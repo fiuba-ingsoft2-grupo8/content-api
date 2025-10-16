@@ -30,6 +30,9 @@ services:
       HOST: "0.0.0.0"
       PORT: "8080"
       DATABASE_URL: "mongodb://admin:admin_password@mongodb:27017/userdb?authSource=admin"
+      SUPABASE_URL: "${SUPABASE_URL}"
+      SUPABASE_SERVICE_KEY: "${SUPABASE_SERVICE_KEY}"
+      SUPABASE_BUCKET: "${SUPABASE_BUCKET}"
       JWT_SECRET: "${JWT_SECRET}"
     ports:
       - "8080:8080"
