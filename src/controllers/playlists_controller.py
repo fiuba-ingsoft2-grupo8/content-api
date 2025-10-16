@@ -2,18 +2,19 @@ import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import databases.storage_database as storage_db
 import schemas
-from fastapi import Body
+from fastapi import Body, Depends
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
 from fastapi import UploadFile, File, Form
 from common.utils import create_error_response, serialize_playlist, DEFAULT_COVERS
+from auth import verify_token
 import random
 
 router = APIRouter()
 
 @router.post("/", status_code=201)
-async def create_playlist(playlist: schemas.CreatePlaylistRequest):
+async def create_playlist(playlist: schemas.CreatePlaylistRequest, user_data: dict = Depends(verify_token)):
     """
     Create a new playlist in the database.
     
@@ -46,7 +47,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
 
 
 @router.get("/")
-async def get_playlists(isPublished: bool = False, userId: str = None):
+async def get_playlists(isPublished: bool = False, userId: str = None, user_data: dict = Depends(verify_token)):
     """
     Retrieve all playlists with their songs.
     
@@ -69,7 +70,7 @@ async def get_playlists(isPublished: bool = False, userId: str = None):
 
 
 @router.get("/{id}")
-async def get_playlist(id: str, userId: str = None):
+async def get_playlist(id: str, userId: str = None, user_data: dict = Depends(verify_token)):
     """
     Retrieve a specific playlist by its ID with all songs.
     
@@ -103,7 +104,7 @@ async def get_playlist(id: str, userId: str = None):
 
 
 @router.delete("/{id}", status_code=204)
-async def delete_playlist(id: str, request: schemas.ModifyPlaylistRequest = Body(...)):
+async def delete_playlist(id: str, request: schemas.ModifyPlaylistRequest = Body(...), user_data: dict = Depends(verify_token)):
     """
     Delete a playlist from the database.
     
@@ -145,7 +146,7 @@ async def delete_playlist(id: str, request: schemas.ModifyPlaylistRequest = Body
 
 
 @router.post("/{id}/songs")
-async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistRequest):
+async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistRequest, user_data: dict = Depends(verify_token)):
     """
     Add an existing song to a playlist.
 
@@ -215,7 +216,7 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
 
 
 @router.delete("/{id}/songs")
-async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlaylistRequest):
+async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlaylistRequest, user_data: dict = Depends(verify_token)):
     """
     Remove a song from a playlist.
 
@@ -289,7 +290,7 @@ async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlayli
 
 
 @router.post("/{id}/publish")
-async def publish_playlist(id: str, request: schemas.ModifyPlaylistRequest):
+async def publish_playlist(id: str, request: schemas.ModifyPlaylistRequest, user_data: dict = Depends(verify_token)):
     """
     Make a playlist public.
 
@@ -340,7 +341,7 @@ async def publish_playlist(id: str, request: schemas.ModifyPlaylistRequest):
 
 
 @router.post("/{id}/private")
-async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
+async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest, user_data: dict = Depends(verify_token)):
     """
     Make a playlist private.
 
@@ -391,7 +392,7 @@ async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
 
 
 @router.post("/{id}/upload-cover")
-async def upload_playlist_cover(id: str, userId: str = Form(...), file: UploadFile = File(...)):
+async def upload_playlist_cover(id: str, userId: str = Form(...), file: UploadFile = File(...), user_data: dict = Depends(verify_token)):
     """
     Uploads a playlist cover image to Supabase Storage and updates the playlist document.
     """

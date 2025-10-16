@@ -9,6 +9,7 @@ services:
       HOST: "0.0.0.0"
       PORT: "8080"
       DATABASE_URL: "${DATABASE_URL}"
+      JWT_SECRET: "${JWT_SECRET}"
     ports:
       - "8080:8080"
     networks:

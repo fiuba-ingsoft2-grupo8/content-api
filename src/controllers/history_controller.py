@@ -2,16 +2,17 @@ import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import databases.history_database as history_db
 import schemas
-from fastapi import Body
+from fastapi import Body, Depends
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
 from common.utils import create_error_response, serialize_playlist
+from auth import verify_token
 
 router = APIRouter()
 
 @router.post("/")
-async def add_to_history(request: schemas.ListeningHistoryRequest):
+async def add_to_history(request: schemas.ListeningHistoryRequest, user_data: dict = Depends(verify_token)):
     logger.info(f"Adding song with id {request.songId} to user {request.userId}'s listening history")
 
     # to do: agregar validacion del estado del historial (pausado o no)
@@ -39,7 +40,7 @@ async def add_to_history(request: schemas.ListeningHistoryRequest):
     return JSONResponse(status_code=201, content={"message": "Added to history"})
 
 @router.get("/")
-async def get_history(userId: str, search: str = None):
+async def get_history(userId: str, search: str = None, user_data: dict = Depends(verify_token)):
     """
     Retrieve the listening history for a specific user.
     Returns a list of songs (most recent first).
@@ -81,7 +82,7 @@ async def get_history(userId: str, search: str = None):
         )
 
 @router.put("/")
-async def update_song_progress(request: schemas.ListeningHistoryRequest):
+async def update_song_progress(request: schemas.ListeningHistoryRequest, user_data: dict = Depends(verify_token)):
     """
     Update the progress of a song in the user's listening history.
     """
@@ -99,7 +100,7 @@ async def update_song_progress(request: schemas.ListeningHistoryRequest):
     return JSONResponse(status_code=200, content={"message": "Progress updated"})
 
 @router.delete("/")
-async def clear_history(userId: str):
+async def clear_history(userId: str, user_data: dict = Depends(verify_token)):
     """
     Clear all listening history for a specific user.
     """

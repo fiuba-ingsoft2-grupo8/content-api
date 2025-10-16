@@ -1,16 +1,17 @@
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import schemas
-from fastapi import Body
+from fastapi import Body, Depends
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
 from common.utils import create_error_response, serialize_playlist
+from auth import verify_token
 
 router = APIRouter()
 
 @router.post("/", status_code=201)
-async def create_liked_songs_playlist(request: schemas.ModifyPlaylistRequest):
+async def create_liked_songs_playlist(request: schemas.ModifyPlaylistRequest, user_data: dict = Depends(verify_token)):
     logger.info("Creating Liked Songs playlist")
     liked_songs_cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/liked-songs.png"
     try:
@@ -30,7 +31,7 @@ async def create_liked_songs_playlist(request: schemas.ModifyPlaylistRequest):
 
 
 @router.post("/addSongs")
-async def add_to_liked_songs(request: schemas.ModifySongInPlaylistRequest):
+async def add_to_liked_songs(request: schemas.ModifySongInPlaylistRequest, user_data: dict = Depends(verify_token)):
     liked_songs = await playlists_db.get_liked_songs_playlist(request.userId)
     
     if not liked_songs:
@@ -83,7 +84,7 @@ async def add_to_liked_songs(request: schemas.ModifySongInPlaylistRequest):
 
 
 @router.delete("/")
-async def remove_from_liked_songs(request: schemas.ModifySongInPlaylistRequest = Body(...)):
+async def remove_from_liked_songs(request: schemas.ModifySongInPlaylistRequest = Body(...), user_data: dict = Depends(verify_token)):
     liked_songs = await playlists_db.get_liked_songs_playlist(request.userId)
     
     if not liked_songs:
@@ -138,7 +139,7 @@ async def remove_from_liked_songs(request: schemas.ModifySongInPlaylistRequest =
 
 
 @router.get("/")
-async def get_liked_songs(userId: str = None):
+async def get_liked_songs(userId: str = None, user_data: dict = Depends(verify_token)):
     try:
         liked_songs = await playlists_db.get_liked_songs_playlist(userId)
         id = str(liked_songs["_id"])
