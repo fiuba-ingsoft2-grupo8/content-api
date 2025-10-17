@@ -51,6 +51,8 @@ class Song(BaseModel):
     id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
     title: str
     artist: str
+    duration: str
+    audio_path: str
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 

@@ -13,6 +13,8 @@ class SongBase(BaseModel):
     """
     title: str
     artist: str
+    duration: str
+    audio_path: str
 
 
 class CreateSongRequest(SongBase):
