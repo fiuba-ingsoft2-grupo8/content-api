@@ -9,3 +9,4 @@ psycopg2-binary==2.9.10
 cryptography==45.0.7
 pymongo==4.15.0
 python-multipart==0.0.6
+supabase==2.6.0
