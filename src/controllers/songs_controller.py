@@ -126,5 +126,3 @@ async def delete_song(id: str):
 
     return await songs_db.delete_song(db_song)
 
-
-

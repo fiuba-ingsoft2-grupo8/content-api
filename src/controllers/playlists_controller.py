@@ -1,11 +1,14 @@
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
+import databases.storage_database as storage_db
 import schemas
-from fastapi import Depends
+from fastapi import Body
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
-from common.utils import create_error_response, serialize_playlist
+from fastapi import UploadFile, File, Form
+from common.utils import create_error_response, serialize_playlist, DEFAULT_COVERS
+import random
 
 router = APIRouter()
 
@@ -21,8 +24,13 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
     logger.info(
         f"Creating playlist: name='{playlist.name}', description='{playlist.description}'"
     )
+    if playlist.coverUrl:
+        cover_url = playlist.coverUrl
+    else:
+        cover_url = playlist.coverUrl or random.choice(DEFAULT_COVERS)
+
     try:
-        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description)
+        db_playlist, e = await playlists_db.create_playlist(playlist.name, playlist.description, False, playlist.userId, cover_url, False)
         if not db_playlist:
             return JSONResponse(
                 status_code=400,
@@ -38,7 +46,7 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest):
 
 
 @router.get("/")
-async def get_all_playlists():
+async def get_playlists(isPublished: bool = False, userId: str = None):
     """
     Retrieve all playlists with their songs.
     
@@ -46,33 +54,9 @@ async def get_all_playlists():
     (newest first) and includes all songs in each playlist with
     their metadata.
     """
-    logger.info("Fetching all published playlists")
+    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={userId})")
     try:
-        playlists = await playlists_db.get_playlists(False)
-        serialized_playlists = []
-        for playlist in playlists:
-            songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
-            serialized_playlists.append(serialize_playlist(playlist, songs))
-        return {"data": serialized_playlists}
-
-    except Exception as e:
-        logger.error(f"Failed to fetch published playlists: {str(e)}")
-        raise
-
-
-@router.get("/")
-async def get_published_playlists():
-    """
-    Retrieve all published playlists with their songs.
-    
-    This endpoint fetches all playlists that are marked as published,
-    ordered by publication date (newest first) and includes all songs
-    in each playlist with their metadata. Only published playlists are
-    returned to maintain privacy of unpublished playlists.
-    """
-    logger.info("Fetching all published playlists")
-    try:
-        playlists = await playlists_db.get_playlists(True)
+        playlists = await playlists_db.get_playlists(isPublished, userId)
         serialized_playlists = []
         for playlist in playlists:
             songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
@@ -85,7 +69,7 @@ async def get_published_playlists():
 
 
 @router.get("/{id}")
-async def get_playlist(id: str):
+async def get_playlist(id: str, userId: str = None):
     """
     Retrieve a specific playlist by its ID with all songs.
     
@@ -95,7 +79,7 @@ async def get_playlist(id: str):
     """
     logger.info(f"Fetching playlist with id={id}")
     try:
-        playlist = await playlists_db.get_playlist(id)
+        playlist = await playlists_db.get_playlist(id, userId)
 
         if playlist is None:
             logger.warning(f"Playlist with id={id} not found")
@@ -109,11 +93,8 @@ async def get_playlist(id: str):
                 ),
             )
 
-        logger.info("\n\n00")
         songs = await playlists_db.get_songs_from_playlist(id)
-        logger.info("01")
         serialized_playlist = serialize_playlist(playlist, songs)
-        logger.info("02")
         logger.info(f"Successfully retrieved playlist {id} with {len(playlist['songs'])} songs")
         return {"data": serialized_playlist}
     except Exception as e:
@@ -122,7 +103,7 @@ async def get_playlist(id: str):
 
 
 @router.delete("/{id}", status_code=204)
-async def delete_playlist(id: str):
+async def delete_playlist(id: str, request: schemas.ModifyPlaylistRequest = Body(...)):
     """
     Delete a playlist from the database.
     
@@ -131,9 +112,22 @@ async def delete_playlist(id: str):
     The operation also removes all song associations from the playlist
     due to foreign key constraints, but the songs themselves remain in the database.
     """
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot delete")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}",
+            ),
+        )
+
     logger.info(f"Deleting playlist with id={id}")
 
-    playlist = await playlists_db.get_playlist(id)
+    playlist = await playlists_db.get_playlist(id, request.userId)
     if playlist is None:
         logger.warning(f"Playlist with id={id} not found for deletion")
         return JSONResponse(
@@ -160,9 +154,22 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
     is not already in the playlist. The song is added with the current timestamp.
     """
 
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot add song")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/songs",
+            ),
+        )  
+
     logger.info(f"Adding song {request.songId} to playlist {id}")
     try:
-        playlist = await playlists_db.get_playlist(id)
+        playlist = await playlists_db.get_playlist(id, request.userId)
         if not playlist:
             return JSONResponse(
                 status_code=404,
@@ -171,7 +178,7 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
                     f"Playlist with id {id} not found",
                     f"/playlists/{id}/songs"
                 ),
-            )
+            )      
 
         song = await songs_db.get_song(request.songId)
         if not song:
@@ -195,7 +202,7 @@ async def add_song_to_playlist(id: str, request: schemas.ModifySongInPlaylistReq
                 ),
             )
 
-        updated_playlist = await playlists_db.get_playlist(id)
+        updated_playlist = await playlists_db.get_playlist(id, request.userId)
         songs = await playlists_db.get_songs_from_playlist(id)
         return {"data": serialize_playlist(updated_playlist, songs)}
 
@@ -216,6 +223,19 @@ async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlayli
     It validates that both the playlist and song exist, and that the song is currently
     in the playlist. If found, the song is removed and the updated playlist is returned.
     """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot remove song")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/songs",
+            ),
+        )
 
     logger.info(f"Removing song {request.songId} from playlist {id}")
     try:
@@ -269,15 +289,29 @@ async def remove_song_from_playlist(id: str, request: schemas.ModifySongInPlayli
 
 
 @router.post("/{id}/publish")
-async def publish_playlist(id: str):
+async def publish_playlist(id: str, request: schemas.ModifyPlaylistRequest):
     """
     Make a playlist public.
 
     This endpoint marks the specified playlist, identified by it's unique ID, as published (is_published = True).
     It first verifies that the playlist exists.
     """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot publish")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/publish",
+            ),
+        )
+
     logger.info(f"Publishing playlist with id {id}")
-    playlist = await playlists_db.get_playlist(id)
+    playlist = await playlists_db.get_playlist(id, request.userId)
     if not playlist:
         return JSONResponse(
             status_code=404,
@@ -306,15 +340,29 @@ async def publish_playlist(id: str):
 
 
 @router.post("/{id}/private")
-async def private_playlist(id: str):
+async def private_playlist(id: str, request: schemas.ModifyPlaylistRequest):
     """
     Make a playlist private.
 
     This endpoint marks the specified playlist, identified by it's unique ID, as private (is_published = True).
     It first verifies that the playlist exists.
     """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, request.userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot make private")
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                f"Playlist does not belong to user",
+                f"/playlists/{id}/private",
+            ),
+        )
+
     logger.info(f"Making playlist with id {id} private")
-    playlist = await playlists_db.get_playlist(id)
+    playlist = await playlists_db.get_playlist(id, request.userId)
     if not playlist:
         return JSONResponse(
             status_code=404,
@@ -339,4 +387,69 @@ async def private_playlist(id: str):
         return JSONResponse(
             status_code=400,
             content=create_error_response(400, "Bad Request", {str(e)}, f"/playlists/{id}/songs"),
+        )
+
+
+@router.post("/{id}/upload-cover")
+async def upload_playlist_cover(id: str, userId: str = Form(...), file: UploadFile = File(...)):
+    """
+    Uploads a playlist cover image to Supabase Storage and updates the playlist document.
+    """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(id, userId)
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot upload cover")
+        return JSONResponse(
+            status_code=401,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                "Playlist does not belong to user",
+                f"/playlists/{id}/upload-cover",
+            ),
+        )
+
+
+    playlist = await playlists_db.get_playlist(id, userId)
+    if not playlist:
+        return JSONResponse(
+            status_code=404,
+            content=create_error_response(
+                404,
+                "Not Found",
+                f"Playlist with id {id} not found",
+                f"/playlists/{id}/upload-cover"
+            ),
+        )
+
+    try:
+        result = await storage_db.upload_cover_image("playlists", userId, file)
+        cover_url = result["coverUrl"]
+
+        updated = await playlists_db.update_playlist_cover(playlist, cover_url)
+        if not updated:
+            logger.error(f"Failed to update playlist cover for id {id}")
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400,
+                    "Bad Request",
+                    "Failed to update playlist cover",
+                    f"/playlists/{id}/upload-cover"
+                ),
+            )
+
+        logger.info(f"Successfully updated playlist cover for {id}")
+        return {"coverUrl": cover_url}
+
+    except Exception as e:
+        logger.error(f"Failed to upload playlist cover: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                str(e),
+                f"/playlists/{id}/upload-cover"
+            ),
         )

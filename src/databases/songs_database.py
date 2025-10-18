@@ -1,6 +1,7 @@
 from resources.logger import logger
 from db.database import get_db
 from bson import ObjectId
+from datetime import datetime
 
 async def create_song(title, artist):
     db = get_db()

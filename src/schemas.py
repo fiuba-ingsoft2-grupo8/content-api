@@ -1,6 +1,7 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from datetime import datetime
+from fastapi import UploadFile, File
 
 
 class SongBase(BaseModel):
@@ -12,6 +13,8 @@ class SongBase(BaseModel):
     """
     title: str
     artist: str
+    duration: str
+    audio_path: str
 
 
 class CreateSongRequest(SongBase):
@@ -70,6 +73,9 @@ class PlaylistBase(BaseModel):
     """
     name: str
     description: str
+    userId: str
+    coverUrl: Optional[str] = None
+    isLikedSongs: Optional[bool] = False
 
 
 class CreatePlaylistRequest(PlaylistBase):
@@ -107,6 +113,16 @@ class ModifySongInPlaylistRequest(BaseModel):
     to add a specific song to a playlist.
     """
     songId: str
+    userId: str
+
+class ModifyPlaylistRequest(BaseModel):
+    """
+    Request schema for modifying or deleting a playlist.
+    
+    Used for POST /playlists/{id}/publish, /playlists/{id}/private, or
+    DELETE /playlists/{id} endpoint.
+    """
+    userId: str
 
 
 class SongResponse(BaseModel):
@@ -145,6 +161,9 @@ class PlaylistsResponse(BaseModel):
     """
     data: List[Playlist]
 
+class PlaylistImageRequest(ModifyPlaylistRequest):
+    file: UploadFile = File(...) 
+
 
 class ErrorResponse(BaseModel):
     """
@@ -158,3 +177,14 @@ class ErrorResponse(BaseModel):
     status: int
     detail: str
     instance: str
+
+class ListeningHistory(BaseModel):
+    songId: str
+    userId: str
+    playedAt: datetime
+    progress: int
+
+class ListeningHistoryRequest(BaseModel):
+    songId: str
+    userId: str
+    progress: Optional[int] = 0
