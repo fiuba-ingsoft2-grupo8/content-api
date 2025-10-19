@@ -34,20 +34,22 @@ async def get_song(id):
     logger.info(f"Successfully retrieved song: title='{song['title']}', artist='{song['artist']}'")
     return song
 
-async def update_song(existing_song, new_title, new_artist):
+async def update_song(existing_song, new_title, new_artist, new_duration, new_audio_path):
     db = get_db()
     try:
         old_title = existing_song.get("title")
         old_artist = existing_song.get("artist")
+        old_duration = existing_song.get("duration")
+        old_audio_path = existing_song.get("audio_path")
 
         result = db.songs.update_one(
             {"_id": existing_song["_id"]},
-            {"$set": {"title": new_title, "artist": new_artist}}
+            {"$set": {"title": new_title, "artist": new_artist, "duration": new_duration, "audio_path": new_audio_path}}
         )
 
         if result.modified_count > 0:
             logger.info(f"Successfully updated song with id={existing_song['_id']}")
-            logger.debug(f"Updated song fields: '{old_title}' -> '{new_title}', '{old_artist}' -> '{new_artist}'")
+            logger.debug(f"Updated song fields: '{old_title}' -> '{new_title}', '{old_artist}' -> '{new_artist}', '{old_duration}' -> '{new_duration}', '{old_audio_path}' -> '{new_audio_path}'")
             updated_song = db.songs.find_one({"_id": existing_song["_id"]})
             return (updated_song, None)
         else:

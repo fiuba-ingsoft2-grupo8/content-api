@@ -79,7 +79,7 @@ async def update_song(id: str, song: schemas.UpdateSongRequest):
     is performed within a database transaction for data consistency.
     """
     logger.info(
-        f"Updating song with id={id}: title='{song.title}', artist='{song.artist}'"
+        f"Updating song with id={id}: title='{song.title}', artist='{song.artist}, duration='{song.duration}, audio_path='{song.audio_path}'"
     )
 
     db_song = await songs_db.get_song(id)
@@ -92,7 +92,7 @@ async def update_song(id: str, song: schemas.UpdateSongRequest):
             ),
         )
 
-    updated_song, e = await songs_db.update_song(db_song, song.title, song.artist)
+    updated_song, e = await songs_db.update_song(db_song, song.title, song.artist, song.duration, song.audio_path)
 
     if not updated_song:
         logger.error(f"Failed to update song with id={id}: {str(e)}")

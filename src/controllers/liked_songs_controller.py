@@ -151,8 +151,8 @@ async def get_liked_songs(userId: str = None):
                 content=create_error_response(
                     404,
                     "Not Found",
-                    f"Playlist with id {id} not found",
-                    f"/playlists/{id}",
+                    f"Liked songs playlist for user {userId} not found",
+                    f"/playlists/{userId}",
                 ),
             )
 
@@ -162,5 +162,5 @@ async def get_liked_songs(userId: str = None):
         logger.info(f"Successfully retrieved playlist {id} with {len(liked_songs['songs'])} songs")
         return {"data": serialized_playlist}
     except Exception as e:
-        logger.error(f"Failed to fetch playlist with id=: {str(e)}")
+        logger.error(f"Failed to fetch liked songs for user {userId}: {str(e)}")
         raise
