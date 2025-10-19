@@ -71,7 +71,9 @@ async def add_to_liked_songs(request: schemas.ModifySongInPlaylistRequest):
 
         print(f"\n2. passing id: {id}\n")
         updated_playlist = await playlists_db.get_playlist(id, request.userId)
+        print("aaa1")
         songs = await playlists_db.get_songs_from_playlist(id)
+        print("aaa2")
         return {"data": serialize_playlist(updated_playlist, songs)}
 
     except Exception as e:
@@ -141,9 +143,9 @@ async def remove_from_liked_songs(request: schemas.ModifySongInPlaylistRequest =
 async def get_liked_songs(userId: str = None):
     try:
         liked_songs = await playlists_db.get_liked_songs_playlist(userId)
-        id = str(liked_songs["_id"])
+        
         if liked_songs is None:
-            logger.warning(f"Playlist with id={id} not found")
+            logger.warning(f"Liked songs playlist for user {userId} not found")
             return JSONResponse(
                 status_code=404,
                 content=create_error_response(
@@ -154,10 +156,11 @@ async def get_liked_songs(userId: str = None):
                 ),
             )
 
+        id = str(liked_songs["_id"])
         songs = await playlists_db.get_songs_from_playlist(id)
         serialized_playlist = serialize_playlist(liked_songs, songs)
         logger.info(f"Successfully retrieved playlist {id} with {len(liked_songs['songs'])} songs")
         return {"data": serialized_playlist}
     except Exception as e:
-        logger.error(f"Failed to fetch playlist with id={id}: {str(e)}")
+        logger.error(f"Failed to fetch playlist with id=: {str(e)}")
         raise

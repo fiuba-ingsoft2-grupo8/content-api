@@ -16,9 +16,9 @@ async def create_song(song: schemas.CreateSongRequest):
     record in the database. It handles database operations with proper error
     handling and transaction management.
     """
-    logger.info(f"Creating song: title='{song.title}', artist='{song.artist}'")
+    logger.info(f"Creating song: title='{song.title}', artist='{song.artist}', duration='{song.duration}', audio_path='{song.audio_path}'")
 
-    (db_song, e) = await songs_db.create_song(song.title, song.artist)
+    (db_song, e) = await songs_db.create_song(song.title, song.artist, song.duration, song.audio_path)
     if not db_song:
         return JSONResponse(
         status_code=400,

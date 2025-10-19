@@ -31,6 +31,15 @@ async def create_playlist(name, description, is_published, userId, coverUrl=None
     
 async def get_playlists(published: bool, userId: str = None):
     db = get_db()
+
+    missing_userid = list(db.playlists.find({"userId": {"$exists": False}}))
+    print("Playlists missing userId:", missing_userid)
+
+    db.playlists.update_many(
+        {"userId": {"$exists": False}},
+        {"$set": {"userId": "unknown"}}
+    )
+
     try:
         query = {}
         if published:

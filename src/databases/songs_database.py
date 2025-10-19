@@ -3,10 +3,10 @@ from db.database import get_db
 from bson import ObjectId
 from datetime import datetime
 
-async def create_song(title, artist):
+async def create_song(title, artist, duration, audio_path):
     db = get_db()
     try:
-        db_song = {"title": title, "artist": artist}
+        db_song = {"title": title, "artist": artist, "duration": duration, "audio_path": audio_path}
         result = db.songs.insert_one(db_song)
         logger.info(f"Successfully created song with id={result.inserted_id}")
         song = db.songs.find_one({ "_id": result.inserted_id })

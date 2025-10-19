@@ -32,6 +32,9 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
         isLikedSongs = playlist["isLikedSongs"] 
     else:
         isLikedSongs = False 
+    print("hasta aca todo bien")
+    print("Songs passed to serializer:", songs)
+
     return schemas.Playlist(
         id=str(playlist["_id"]),
         name=playlist["name"],
@@ -44,6 +47,8 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
                 id=str(song["_id"]),
                 title=song["title"],
                 artist=song["artist"],
+                duration=song["duration"],
+                audio_path=song["audio_path"],
                 addedAt=song["added_at"],
             )
             for song in songs
