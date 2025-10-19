@@ -34,4 +34,7 @@ jobs:
         run: |
           sudo docker run -d -p 8080:8080 --name content-api \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            -e SUPABASE_SERVICE_KEY="${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -e SUPABASE_BUCKET="${{ secrets.SUPABASE_BUCKET }}" \
+            -e SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
             jandresen99/content-api:latest
