@@ -197,27 +197,27 @@ class TestPlaylistEndpoints:
         response_other = client.get(f"/playlists/{playlist['id']}?userId=other8432")
         assert response_other.status_code == 404
 
-    # def test_add_song_to_playlist(self, client, sample_song_data):
-    #     """Add a song to a playlist."""
-    #     song = client.post("/songs", json=sample_song_data).json()["data"]
-    #     playlist = client.post("/playlists", json={
-    #         "name": "Monos Árticos",
-    #         "description": "monk" * 20,
-    #         "isPublished": True,
-    #         "publishedAt": datetime.utcnow().isoformat(),
-    #         "userId": "uu8432"
-    #     }).json()["data"]
+    def test_add_song_to_playlist(self, client, sample_song_data):
+        """Add a song to a playlist."""
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        playlist = client.post("/playlists", json={
+            "name": "Monos Árticos",
+            "description": "monk" * 20,
+            "isPublished": True,
+            "publishedAt": datetime.utcnow().isoformat(),
+            "userId": "uu8432"
+        }).json()["data"]
 
-    #     response = client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song["_id"], "userId": "uu8432"})
-    #     assert response.status_code == 200
+        response = client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song["_id"], "userId": "uu8432"})
+        assert response.status_code == 200
 
-    #     data = response.json()["data"]
-    #     assert len(data["songs"]) == 1
-    #     added = data["songs"][0]
-    #     assert added["id"] == song["_id"]
-    #     assert added["title"] == sample_song_data["title"]
-    #     assert added["artist"] == sample_song_data["artist"]
-    #     assert datetime.fromisoformat(added["addedAt"])
+        data = response.json()["data"]
+        assert len(data["songs"]) == 1
+        added = data["songs"][0]
+        assert added["id"] == song["_id"]
+        assert added["title"] == sample_song_data["title"]
+        assert added["artist"] == sample_song_data["artist"]
+        assert datetime.fromisoformat(added["addedAt"])
 
     def test_add_song_to_nonexistent_playlist(self, client, sample_song_data):
         song = client.post("/songs", json=sample_song_data).json()["data"]
@@ -303,34 +303,34 @@ class TestPlaylistEndpoints:
 
         assert data == True
 
-    # def test_delete_playlist_with_songs(self, client):
-    #     """Delete a playlist that has songs inside it."""
-    #     playlist = client.post("/playlists", json={
-    #         "name": "Folklore",
-    #         "description": "Primera playlist!!!" * 10,
-    #         "isPublished": False,
-    #         "publishedAt": None,
-    #         "userId": "uu8432"
-    #     }).json()["data"]
+    def test_delete_playlist_with_songs(self, client):
+        """Delete a playlist that has songs inside it."""
+        playlist = client.post("/playlists", json={
+            "name": "Folklore",
+            "description": "Primera playlist!!!" * 10,
+            "isPublished": False,
+            "publishedAt": None,
+            "userId": "uu8432"
+        }).json()["data"]
 
-    #     song1 = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-    #     song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song1 = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
 
-    #     client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song1["_id"], "userId": "uu8432"})
-    #     client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"], "userId": "uu8432"})
+        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song1["_id"], "userId": "uu8432"})
+        client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"], "userId": "uu8432"})
 
-    #     check = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
-    #     assert check.status_code == 200
-    #     response = client.request(
-    #         "DELETE",
-    #         f"/playlists/{playlist['id']}",
-    #         json={"userId": "uu8432"}
-    #     )
+        check = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
+        assert check.status_code == 200
+        response = client.request(
+            "DELETE",
+            f"/playlists/{playlist['id']}",
+            json={"userId": "uu8432"}
+        )
         
-    #     assert response.status_code == 204
+        assert response.status_code == 204
 
-    #     check_again = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
-    #     assert check_again.status_code == 404
+        check_again = client.get(f"/playlists/{playlist['id']}?userId=uu8432")
+        assert check_again.status_code == 404
 
 
 class TestLikedSongsEndpoints:
@@ -359,30 +359,30 @@ class TestLikedSongsEndpoints:
         assert fetched["name"] == "Liked Songs"
         assert fetched["userId"] == "uu8432"
 
-    # def test_add_song_to_liked_songs(self, client):
-    #     """Add a song to the user's liked songs playlist."""
-    #     playlist_response = client.post("/likedSongs", json={"userId": "uu8432"})
-    #     assert playlist_response.status_code == 201
-    #     playlist_id = playlist_response.json()["data"]["id"]
+    def test_add_song_to_liked_songs(self, client):
+        """Add a song to the user's liked songs playlist."""
+        playlist_response = client.post("/likedSongs", json={"userId": "uu8432"})
+        assert playlist_response.status_code == 201
+        playlist_id = playlist_response.json()["data"]["id"]
 
-    #     song_response = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"})
-    #     assert song_response.status_code == 201
-    #     song_id = song_response.json()["data"]["_id"]
+        song_response = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"})
+        assert song_response.status_code == 201
+        song_id = song_response.json()["data"]["_id"]
 
-    #     add_response = client.post(
-    #         "/likedSongs/addSongs",
-    #         json={"userId": "uu8432", "songId": song_id},
-    #     )
-    #     assert add_response.status_code == 200
-    #     data = add_response.json()["data"]
-    #     assert data["id"] == playlist_id
-    #     assert len(data["songs"]) == 1
-    #     assert data["songs"][0]["id"] == song_id
+        add_response = client.post(
+            "/likedSongs/addSongs",
+            json={"userId": "uu8432", "songId": song_id},
+        )
+        assert add_response.status_code == 200
+        data = add_response.json()["data"]
+        assert data["id"] == playlist_id
+        assert len(data["songs"]) == 1
+        assert data["songs"][0]["id"] == song_id
 
-    #     get_response = client.get(f"/likedSongs?userId=uu8432")
-    #     assert get_response.status_code == 200
-    #     fetched = get_response.json()["data"]
-    #     assert any(song["id"] == song_id for song in fetched["songs"])
+        get_response = client.get(f"/likedSongs?userId=uu8432")
+        assert get_response.status_code == 200
+        fetched = get_response.json()["data"]
+        assert any(song["id"] == song_id for song in fetched["songs"])
 
     def test_remove_song_from_liked_songs(self, client):
         """Remove a song from the user's liked songs playlist."""
