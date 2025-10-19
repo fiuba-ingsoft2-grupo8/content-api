@@ -30,6 +30,9 @@ services:
       HOST: "0.0.0.0"
       PORT: "8080"
       DATABASE_URL: "mongodb://admin:admin_password@mongodb:27017/userdb?authSource=admin"
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhbHduc29paGhwcnFlcHBlbG9pIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDI2NTQzMiwiZXhwIjoyMDc1ODQxNDMyfQ.PHEfsfx09gKWT2qV79Zh270zm7Szo-fI-ys7C2BOo8M
+      SUPABASE_BUCKET: images
+      SUPABASE_URL: https://qalwnsoihhprqeppeloi.supabase.co
     ports:
       - "8080:8080"
     depends_on:
