@@ -47,8 +47,8 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
                 id=str(song["_id"]),
                 title=song["title"],
                 artist=song["artist"],
-                duration=song["duration"],
-                audio_path=song["audio_path"],
+                duration=song.get("duration", "0"),
+                audio_path=song.get("audio_path", ""),
                 addedAt=song["added_at"],
             )
             for song in songs
