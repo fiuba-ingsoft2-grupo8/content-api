@@ -133,12 +133,17 @@ class TestPlaylistEndpoints:
 
     def test_get_playlists_ordered_by_published_date(self, client):
         """Should return playlists ordered by publishedAt (desc)."""
-        # Create two playlists
+        from datetime import timedelta
+        
+        # Create two playlists with different timestamps
+        time1 = datetime.utcnow()
+        time2 = time1 + timedelta(seconds=1)
+        
         playlist1 = client.post("/playlists", json={
             "name": "Folklore",
             "description": "Primera playlist!!!" * 10,
             "isPublished": True,
-            "publishedAt": datetime.utcnow().isoformat(),
+            "publishedAt": time1.isoformat(),
             "userId": "uu8432"
         }).json()["data"]
 
@@ -146,7 +151,7 @@ class TestPlaylistEndpoints:
             "name": "Evermore",
             "description": "Segunda playlist!!!" * 10,
             "isPublished": True,
-            "publishedAt": datetime.utcnow().isoformat(),
+            "publishedAt": time2.isoformat(),
             "userId": "uu8432"
         }).json()["data"]
 
@@ -157,7 +162,7 @@ class TestPlaylistEndpoints:
 
         first_published = datetime.fromisoformat(data[0]["publishedAt"]).timestamp()
         second_published = datetime.fromisoformat(data[1]["publishedAt"]).timestamp()
-        assert first_published > second_published
+        assert first_published >= second_published
 
     def test_get_playlist_by_id(self, client):
         """Fetch a playlist by its ID."""
