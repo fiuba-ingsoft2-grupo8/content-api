@@ -52,7 +52,6 @@ class Song(BaseModel):
     title: str
     artist: str
     duration: str
-    audio_path: str
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 

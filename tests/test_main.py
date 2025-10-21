@@ -5,7 +5,7 @@ from datetime import datetime
 
 @pytest.fixture
 def sample_song_data():
-    return {"title": "Test Song", "artist": "Test Artist", "duration": "60", "audio_path": "song.mp3"}
+    return {"title": "Test Song", "artist": "Test Artist", "duration": "60"}
 
 
 @pytest.fixture  
@@ -77,7 +77,7 @@ class TestSongEndpoints:
         """Should update existing song fields."""
         created = client.post("/songs", json=sample_song_data).json()["data"]
 
-        update_data = {"title": "Fortnight", "artist": "Taylor Swift ft. Post Malone", "duration": "60", "audio_path": "song.mp3"}
+        update_data = {"title": "Fortnight", "artist": "Taylor Swift ft. Post Malone", "duration": "60"}
         response = client.put(f"/songs/{created['_id']}", json=update_data)
         assert response.status_code == 200
         data = response.json()["data"]
@@ -313,8 +313,8 @@ class TestPlaylistEndpoints:
             "userId": "uu8432"
         }).json()["data"]
 
-        song1 = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song1 = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
 
         client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song1["_id"], "userId": "uu8432"})
         client.post(f"/playlists/{playlist['id']}/songs", json={"songId": song2["_id"], "userId": "uu8432"})
@@ -365,7 +365,7 @@ class TestLikedSongsEndpoints:
         assert playlist_response.status_code == 201
         playlist_id = playlist_response.json()["data"]["id"]
 
-        song_response = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"})
+        song_response = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60"})
         assert song_response.status_code == 201
         song_id = song_response.json()["data"]["_id"]
 
@@ -388,7 +388,7 @@ class TestLikedSongsEndpoints:
         """Remove a song from the user's liked songs playlist."""
         playlist = client.post("/likedSongs", json={"userId": "uu8432"}).json()["data"]
 
-        song = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
         client.post("/likedSongs/addSongs", json={"userId": "uu8432", "songId": song["_id"]})
 
         response = client.request(
@@ -409,7 +409,7 @@ class TestHistoryEndpoints:
     def test_add_to_history(self, client):
         """Add a song to a user's listening history."""
 
-        song = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
         response = client.post("/history", json={
             "songId": song["_id"],
             "userId": "uu8432"
@@ -419,7 +419,7 @@ class TestHistoryEndpoints:
     def test_get_history(self, client):
         """Fetch a user's listening history."""
         
-        song = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song = client.post("/songs", json={"title": "Fortnight", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
         client.post("/history", json={
             "songId": song["_id"],
             "userId": "uu8432"
@@ -434,9 +434,9 @@ class TestHistoryEndpoints:
         assert entry["playedAt"] is not None
 
     def test_filter_history(self, client):
-        song1 = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song2 = client.post("/songs", json={"title": "Lover", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song3 = client.post("/songs", json={"title": "Stick Season", "artist": "Noah Kahan", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song1 = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Lover", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Stick Season", "artist": "Noah Kahan", "duration": "60"}).json()["data"]
 
         user_id = "uu8432"
         for s in [song1, song2, song3]:
@@ -449,9 +449,9 @@ class TestHistoryEndpoints:
         assert resp.status_code == 200
 
     def test_filter_history_no_matches(self, client):
-        song1 = client.post("/songs", json={"title": "False Confidence", "artist": "Noah Kahan", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song2 = client.post("/songs", json={"title": "New Perspective", "artist": "Noah Kahan", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song3 = client.post("/songs", json={"title": "Stick Season", "artist": "Noah Kahan", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song1 = client.post("/songs", json={"title": "False Confidence", "artist": "Noah Kahan", "duration": "60"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "New Perspective", "artist": "Noah Kahan", "duration": "60"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Stick Season", "artist": "Noah Kahan", "duration": "60"}).json()["data"]
 
         user_id = "uu8432"
         for s in [song1, song2, song3]:
@@ -464,9 +464,9 @@ class TestHistoryEndpoints:
         assert resp.status_code == 200
 
     def test_filter_history_case_insensitive(self, client):
-        song1 = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song2 = client.post("/songs", json={"title": "Lover", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song3 = client.post("/songs", json={"title": "Stick Season", "artist": "Noah Kahan", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song1 = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Lover", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Stick Season", "artist": "Noah Kahan", "duration": "60"}).json()["data"]
 
         user_id = "uu8432"
         for s in [song1, song2, song3]:
@@ -488,7 +488,7 @@ class TestHistoryEndpoints:
 
     def test_duplicate_song_addition(self, client):
         """Adding the same song twice should update timestamp, not duplicate."""
-        song = client.post("/songs", json={"title": "Lover", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song = client.post("/songs", json={"title": "Lover", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
 
         client.post("/history", json={"songId": song["_id"], "userId": "uu8432"})
         client.post("/history", json={"songId": song["_id"], "userId": "uu8432"})
@@ -502,7 +502,7 @@ class TestHistoryEndpoints:
         assert lover_entries[0]["progress"] == 0
 
     def test_update_progress(self, client):
-        song = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
         client.post("/history", json={"songId": song["_id"], "userId": "uu8432"})
 
         response = client.put("/history", json={"songId": song["_id"], "userId": "uu8432", "progress": 120})
@@ -510,8 +510,8 @@ class TestHistoryEndpoints:
 
     def test_clear_history(self, client):
         """Clear all listening history for a user."""
-        song1 = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
-        song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60", "audio_path": "song.mp3"}).json()["data"]
+        song1 = client.post("/songs", json={"title": "Willow", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Red", "artist": "Taylor Swift", "duration": "60"}).json()["data"]
         client.post("/history", json={"songId": song1["_id"], "userId": "uu8432"})
         client.post("/history", json={"songId": song2["_id"], "userId": "uu8432"})
 

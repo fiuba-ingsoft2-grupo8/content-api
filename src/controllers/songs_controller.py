@@ -16,9 +16,9 @@ async def create_song(song: schemas.CreateSongRequest):
     record in the database. It handles database operations with proper error
     handling and transaction management.
     """
-    logger.info(f"Creating song: title='{song.title}', artist='{song.artist}', duration='{song.duration}', audio_path='{song.audio_path}'")
+    logger.info(f"Creating song: title='{song.title}', artist='{song.artist}', duration='{song.duration}'")
 
-    (db_song, e) = await songs_db.create_song(song.title, song.artist, song.duration, song.audio_path)
+    (db_song, e) = await songs_db.create_song(song.title, song.artist, song.duration)
     if not db_song:
         return JSONResponse(
         status_code=400,
@@ -79,7 +79,7 @@ async def update_song(id: str, song: schemas.UpdateSongRequest):
     is performed within a database transaction for data consistency.
     """
     logger.info(
-        f"Updating song with id={id}: title='{song.title}', artist='{song.artist}, duration='{song.duration}, audio_path='{song.audio_path}'"
+        f"Updating song with id={id}: title='{song.title}', artist='{song.artist}, duration='{song.duration}'"
     )
 
     db_song = await songs_db.get_song(id)
@@ -92,7 +92,7 @@ async def update_song(id: str, song: schemas.UpdateSongRequest):
             ),
         )
 
-    updated_song, e = await songs_db.update_song(db_song, song.title, song.artist, song.duration, song.audio_path)
+    updated_song, e = await songs_db.update_song(db_song, song.title, song.artist, song.duration)
 
     if not updated_song:
         logger.error(f"Failed to update song with id={id}: {str(e)}")
