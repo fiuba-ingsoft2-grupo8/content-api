@@ -2,7 +2,7 @@ import os
 import sys
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -11,6 +11,7 @@ from controllers import songs_controller, playlists_controller, liked_songs_cont
 from common.utils import create_error_response
 from db.database import Database
 from db.supabase import Supabase
+from auth import verify_token
 
 logger.info("Load configurations")
 load_dotenv()

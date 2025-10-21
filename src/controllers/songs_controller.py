@@ -2,13 +2,14 @@ import schemas
 import databases.songs_database as songs_db
 from fastapi.responses import JSONResponse
 from resources.logger import logger
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from common.utils import create_error_response, serialize_song
+from auth import verify_token
 
 router = APIRouter()
 
 @router.post("/", status_code=201)
-async def create_song(song: schemas.CreateSongRequest):
+async def create_song(song: schemas.CreateSongRequest, user: dict = Depends(verify_token)):
     """
     Create a new song in the database.
     
@@ -28,7 +29,7 @@ async def create_song(song: schemas.CreateSongRequest):
 
 
 @router.get("/")
-async def get_all_songs():
+async def get_all_songs(user: dict = Depends(verify_token)):
     """
     Retrieve all songs from the database.
     
@@ -45,7 +46,7 @@ async def get_all_songs():
 
 
 @router.get("/{id}")
-async def get_song(id: str):
+async def get_song(id: str, user: dict = Depends(verify_token)):
     """
     Retrieve a specific song by its ID.
     
@@ -70,7 +71,7 @@ async def get_song(id: str):
 
 
 @router.put("/{id}", status_code=200)
-async def update_song(id: str, song: schemas.UpdateSongRequest):
+async def update_song(id: str, song: schemas.UpdateSongRequest, user: dict = Depends(verify_token)):
     """
     Update an existing song's information.
     
@@ -105,7 +106,7 @@ async def update_song(id: str, song: schemas.UpdateSongRequest):
 
 
 @router.delete("/{id}", status_code=204)
-async def delete_song(id: str):
+async def delete_song(id: str, user: dict = Depends(verify_token)):
     """
     Delete a song from the database.
     
