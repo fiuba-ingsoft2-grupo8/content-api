@@ -37,4 +37,5 @@ jobs:
             -e SUPABASE_SERVICE_KEY="${{ secrets.SUPABASE_SERVICE_KEY }}" \
             -e SUPABASE_BUCKET="${{ secrets.SUPABASE_BUCKET }}" \
             -e SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
             jandresen99/content-api:latest

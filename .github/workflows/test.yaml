@@ -24,7 +24,7 @@ jobs:
           pip install -r requirements-tests.txt
           
       - name: Run tests with coverage
-        run: python -m pytest --cov=src --cov-report=xml tests/test_main.py -v
+        run: python -m pytest --cov=src --cov-report=xml tests/ -v
         
       - name: Get Cover 
         uses: orgoro/coverage@v3.2

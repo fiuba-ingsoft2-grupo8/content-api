@@ -1,4 +1,4 @@
-name: melodia-user-api
+name: melodia-content-api
 
 services:
   mongodb:
@@ -33,6 +33,7 @@ services:
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
       SUPABASE_BUCKET: ${SUPABASE_BUCKET}
       SUPABASE_URL: ${SUPABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
     ports:
       - "8080:8080"
     depends_on:

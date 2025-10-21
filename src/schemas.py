@@ -77,14 +77,12 @@ class PlaylistBase(BaseModel):
     isLikedSongs: Optional[bool] = False
 
 
-class CreatePlaylistRequest(PlaylistBase):
-    """
-    Request schema for creating a new playlist.
+class CreatePlaylistRequest(BaseModel):
+    name: str
+    description: str
+    coverUrl: Optional[str] = None
+    isLikedSongs: Optional[bool] = False
     
-    Inherits name and description from PlaylistBase. Used for POST /playlists
-    endpoint to validate incoming playlist creation requests.
-    """
-    pass
 
 
 class Playlist(PlaylistBase):
@@ -102,26 +100,6 @@ class Playlist(PlaylistBase):
 
     class Config:
         from_attributes = True
-
-
-class ModifySongInPlaylistRequest(BaseModel):
-    """
-    Request schema for adding a song to an existing playlist.
-    
-    Used for POST /playlists/{id}/songs endpoint to validate the request
-    to add a specific song to a playlist.
-    """
-    songId: str
-    userId: str
-
-class ModifyPlaylistRequest(BaseModel):
-    """
-    Request schema for modifying or deleting a playlist.
-    
-    Used for POST /playlists/{id}/publish, /playlists/{id}/private, or
-    DELETE /playlists/{id} endpoint.
-    """
-    userId: str
 
 
 class SongResponse(BaseModel):
@@ -160,7 +138,7 @@ class PlaylistsResponse(BaseModel):
     """
     data: List[Playlist]
 
-class PlaylistImageRequest(ModifyPlaylistRequest):
+class PlaylistImageRequest(BaseModel):
     file: UploadFile = File(...) 
 
 
@@ -185,5 +163,4 @@ class ListeningHistory(BaseModel):
 
 class ListeningHistoryRequest(BaseModel):
     songId: str
-    userId: str
     progress: Optional[int] = 0
