@@ -1,4 +1,4 @@
-name: melodia-user-api
+name: melodia-content-api
 
 services:
   mongodb:
