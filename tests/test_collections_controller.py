@@ -1,4 +1,5 @@
 import pytest
+from bson import ObjectId
 
 @pytest.fixture
 def sample_song_data():
@@ -11,7 +12,6 @@ def sample_collection_data():
         "artistId": "artist123",
         "artistName": "Test Artist",
         "type": "album",
-        "coverUrl": "cover.png",
         "songIds": ["song1", "song2"]
     }
 
@@ -26,7 +26,6 @@ class TestCollectionsEndpoints:
             "artistId": "artist123",
             "artistName": "Test Artist",
             "type": "album",
-            "coverUrl": "cover.png",
             "songIds": [song1['_id'], song2['_id']]
         }
         response = client.post("/collections/", json=sample_collection)
@@ -43,7 +42,6 @@ class TestCollectionsEndpoints:
         assert collection["artistId"] == sample_collection_data["artistId"]
         assert collection["artistName"] == sample_collection_data["artistName"]
         assert collection["type"] == sample_collection_data["type"]
-        assert collection["coverUrl"] == sample_collection_data["coverUrl"]
         assert isinstance(collection["songs"], list)
 
     def test_create_collection_bad_request(self, client):
@@ -52,7 +50,6 @@ class TestCollectionsEndpoints:
             # Missing 'name' and 'artistId'
             "artistName": "No Name",
             "type": "album",
-            "coverUrl": "https://example.com/missing.jpg",
             "songIds": []
         }
 
@@ -69,7 +66,6 @@ class TestCollectionsEndpoints:
             "artistId": "artist123",
             "artistName": "Test Artist",
             "type": "album",
-            "coverUrl": "cover.png",
             "songIds": [song1['_id'], song2['_id']]
         }
         create_collection_response = client.post("/collections/", json=sample_collection).json()['data']
@@ -92,7 +88,6 @@ class TestCollectionsEndpoints:
             "artistId": "artist123",
             "artistName": "Test Artist",
             "type": "album",
-            "coverUrl": "cover.png",
             "songIds": [song1['_id'], song2['_id']]
         }
 
@@ -101,7 +96,7 @@ class TestCollectionsEndpoints:
             "artistId": "artist123",
             "artistName": "Test Artist",
             "type": "album",
-            "coverUrl": "cover.png",
+    
             "songIds": [song3['_id'], song4['_id']]
         }
         client.post("/collections/", json=first_collection)
@@ -129,7 +124,6 @@ class TestCollectionsEndpoints:
             "artistId": "artist123",
             "artistName": "Test Artist",
             "type": "album",
-            "coverUrl": "cover.png",
             "songIds": [song1['_id'], song2['_id']]
         }
 
@@ -138,7 +132,7 @@ class TestCollectionsEndpoints:
             "artistId": "artist123",
             "artistName": "Test Artist",
             "type": "album",
-            "coverUrl": "cover.png",
+    
             "songIds": [song3['_id'], song4['_id']]
         }
         
@@ -167,7 +161,6 @@ class TestCollectionsEndpoints:
             "artistId": "artist123",
             "artistName": "Test Artist",
             "type": "album",
-            "coverUrl": "cover.png",
             "songIds": [song1['_id'], song2['_id']]
         }
 
