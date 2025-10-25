@@ -16,7 +16,13 @@ class SongBase(BaseModel):
     duration: str
 
 
-class CreateSongRequest(SongBase):
+class CreateSongRequest(BaseModel):
+    """
+    Request schema for creating a new song.
+    
+    Artist is derived from the user's stage_name in the authentication token,
+    so it's not included in the request body.
+    """
     title: str
     duration: str
 
