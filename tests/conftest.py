@@ -31,6 +31,7 @@ def client(mock_db):
         # Also patch in the database modules that import get_db
         with patch("databases.songs_database.get_db", side_effect=_get_test_db), \
              patch("databases.playlists_database.get_db", side_effect=_get_test_db), \
-             patch("databases.history_database.get_db", side_effect=_get_test_db):
+             patch("databases.history_database.get_db", side_effect=_get_test_db), \
+             patch("databases.collections_database.get_db", side_effect=_get_test_db):
             with TestClient(app) as test_client:
                 yield test_client

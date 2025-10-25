@@ -171,13 +171,13 @@ class ListeningHistoryRequest(BaseModel):
     songId: str
     progress: Optional[int] = 0
 
-class CollectionSong(BaseModel):
-    collectionId: str
-    songId: str
+class CollectionSong(SongBase):
+    id: str
     order: int
-
+    
     class Config:
         from_attributes = True
+
 class CollectionBase(BaseModel):
     """
     Base Pydantic model for playlist data with common fields.
@@ -205,6 +205,13 @@ class Collection(CollectionBase):
     class Config:
         from_attributes = True
 
-class CreateCollectionRequest(CollectionBase):
+class CreateCollectionRequest(BaseModel):
+    name: str
+    artistId: str
+    artistName: str
+    type: CollectionType
+    songIds: List[str]
+
+class ModifyCollectionRequest(BaseModel):
     songIds: List[str]
 

@@ -20,7 +20,7 @@ async def create_collection(name, artistId, artistName, type, coverUrl, songIds)
 
         order = 0
         for songId in songIds:
-            if not add_song_to_collection(songId, result.inserted_id, order):
+            if not await add_song_to_collection(songId, result.inserted_id, order):
                 logger.error(f"Failed to add song {songId} to collection")
             order += 1
         collection = db.collections.find_one({"_id": result.inserted_id})
@@ -68,3 +68,65 @@ async def get_collection(id):
     except Exception as e:
         logger.error(f"Failed to get collection with id={id}: {str(e)}")
         return None
+
+async def get_songs_from_collection(collection_id: str):
+    db = get_db()
+
+    collection_songs = list(db.collection_songs.find(
+        {"collection_id": ObjectId(collection_id)},
+        {"song_id": 1, "order": 1}
+    ))
+
+    if not collection_songs:
+        return []
+
+    song_ids = [ps["song_id"] for ps in collection_songs]
+    if not song_ids:
+        return []
+
+    songs = list(db.songs.find({"_id": {"$in": song_ids}}))
+    song_map = {song["_id"]: song for song in songs}
+    return [
+        {**song_map[ps["song_id"]], "order": ps["order"]}
+        for ps in collection_songs
+        if ps["song_id"] in song_map
+    ]
+
+async def get_collections(type: str = None, artistId: str = None):
+    db = get_db()
+
+    try:
+        query = {}
+        if type:
+            query["type"] = type
+        if artistId:
+            query["artistId"] = artistId
+
+        collections = list(
+            db.collections.find(query)
+            .sort([("_id", DESCENDING)])
+        )
+        logger.info(f"Retrieved {len(collections)} collections from database")
+        return collections
+    except Exception as e:
+        logger.error(f"Failed to retrieve collections: {str(e)}")
+        return []
+    
+async def delete_songs_from_collection(collection_id: str):
+    db = get_db()
+
+    try:
+        result = db.collection_songs.delete_many({ "collection_id": ObjectId(collection_id)})
+        logger.info(f"Se eliminaron {result.deleted_count} de collection_sogns")
+        return
+    except Exception as e:
+        logger.error(f"Failed to delete songs from collections: {str(e)}")
+        return
+
+async def update_collection_cover(collection_id: str, cover_url: str):
+    db = get_db()
+    result = db.collections.update_one(
+        {"_id": ObjectId(collection_id)},
+        {"$set": {"coverUrl": cover_url}}
+    )
+    return result.modified_count > 0
