@@ -55,7 +55,7 @@ async def get_playlists(isPublished: bool = False, user: dict = Depends(verify_t
     (newest first) and includes all songs in each playlist with
     their metadata.
     """
-    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={user["user_id"]})")
+    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={user['user_id']})")
     try:
         playlists = await playlists_db.get_playlists(isPublished, user["user_id"])
         serialized_playlists = []
@@ -454,3 +454,48 @@ async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), 
                 f"/playlists/{playlist_id}/upload-cover"
             ),
         )
+
+
+@router.put("/{playlist_id}/reorder")
+async def reorder_playlist(playlist_id: str, request: schemas.ReorderRequest, user: dict = Depends(verify_token)):
+    """
+    Reorder songs in a playlist.
+    """
+
+    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
+    if not belongs_to_user:
+        logger.warning(f"Playlist does not belong to user, cannot reorder songs")
+        return JSONResponse(
+            status_code=401,
+            content=create_error_response(
+                401,
+                "Authentication Error",
+                "Playlist does not belong to user",
+                f"/playlists/{playlist_id}/reorder",
+            ),
+        )
+
+    try:
+        logger.info(f"Reordering playlist {playlist_id}")
+        success = await playlists_db.reorder_songs_in_playlist(playlist_id, request.songs)
+        if not success:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    "Failed to reorder playlist",
+                    f"/playlists/{playlist_id}/reorder"
+                )
+            )
+        logger.info(f"Successfully reordered playlist {playlist_id}")
+        return {"message": "Playlist order updated successfully"}
+
+    except Exception as e:
+        logger.error(f"Error reordering playlist {playlist_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500, "Internal Server Error", str(e), f"/playlists/{playlist_id}/reorder"
+            ),
+        )
+

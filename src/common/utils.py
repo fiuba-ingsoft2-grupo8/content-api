@@ -49,6 +49,7 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
                 artist=song["artist"],
                 duration=song.get("duration", "0"),
                 addedAt=song["added_at"],
+                order=song["order"]
             )
             for song in songs
         ],

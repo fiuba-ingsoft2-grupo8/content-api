@@ -58,6 +58,7 @@ class PlaylistSong(SongBase):
     """
     id: str
     addedAt: datetime
+    order: int
 
     class Config:
         from_attributes = True
@@ -164,3 +165,10 @@ class ListeningHistory(BaseModel):
 class ListeningHistoryRequest(BaseModel):
     songId: str
     progress: Optional[int] = 0
+
+class SongOrder(BaseModel):
+    songId: str
+    order: int
+
+class ReorderRequest(BaseModel):
+    songs: list[SongOrder]

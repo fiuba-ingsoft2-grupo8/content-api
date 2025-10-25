@@ -85,7 +85,15 @@ async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
     song_oid = ObjectId(song_id)
     playlist_oid = ObjectId(playlist_id)
 
-    playlist_song = PlaylistSong(song_id=song_oid, playlist_id=playlist_oid)
+    last_song = db.playlist_songs.find_one(
+        {"playlist_id": playlist_oid},
+        sort=[("order", -1)],
+        projection={"order": 1}
+    )
+
+    next_pos = (last_song["order"] + 1) if last_song and "order" in last_song else 1
+
+    playlist_song = PlaylistSong(song_id=song_oid, playlist_id=playlist_oid, order=next_pos)
     db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
     logger.info(f"Added song {song_id} to playlist {playlist_id}")
     return True
@@ -115,8 +123,8 @@ async def get_songs_from_playlist(playlist_id: str):
 
     playlist_songs = list(db.playlist_songs.find(
         {"playlist_id": ObjectId(playlist_id)},
-        {"song_id": 1, "added_at": 1} 
-    ))
+        {"song_id": 1, "added_at": 1, "order": 1} 
+    ).sort("order", 1))
 
     if not playlist_songs:
         return []
@@ -128,7 +136,7 @@ async def get_songs_from_playlist(playlist_id: str):
     songs = list(db.songs.find({"_id": {"$in": song_ids}}))
     song_map = {song["_id"]: song for song in songs}
     return [
-        {**song_map[ps["song_id"]], "added_at": ps["added_at"]}
+        {**song_map[ps["song_id"]], "added_at": ps["added_at"], "order": ps.get("order", 1)}
         for ps in playlist_songs
         if ps["song_id"] in song_map
     ]
@@ -186,3 +194,23 @@ async def get_liked_songs_playlist(userId):
     except Exception as e:
         logger.error(f"Failed to get liked songs for user{userId}: {str(e)}")
         return None
+
+
+async def reorder_songs_in_playlist(playlist_id: str, songs: list[dict]) -> bool:
+    db = get_db()
+    playlist_oid = ObjectId(playlist_id)
+
+    try:
+        for item in songs:
+            song_id = item.songId
+            order = item.order 
+            db.playlist_songs.update_one(
+                {"playlist_id": playlist_oid, "song_id": ObjectId(song_id)},
+                {"$set": {"order": order}}
+            )
+        logger.info(f"Updated order for {len(songs)} songs in playlist {playlist_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to reorder songs in playlist {playlist_id}: {str(e)}")
+        return False
+
