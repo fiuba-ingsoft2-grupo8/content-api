@@ -15,7 +15,20 @@ router = APIRouter()
 @router.post("/{collection_id}/upload-cover", status_code=201)
 async def upload_collection_cover(collection_id: str, file: UploadFile = File(...), user: dict = Depends(verify_token)):
     try:
-        result = await storage_db.upload_cover_image("playlists", user["user_id"], file)
+        collection = await collections_db.get_collection(collection_id)
+        if collection is None:
+            logger.warning(f"Collection with id={collection_id} not found for deletion")
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Collection with id {collection_id} not found",
+                    f"/collections/{collection_id}",
+                ),
+            )
+
+        result = await storage_db.upload_cover_image("albums", collection["artistId"], file)
         cover_url = result["coverUrl"]
 
         updated = await collections_db.update_collection_cover(collection_id, cover_url)
@@ -124,6 +137,7 @@ async def modify_songs_in_collection(collection_id: str, collection_songs_in_ord
         logger.error(f"Failed to fetch collections: {str(e)}")
         raise
 
+
 @router.get("/", status_code=200)
 async def get_collections(type: str = None, artistId: str = None, user: dict = Depends(verify_token)):
     logger.info(f"Fetching collections (type={type}, artistId={artistId})")
@@ -139,8 +153,9 @@ async def get_collections(type: str = None, artistId: str = None, user: dict = D
         logger.error(f"Failed to fetch collections: {str(e)}")
         raise
 
+
 @router.get("/{collection_id}", status_code=200)
-async def get_collections(collection_id: str, user: dict = Depends(verify_token)):
+async def get_collection(collection_id: str, user: dict = Depends(verify_token)):
     logger.info(f"Fetching collection collection_id={collection_id}")
     try:
         collection = await collections_db.get_collection(collection_id)
