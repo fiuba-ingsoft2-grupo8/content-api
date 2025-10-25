@@ -73,3 +73,11 @@ class PlaylistSong(BaseModel):
     added_at: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class CollectionSong(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    collection_id: ObjectIdStr
+    song_id: ObjectIdStr
+    order: int
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}

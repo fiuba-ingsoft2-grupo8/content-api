@@ -2,7 +2,13 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from fastapi import UploadFile, File
+from enum import Enum
 
+
+class CollectionType(str, Enum):
+    ALBUM = "album"
+    SINGLE = "single"
+    EP = "ep"
 
 class SongBase(BaseModel):
     """
@@ -164,3 +170,48 @@ class ListeningHistory(BaseModel):
 class ListeningHistoryRequest(BaseModel):
     songId: str
     progress: Optional[int] = 0
+
+class CollectionSong(SongBase):
+    id: str
+    order: int
+    
+    class Config:
+        from_attributes = True
+
+class CollectionBase(BaseModel):
+    """
+    Base Pydantic model for playlist data with common fields.
+    
+    This base class contains the core attributes that all collecttion-related
+    schemas share, promoting code reuse and consistency.
+    """
+    id: str
+    name: str
+    artistId: str
+    artistName: str
+    type: CollectionType
+    coverUrl: str
+
+class Collection(CollectionBase):
+    """
+    Complete playlist representation with all metadata and songs.
+    
+    Extends PlaylistBase with database ID, publication status, timestamps,
+    and the list of songs in the playlist. Used for API responses when
+    returning complete playlist data.
+    """
+    songs: List[CollectionSong] = []
+
+    class Config:
+        from_attributes = True
+
+class CreateCollectionRequest(BaseModel):
+    name: str
+    artistId: str
+    artistName: str
+    type: CollectionType
+    songIds: List[str]
+
+class ModifyCollectionRequest(BaseModel):
+    songIds: List[str]
+
