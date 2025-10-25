@@ -16,15 +16,15 @@ class SongBase(BaseModel):
     duration: str
 
 
-class CreateSongRequest(SongBase):
+class CreateSongRequest(BaseModel):
     """
     Request schema for creating a new song.
     
-    Inherits title and artist from SongBase. Used for POST /songs endpoint
-    to validate incoming song creation requests.
+    Artist is derived from the user's stage_name in the authentication token,
+    so it's not included in the request body.
     """
-    pass
-
+    title: str
+    duration: str
 
 class UpdateSongRequest(SongBase):
     """
