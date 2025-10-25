@@ -17,14 +17,8 @@ class SongBase(BaseModel):
 
 
 class CreateSongRequest(SongBase):
-    """
-    Request schema for creating a new song.
-    
-    Inherits title and artist from SongBase. Used for POST /songs endpoint
-    to validate incoming song creation requests.
-    """
-    pass
-
+    title: str
+    duration: str
 
 class UpdateSongRequest(SongBase):
     """
