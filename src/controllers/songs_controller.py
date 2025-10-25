@@ -17,9 +17,9 @@ async def create_song(song: schemas.CreateSongRequest, user: dict = Depends(veri
     record in the database. It handles database operations with proper error
     handling and transaction management.
     """
-    logger.info(f"Creating song: title='{song.title}', artist='{song.artist}', duration='{song.duration}'")
+    logger.info(f"Creating song: title='{song.title}', artist='{user['stage_name']}', duration='{song.duration}'")
 
-    (db_song, e) = await songs_db.create_song(song.title, song.artist, song.duration)
+    (db_song, e) = await songs_db.create_song(song.title, user["stage_name"], song.duration, user["user_id"])
     if not db_song:
         return JSONResponse(
         status_code=400,

@@ -35,3 +35,15 @@ def client(mock_db):
              patch("databases.collections_database.get_db", side_effect=_get_test_db):
             with TestClient(app) as test_client:
                 yield test_client
+
+
+@pytest.fixture
+def sample_song_data():
+    """Fixture providing sample song data for tests."""
+    return {"title": "Test Song", "duration": "60"}
+
+
+@pytest.fixture  
+def sample_playlist_data():
+    """Fixture providing sample playlist data for tests."""
+    return {"name": "Test Playlist", "description": "A test playlist", "userId": "uu8432"}
