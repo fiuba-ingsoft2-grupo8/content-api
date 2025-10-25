@@ -55,7 +55,7 @@ async def get_playlists(isPublished: bool = False, user: dict = Depends(verify_t
     (newest first) and includes all songs in each playlist with
     their metadata.
     """
-    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={user["user_id"]})")
+    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={user['user_id']})")
     try:
         playlists = await playlists_db.get_playlists(isPublished, user["user_id"])
         serialized_playlists = []
