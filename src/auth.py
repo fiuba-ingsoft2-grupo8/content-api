@@ -19,7 +19,8 @@ def verify_token(authorization: Optional[str] = Header(None)):
         return {
             "user_id": "test_user_123",
             "email": "test@example.com",
-            "user_type": "user"
+            "user_type": "user",
+            "stage_name": "Test Artist"
         }
     
     if not authorization:
