@@ -1,6 +1,5 @@
 import databases.storage_database as storage_db
 import databases.collections_database as collections_db
-import databases.songs_database as songs_db
 import schemas
 from fastapi import Depends
 from auth import verify_token
