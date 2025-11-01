@@ -174,6 +174,7 @@ class ListeningHistoryRequest(BaseModel):
 class CollectionSong(SongBase):
     id: str
     order: int
+    earlyReleaseDate: Optional[datetime] = None  # Fecha de lanzamiento anticipado
     
     class Config:
         from_attributes = True
@@ -215,11 +216,17 @@ class Collection(CollectionBase):
     class Config:
         from_attributes = True
 
+class SongWithEarlyRelease(BaseModel):
+    """Song ID with optional early release date for collections."""
+    songId: str
+    earlyReleaseDate: Optional[datetime] = None
+
 class CreateCollectionRequest(BaseModel):
     name: str
     type: CollectionType
     genre: str
-    songIds: List[str]
+    songIds: List[str] = []  # Deprecated: use songs instead
+    songs: Optional[List[SongWithEarlyRelease]] = None  # New way with early release support
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
 

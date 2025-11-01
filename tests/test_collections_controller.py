@@ -1004,3 +1004,146 @@ class TestCollectionsEndpoints:
         updated = response.json()["data"]
         assert updated["genre"] == "Progressive Rock"
         assert updated["credits"] == ["Bass Player", "Drummer"]
+
+    # Tests for early releases (singles anticipados)
+    def test_create_collection_with_early_releases(self, client):
+        """Test creating a collection with early release dates for some songs."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Single 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Single 2", "duration": "200"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Album Track", "duration": "150"}).json()["data"]
+        
+        # Create collection with future release date
+        album_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        single1_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()  # Already released
+        single2_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()  # Future single
+        
+        collection = client.post("/collections/", json={
+            "name": "Upcoming Album",
+            "type": "album",
+            "genre": "Pop",
+            "releaseDate": album_date,
+            "songs": [
+                {"songId": song1['_id'], "earlyReleaseDate": single1_date},
+                {"songId": song2['_id'], "earlyReleaseDate": single2_date},
+                {"songId": song3['_id']}  # No early release
+            ]
+        }).json()["data"]
+        
+        assert collection["name"] == "Upcoming Album"
+        assert len(collection["songs"]) == 3
+        
+        # Verify earlyReleaseDate is included in response
+        song_with_early = [s for s in collection["songs"] if s["id"] == song1['_id']][0]
+        assert "earlyReleaseDate" in song_with_early
+        assert song_with_early["earlyReleaseDate"] is not None
+
+    def test_create_collection_legacy_format(self, client):
+        """Test that legacy songIds format still works."""
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Song 2", "duration": "200"}).json()["data"]
+        
+        # Use old format with songIds
+        collection = client.post("/collections/", json={
+            "name": "Legacy Album",
+            "type": "album",
+            "genre": "Rock",
+            "songIds": [song1['_id'], song2['_id']]
+        }).json()["data"]
+        
+        assert collection["name"] == "Legacy Album"
+        assert len(collection["songs"]) == 2
+
+    def test_get_early_releases_from_collection(self, client):
+        """Test getting only early released songs from a collection."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Released Single", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Future Single", "duration": "200"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Album Only", "duration": "150"}).json()["data"]
+        
+        # Create collection
+        album_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        released_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        
+        collection = client.post("/collections/", json={
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "releaseDate": album_date,
+            "songs": [
+                {"songId": song1['_id'], "earlyReleaseDate": released_date},
+                {"songId": song2['_id'], "earlyReleaseDate": future_date},
+                {"songId": song3['_id']}
+            ]
+        }).json()["data"]
+        
+        # Get early releases
+        response = client.get(f"/collections/{collection['id']}/early-releases")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert data["collectionName"] == "Future Album"
+        assert "earlyReleasedSongs" in data
+        
+        # Should only return the one already released
+        early_songs = data["earlyReleasedSongs"]
+        assert len(early_songs) == 1
+        assert early_songs[0]["title"] == "Released Single"
+
+    def test_early_releases_empty_if_none_released(self, client):
+        """Test that early-releases endpoint returns empty if no songs are early released."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Song 2", "duration": "200"}).json()["data"]
+        
+        # Create collection with future release, no early releases
+        album_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        
+        collection = client.post("/collections/", json={
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Rock",
+            "releaseDate": album_date,
+            "songIds": [song1['_id'], song2['_id']]
+        }).json()["data"]
+        
+        # Get early releases
+        response = client.get(f"/collections/{collection['id']}/early-releases")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data["earlyReleasedSongs"]) == 0
+
+    def test_collection_with_all_early_releases(self, client):
+        """Test collection where all songs have early release dates."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Single 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Single 2", "duration": "200"}).json()["data"]
+        
+        # Both songs released early
+        date1 = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        date2 = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        album_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        
+        collection = client.post("/collections/", json={
+            "name": "EP with Pre-releases",
+            "type": "ep",
+            "genre": "Electronic",
+            "releaseDate": album_date,
+            "songs": [
+                {"songId": song1['_id'], "earlyReleaseDate": date1},
+                {"songId": song2['_id'], "earlyReleaseDate": date2}
+            ]
+        }).json()["data"]
+        
+        # Get early releases
+        response = client.get(f"/collections/{collection['id']}/early-releases")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data["earlyReleasedSongs"]) == 2

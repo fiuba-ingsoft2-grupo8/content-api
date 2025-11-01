@@ -84,6 +84,19 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
     try:
         # uploaded_file = await storage_db.upload_cover_image(collection.artistId, collection.type, file)
         collection_type = collection.type.value if hasattr(collection.type, 'value') else collection.type
+        
+        # Prepare songs with early release info
+        songs_with_early = None
+        if collection.songs:
+            # New format with early release support
+            songs_with_early = [
+                {
+                    "songId": song.songId,
+                    "earlyReleaseDate": song.earlyReleaseDate
+                }
+                for song in collection.songs
+            ]
+        
         db_collection, e = await collections_db.create_collection(
             collection.name, 
             user["user_id"], 
@@ -93,7 +106,8 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
             "None", 
             collection.songIds,
             collection.releaseDate,
-            collection.credits
+            collection.credits,
+            songs_with_early
         )
         if not db_collection:
             return JSONResponse(
@@ -329,6 +343,52 @@ async def publish_collection(collection_id: str, user: dict = Depends(verify_tok
                 f"/collections/{collection_id}/publish",
             ),
         )
+
+@router.get("/{collection_id}/early-releases", status_code=200)
+async def get_collection_early_releases(collection_id: str, user: dict = Depends(verify_token)):
+    """
+    Get early released songs (singles) from an upcoming collection.
+    Only returns songs that have been released early before the full collection release.
+    """
+    logger.info(f"Fetching early releases for collection {collection_id}")
+    try:
+        collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
+        if not collection:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Collection with id {collection_id} not found",
+                    f"/collections/{collection_id}/early-releases",
+                ),
+            )
+        
+        # Get only early released songs
+        songs = await collections_db.get_songs_from_collection(collection["_id"], include_unreleased=False)
+        
+        return {
+            "data": {
+                "collectionId": str(collection["_id"]),
+                "collectionName": collection["name"],
+                "releaseDate": collection.get("releaseDate"),
+                "earlyReleasedSongs": [
+                    {
+                        "id": str(song["_id"]),
+                        "title": song["title"],
+                        "artist": song["artist"],
+                        "duration": song.get("duration", "0"),
+                        "order": song["order"],
+                        "earlyReleaseDate": song.get("early_release_date")
+                    }
+                    for song in songs
+                ]
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch early releases: {str(e)}")
+        raise
 
 @router.get("/{collection_id}", status_code=200)
 async def get_collection(collection_id: str, includeUnpublished: bool = False, user: dict = Depends(verify_token)):

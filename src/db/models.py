@@ -79,6 +79,7 @@ class CollectionSong(BaseModel):
     collection_id: ObjectIdStr
     song_id: ObjectIdStr
     order: int
+    early_release_date: datetime | None = None  # Fecha de lanzamiento anticipado (None = no anticipado)
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 

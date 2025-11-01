@@ -86,6 +86,7 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
                 artist=song["artist"],
                 duration=song.get("duration", "0"),
                 order=song['order'],
+                earlyReleaseDate=song.get('early_release_date'),
             )
             for song in songs
         ]

@@ -29,16 +29,19 @@ async def create_song(song: schemas.CreateSongRequest, user: dict = Depends(veri
 
 
 @router.get("/")
-async def get_all_songs(user: dict = Depends(verify_token)):
+async def get_all_songs(includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
     Retrieve all songs from the database.
     
-    This endpoint fetches and returns all song records from the database.
-    No filtering or pagination is applied - all songs are returned in a single response.
+    By default, only returns published songs (songs in published collections or standalone songs).
+    If includeUnpublished=true, returns all songs owned by the requesting user.
+    
+    Args:
+        includeUnpublished: If true, includes unpublished songs owned by the user
     """
-    logger.info("Fetching all songs")
+    logger.info(f"Fetching all songs (includeUnpublished={includeUnpublished})")
     try:
-        songs = await songs_db.get_all_songs()
+        songs = await songs_db.get_all_songs(includeUnpublished, user["user_id"])
         return { "data": [serialize_song(song) for song in songs] }
     except Exception as e:
         logger.error(f"Failed to fetch all songs: {str(e)}")
@@ -46,22 +49,26 @@ async def get_all_songs(user: dict = Depends(verify_token)):
 
 
 @router.get("/{id}")
-async def get_song(id: str, user: dict = Depends(verify_token)):
+async def get_song(id: str, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
     Retrieve a specific song by its ID.
     
-    This endpoint fetches a single song from the database using its unique ID.
-    If the song doesn't exist, returns a 404 Not Found error.
+    By default, only returns the song if it's published (in a published collection or standalone).
+    If includeUnpublished=true and the user is the owner, allows viewing unpublished songs.
+    
+    Args:
+        id: Song ID
+        includeUnpublished: If true, allows viewing unpublished songs owned by the user
     """
-    logger.info(f"Fetching song with id={id}")
+    logger.info(f"Fetching song with id={id} (includeUnpublished={includeUnpublished})")
     try:
-        song = await songs_db.get_song(id)
+        song = await songs_db.get_song(id, includeUnpublished, user["user_id"])
         if song is None:
-            logger.warning(f"Song with id={id} not found")
+            logger.warning(f"Song with id={id} not found or not published")
             return JSONResponse(
                 status_code=404,
                 content=create_error_response(
-                    404, "Not Found", f"Song with id {id} not found", f"/songs/{id}"
+                    404, "Not Found", f"Song with id {id} not found or not published", f"/songs/{id}"
                 ),
             )
         return {"data": serialize_song(song)}
@@ -78,12 +85,14 @@ async def update_song(id: str, song: schemas.UpdateSongRequest, user: dict = Dep
     This endpoint updates the title and artist of an existing song identified by ID.
     If the song doesn't exist, returns a 404 Not Found error. The update operation
     is performed within a database transaction for data consistency.
+    Only the owner can update their songs (including unpublished ones).
     """
     logger.info(
         f"Updating song with id={id}: title='{song.title}', artist='{song.artist}, duration='{song.duration}'"
     )
 
-    db_song = await songs_db.get_song(id)
+    # Allow owner to update their unpublished songs
+    db_song = await songs_db.get_song(id, includeUnpublished=True, userId=user["user_id"])
     if db_song is None:
         logger.warning(f"Song with id={id} not found for update")
         return JSONResponse(
@@ -113,11 +122,13 @@ async def delete_song(id: str, user: dict = Depends(verify_token)):
     This endpoint permanently removes a song record from the database.
     If the song doesn't exist, returns a 404 Not Found error.
     The operation also removes the song from all playlists due to foreign key constraints.
+    Only the owner can delete their songs (including unpublished ones).
     """
     logger.info(f"Deleting song with id={id}")
-    db_song = await songs_db.get_song(id)
+    # Allow owner to delete their unpublished songs
+    db_song = await songs_db.get_song(id, includeUnpublished=True, userId=user["user_id"])
     if db_song is None:
-        logger.warning(f"Song with id={id} not found for update")
+        logger.warning(f"Song with id={id} not found for deletion")
         return JSONResponse(
             status_code=404,
             content=create_error_response(
