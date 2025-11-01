@@ -191,6 +191,7 @@ class CollectionBase(BaseModel):
     artistName: str
     type: CollectionType
     coverUrl: str
+    createdAt: datetime
 
 class Collection(CollectionBase):
     """

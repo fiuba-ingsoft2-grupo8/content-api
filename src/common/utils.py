@@ -69,6 +69,7 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
         artistName=collection["artistName"],
         type=collection["type"],
         coverUrl=collection["coverUrl"],
+        createdAt=collection["createdAt"],
         songs=[
             schemas.CollectionSong(
                 id=str(song["_id"]),

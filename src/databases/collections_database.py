@@ -14,6 +14,7 @@ async def create_collection(name, artistId, artistName, type, coverUrl, songIds)
             "artistName": artistName,
             "type": type,
             "coverUrl": coverUrl,
+            "createdAt": datetime.now(timezone.utc),
         }
         result = db.collections.insert_one(collection_doc)
         logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, id={result.inserted_id}")
@@ -104,7 +105,7 @@ async def get_collections(type: str = None, artistId: str = None):
 
         collections = list(
             db.collections.find(query)
-            .sort([("_id", DESCENDING)])
+            .sort([("createdAt", DESCENDING), ("name", 1)])
         )
         logger.info(f"Retrieved {len(collections)} collections from database")
         return collections

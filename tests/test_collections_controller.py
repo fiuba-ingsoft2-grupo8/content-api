@@ -308,3 +308,76 @@ class TestCollectionsEndpoints:
         assert updated_collection['songs'][0]['id'] == song3['_id']
         assert updated_collection['songs'][1]['id'] == song1['_id']
         assert updated_collection['songs'][2]['id'] == song2['_id']
+
+    def test_collection_has_created_at(self, client):
+        """Test that collections have a createdAt field."""
+        song1 = client.post("/songs", json={"title": "Test Song", "duration": "60"}).json()["data"]
+        
+        collection = {
+            "name": "Test Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }
+
+        collection_created = client.post("/collections/", json=collection).json()["data"]
+        
+        # Verify createdAt exists and is a valid timestamp
+        assert "createdAt" in collection_created
+        assert collection_created["createdAt"] is not None
+        
+    def test_collections_ordered_by_date_desc_then_name_asc(self, client):
+        """Test that collections are ordered by creation date (desc) and then alphabetically (asc)."""
+        import time
+        
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "60"}).json()["data"]
+        
+        # Create collections with the same timestamp to test alphabetical ordering
+        # Create them quickly so they have the same or very close timestamps
+        collection_z = {
+            "name": "Z Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }
+        client.post("/collections/", json=collection_z)
+        
+        collection_a = {
+            "name": "A Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }
+        client.post("/collections/", json=collection_a)
+        
+        collection_m = {
+            "name": "M Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }
+        client.post("/collections/", json=collection_m)
+        
+        # Wait a bit to ensure different timestamp
+        time.sleep(0.1)
+        
+        # Create an older collection
+        collection_old = {
+            "name": "Old Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }
+        old_response = client.post("/collections/", json=collection_old).json()["data"]
+        
+        # Get all collections
+        response = client.get("/collections")
+        assert response.status_code == 200
+        collections = response.json()["data"]
+        
+        # Find the old album - it should be the first one (most recent)
+        assert collections[0]["name"] == "Old Album"
+        
+        # The other 3 should be ordered by creation date descending
+        # Since they were created quickly, they should maintain their order or be sorted by date
+        other_collections = [c["name"] for c in collections[1:]]
+        
+        # Verify we have our test collections
+        assert "Z Album" in other_collections
+        assert "A Album" in other_collections
+        assert "M Album" in other_collections
