@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from resources.logger import logger, LOGGING_CONFIG
-from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, search_controller
+from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, metrics_controller, search_controller
 from common.utils import create_error_response
 from db.database import Database
 from db.supabase import Supabase
