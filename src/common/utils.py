@@ -59,3 +59,24 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
 def serialize_song(song):
     song["_id"] = str(song["_id"])
     return song
+
+def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
+
+    return schemas.Collection(
+        id=str(collection["_id"]),
+        name=collection["name"],
+        artistId=collection["artistId"],
+        artistName=collection["artistName"],
+        type=collection["type"],
+        coverUrl=collection["coverUrl"],
+        songs=[
+            schemas.CollectionSong(
+                id=str(song["_id"]),
+                title=song["title"],
+                artist=song["artist"],
+                duration=song.get("duration", "0"),
+                order=song['order'],
+            )
+            for song in songs
+        ]
+    )
