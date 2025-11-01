@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from resources.logger import logger, LOGGING_CONFIG
-from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, metrics_controller
+from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, metrics_controller, search_controller
 from common.utils import create_error_response
 from db.database import Database
 from db.supabase import Supabase
@@ -17,7 +17,7 @@ logger.info("Load configurations")
 load_dotenv()
 
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8080"))
+PORT = int(os.getenv("PORT", "8082"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 def is_testing():
@@ -56,6 +56,7 @@ app.include_router(playlists_controller.router, prefix="/playlists", tags=["play
 app.include_router(liked_songs_controller.router, prefix="/likedSongs", tags=["likedSongs"])
 app.include_router(history_controller.router, prefix="/history", tags=["history"])
 app.include_router(collections_controller.router, prefix="/collections", tags=["collections"])
+app.include_router(search_controller.router, prefix="/search", tags=["search"])
 app.include_router(metrics_controller.router, prefix="/metrics", tags=["metrics"])
 
 # Global validation handler
