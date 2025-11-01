@@ -50,7 +50,7 @@ class TestMetricsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1["_id"]]
+            "songs": [{"songId": song1["_id"]}]
         }).json()["data"]
         
         # Try to check like status for collection (should fail)
@@ -105,7 +105,7 @@ class TestMetricsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1["_id"]]
+            "songs": [{"songId": song1["_id"]}]
         }).json()["data"]
         
         # Share the collection
@@ -184,7 +184,7 @@ class TestMetricsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1["_id"], song2["_id"], song3["_id"]]
+            "songs": [{"songId": song1["_id"]}, {"songId": song2["_id"]}, {"songId": song3["_id"]}]
         }).json()["data"]
         
         # Add some activity
@@ -237,7 +237,7 @@ class TestMetricsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1["_id"], song2["_id"]]
+            "songs": [{"songId": song1["_id"]}, {"songId": song2["_id"]}]
         }).json()["data"]
         
         # Add some activity

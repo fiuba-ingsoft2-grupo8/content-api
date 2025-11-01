@@ -85,16 +85,13 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
         collection_type = collection.type.value if hasattr(collection.type, 'value') else collection.type
         
         # Prepare songs with early release info
-        songs_with_early = None
-        if collection.songs:
-            # New format with early release support
-            songs_with_early = [
-                {
-                    "songId": song.songId,
-                    "earlyReleaseDate": song.earlyReleaseDate
-                }
-                for song in collection.songs
-            ]
+        songs_with_early = [
+            {
+                "songId": song.songId,
+                "earlyReleaseDate": song.earlyReleaseDate
+            }
+            for song in collection.songs
+        ]
         
         db_collection, e = await collections_db.create_collection(
             collection.name, 
@@ -103,7 +100,6 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
             collection_type,
             collection.genre,
             "None", 
-            collection.songIds,
             collection.releaseDate,
             collection.credits,
             songs_with_early
@@ -201,13 +197,13 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
                     ),
                 )
         
-        # Update songs if songIds is provided
-        if update_request.songIds is not None:
+        # Update songs if provided
+        if update_request.songs is not None:
             await collections_db.delete_songs_from_collection(collection_id)
             order = 0
-            for songId in update_request.songIds:
-                if not await collections_db.add_song_to_collection(songId, collection_id, order):
-                    logger.error(f"Failed to add song {songId} to collection")
+            for song_info in update_request.songs:
+                if not await collections_db.add_song_to_collection(song_info.songId, collection_id, order, song_info.earlyReleaseDate):
+                    logger.error(f"Failed to add song {song_info.songId} to collection")
                 order += 1
         
         # Get updated collection with songs
