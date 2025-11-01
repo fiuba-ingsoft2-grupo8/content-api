@@ -207,11 +207,12 @@ class Collection(CollectionBase):
 
 class CreateCollectionRequest(BaseModel):
     name: str
-    artistId: str
-    artistName: str
     type: CollectionType
     songIds: List[str]
 
-class ModifyCollectionRequest(BaseModel):
-    songIds: List[str]
+class UpdateCollectionRequest(BaseModel):
+    name: Optional[str] = None
+    type: Optional[CollectionType] = None
+    coverUrl: Optional[str] = None
+    songIds: Optional[List[str]] = None
 
