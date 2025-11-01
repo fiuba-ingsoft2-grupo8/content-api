@@ -325,3 +325,19 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
     except Exception as e:
         logger.error(f"Failed to retrieve popular collections: {str(e)}")
         return []
+
+
+async def get_ids_by_name(name: str):
+    db = get_db()
+    try:
+        playlists = list(db.playlists.find({"name": {"$regex": name, "$options": "i"}}, {"_id": 1}))
+        songs = list(db.songs.find({"title": {"$regex": name, "$options": "i"}}, {"_id": 1}))
+        collections = {}
+        collections['playlists'] = playlists
+        collections['songs'] = songs
+        logger.info(f"Found {len(collections)} collections with name '{name}'")
+        logger.info(f"Collections: {collections}")
+        return collections
+    except Exception as e:
+        logger.error(f"Failed to get collection ids by name '{name}': {str(e)}")
+        return []
