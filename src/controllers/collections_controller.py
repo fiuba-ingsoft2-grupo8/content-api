@@ -201,6 +201,35 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         )
 
 
+@router.get("/popular", status_code=200)
+async def get_popular_collections(limit: int = 50, type: str = None, user: dict = Depends(verify_token)):
+    """
+    Get collections ordered by popularity (most played first).
+    
+    Query Parameters:
+    - limit: Maximum number of collections to return (default: 50, max: 100)
+    - type: Optional filter by collection type (album, single, ep)
+    """
+    logger.info(f"Fetching popular collections (limit={limit}, type={type})")
+    
+    # Validate limit
+    if limit > 100:
+        limit = 100
+    if limit < 1:
+        limit = 10
+    
+    try:
+        collections = await collections_db.get_popular_collections(limit=limit, type=type)
+        serialized_collections = []
+        for collection in collections:
+            songs = await collections_db.get_songs_from_collection(collection["_id"])
+            serialized_collections.append(serialize_collection(collection, songs))
+        return {"data": serialized_collections}
+
+    except Exception as e:
+        logger.error(f"Failed to fetch popular collections: {str(e)}")
+        raise
+
 @router.get("/", status_code=200)
 async def get_collections(type: str = None, artistId: str = None, user: dict = Depends(verify_token)):
     logger.info(f"Fetching collections (type={type}, artistId={artistId})")

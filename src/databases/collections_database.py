@@ -164,3 +164,54 @@ async def update_collection(collection_id: str, update_data: dict):
     except Exception as e:
         logger.error(f"Failed to update collection {collection_id}: {str(e)}")
         return False
+
+async def get_popular_collections(limit: int = 50, type: str = None):
+    """
+    Get collections ordered by popularity (total plays descending).
+    
+    Args:
+        limit: Maximum number of collections to return
+        type: Optional filter by collection type (album, single, ep)
+        
+    Returns:
+        List of collections with popularity metrics
+    """
+    db = get_db()
+    try:
+        # Get all collections with optional type filter
+        query = {}
+        if type:
+            query["type"] = type
+            
+        collections = list(db.collections.find(query))
+        
+        # Calculate popularity for each collection (total plays)
+        collections_with_metrics = []
+        for collection in collections:
+            # Get all songs in the collection
+            collection_songs = list(db.collection_songs.find(
+                {"collection_id": collection["_id"]},
+                {"song_id": 1}
+            ))
+            song_ids = [cs["song_id"] for cs in collection_songs]
+            
+            # Count total plays for all songs in collection
+            total_plays = 0
+            if song_ids:
+                total_plays = db.history.count_documents({"songId": {"$in": song_ids}})
+            
+            # Add popularity metric to collection
+            collection["totalPlays"] = total_plays
+            collections_with_metrics.append(collection)
+        
+        # Sort by total plays descending
+        collections_with_metrics.sort(key=lambda x: x["totalPlays"], reverse=True)
+        
+        # Return limited results
+        result = collections_with_metrics[:limit]
+        logger.info(f"Retrieved {len(result)} popular collections")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to retrieve popular collections: {str(e)}")
+        return []

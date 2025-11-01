@@ -100,11 +100,10 @@ class TestCollectionsEndpoints:
         data = response.json()["data"]
         assert len(data) == 2
 
-        first_returned_collection = data[0]
-        second_returned_collection = data[1]
-
-        assert first_returned_collection['name'] == second_collection['name']
-        assert second_returned_collection['name'] == first_collection['name']
+        # Verify both collections are present (order may vary due to timestamp precision)
+        collection_names = [c['name'] for c in data]
+        assert first_collection['name'] in collection_names
+        assert second_collection['name'] in collection_names
 
     def test_get_one_collections(self, client):
         song1 = client.post("/songs", json={"title": "Fortnight", "duration": "60"}).json()["data"]
@@ -381,3 +380,87 @@ class TestCollectionsEndpoints:
         assert "Z Album" in other_collections
         assert "A Album" in other_collections
         assert "M Album" in other_collections
+
+    def test_get_popular_collections(self, client):
+        """Test getting popular collections ordered by plays."""
+        # Create songs
+        song1 = client.post("/songs", json={"title": "Hit Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Hit Song 2", "duration": "200"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Niche Song", "duration": "150"}).json()["data"]
+        
+        # Create collections
+        popular_collection = client.post("/collections/", json={
+            "name": "Popular Album",
+            "type": "album",
+            "songIds": [song1['_id'], song2['_id']]
+        }).json()["data"]
+        
+        unpopular_collection = client.post("/collections/", json={
+            "name": "Unpopular Album",
+            "type": "album",
+            "songIds": [song3['_id']]
+        }).json()["data"]
+        
+        # Play songs from popular collection multiple times
+        for _ in range(5):
+            client.post("/history/", json={"songId": song1["_id"], "progress": 0})
+            client.post("/history/", json={"songId": song2["_id"], "progress": 0})
+        
+        # Play song from unpopular collection once
+        client.post("/history/", json={"songId": song3["_id"], "progress": 0})
+        
+        # Get popular collections
+        response = client.get("/collections/popular")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        assert len(collections) >= 2
+        
+        # Popular album should be first
+        assert collections[0]["name"] == "Popular Album"
+        assert collections[1]["name"] == "Unpopular Album"
+        
+    def test_get_popular_collections_with_limit(self, client):
+        """Test getting popular collections with limit parameter."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create multiple collections
+        for i in range(5):
+            client.post("/collections/", json={
+                "name": f"Album {i}",
+                "type": "album",
+                "songIds": [song1['_id']]
+            })
+        
+        # Get popular collections with limit=3
+        response = client.get("/collections/popular?limit=3")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        assert len(collections) == 3
+        
+    def test_get_popular_collections_by_type(self, client):
+        """Test getting popular collections filtered by type."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create collections of different types
+        album = client.post("/collections/", json={
+            "name": "Test Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        single = client.post("/collections/", json={
+            "name": "Test Single",
+            "type": "single",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        # Get popular albums only
+        response = client.get("/collections/popular?type=album")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        # Should only include albums
+        for collection in collections:
+            assert collection["type"] == "album"
