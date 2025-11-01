@@ -217,3 +217,45 @@ class UpdateCollectionRequest(BaseModel):
     coverUrl: Optional[str] = None
     songIds: Optional[List[str]] = None
 
+# Metrics schemas
+class SongMetrics(BaseModel):
+    """Metrics for a single song."""
+    songId: str
+    plays: int
+    likes: int
+    shares: int
+
+class CollectionMetrics(BaseModel):
+    """
+    Metrics for a collection (album/EP/single).
+    Note: likes = sum of likes from all songs in the collection.
+    """
+    collectionId: str
+    totalPlays: int
+    likes: int  # Sum of likes from all songs
+    shares: int
+
+class PeriodMetrics(BaseModel):
+    """Metrics for a specific period with comparison to previous period."""
+    value: int
+    delta: int
+    percentChange: float
+
+class ArtistMetrics(BaseModel):
+    """Overall metrics for an artist."""
+    artistId: str
+    monthlyListeners: PeriodMetrics
+    plays: PeriodMetrics
+    saves: PeriodMetrics
+    shares: PeriodMetrics
+
+class LikeRequest(BaseModel):
+    """Request to like/unlike a song or collection."""
+    targetId: str
+    targetType: str  # 'song' or 'collection'
+
+class ShareRequest(BaseModel):
+    """Request to record a share."""
+    targetId: str
+    targetType: str  # 'song' or 'collection'
+

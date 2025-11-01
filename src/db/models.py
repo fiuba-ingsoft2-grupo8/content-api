@@ -81,3 +81,21 @@ class CollectionSong(BaseModel):
     order: int
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Like(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    target_id: ObjectIdStr  # Can be song_id or collection_id
+    target_type: str  # 'song' or 'collection'
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Share(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    target_id: ObjectIdStr  # Can be song_id or collection_id
+    target_type: str  # 'song' or 'collection'
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
