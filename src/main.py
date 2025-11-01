@@ -56,8 +56,8 @@ app.include_router(playlists_controller.router, prefix="/playlists", tags=["play
 app.include_router(liked_songs_controller.router, prefix="/likedSongs", tags=["likedSongs"])
 app.include_router(history_controller.router, prefix="/history", tags=["history"])
 app.include_router(collections_controller.router, prefix="/collections", tags=["collections"])
-app.include_router(metrics_controller.router, prefix="/metrics", tags=["metrics"])
 app.include_router(search_controller.router, prefix="/search", tags=["search"])
+app.include_router(metrics_controller.router, prefix="/metrics", tags=["metrics"])
 
 # Global validation handler
 @app.exception_handler(RequestValidationError)
