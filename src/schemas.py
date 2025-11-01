@@ -225,8 +225,7 @@ class CreateCollectionRequest(BaseModel):
     name: str
     type: CollectionType
     genre: str
-    songIds: List[str] = []  # Deprecated: use songs instead
-    songs: Optional[List[SongWithEarlyRelease]] = None  # New way with early release support
+    songs: List[SongWithEarlyRelease] = []  # List of songs with optional early release dates
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
 
@@ -235,7 +234,7 @@ class UpdateCollectionRequest(BaseModel):
     type: Optional[CollectionType] = None
     genre: Optional[str] = None
     coverUrl: Optional[str] = None
-    songIds: Optional[List[str]] = None
+    songs: Optional[List[SongWithEarlyRelease]] = None
     credits: Optional[List[str]] = None
 
 # Metrics schemas
