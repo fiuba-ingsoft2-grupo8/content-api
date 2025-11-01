@@ -1,6 +1,7 @@
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import databases.history_database as history_db
+import databases.metrics_database as metrics_db
 import schemas
 from fastapi import Body, Depends
 from fastapi.responses import JSONResponse
@@ -35,6 +36,12 @@ async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = 
             status_code=400,
             content=create_error_response(400, "Bad Request", str(error), "/history"),
         )
+
+    # Record play in permanent metrics table (separate from user history)
+    metrics_error = await metrics_db.record_play(user["user_id"], request.songId)
+    if metrics_error:
+        logger.warning(f"Failed to record play metrics for song {request.songId}: {str(metrics_error)}")
+        # Don't fail the request if metrics recording fails, just log it
 
     logger.info(f"Succesfully logged song with id {request.songId} to user {user['user_id']}'s listening history")
     return JSONResponse(status_code=201, content={"message": "Added to history"})

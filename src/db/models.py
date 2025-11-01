@@ -81,3 +81,33 @@ class CollectionSong(BaseModel):
     order: int
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Like(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    target_id: ObjectIdStr  # Can be song_id or collection_id
+    target_type: str  # 'song' or 'collection'
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Share(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    target_id: ObjectIdStr  # Can be song_id or collection_id
+    target_type: str  # 'song' or 'collection'
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Play(BaseModel):
+    """
+    Permanent play metrics that are NOT deleted when users clear their history.
+    This is separate from the history table which is user-specific and can be cleared.
+    """
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    song_id: ObjectIdStr
+    played_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
