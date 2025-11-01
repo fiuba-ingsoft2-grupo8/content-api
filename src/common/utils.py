@@ -68,9 +68,11 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
         artistId=collection["artistId"],
         artistName=collection["artistName"],
         type=collection["type"],
+        genre=collection.get("genre", "Unknown"),
         coverUrl=collection["coverUrl"],
         createdAt=collection["createdAt"],
         releaseDate=collection.get("releaseDate"),
+        credits=collection.get("credits", []),
         # Popularity metrics (optional, only in popular collections)
         totalPlays=collection.get("totalPlays"),
         totalLikes=collection.get("totalLikes"),
@@ -84,6 +86,7 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
                 artist=song["artist"],
                 duration=song.get("duration", "0"),
                 order=song['order'],
+                earlyReleaseDate=song.get('early_release_date'),
             )
             for song in songs
         ]

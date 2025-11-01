@@ -81,3 +81,225 @@ class TestSongEndpoints:
         response = client.get("/songs/68ceb28af48aee23d3c773ea")
         assert response.status_code == 404
 
+
+class TestSongPublishingRules:
+    """Test suite for song publishing and visibility rules."""
+
+    def test_standalone_song_is_visible(self, client, sample_song_data):
+        """A song not in any collection should be visible."""
+        created = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Should be visible in list
+        response = client.get("/songs")
+        assert response.status_code == 200
+        songs = response.json()["data"]
+        assert len(songs) == 1
+        assert songs[0]["_id"] == created["_id"]
+        
+        # Should be visible by ID
+        response = client.get(f"/songs/{created['_id']}")
+        assert response.status_code == 200
+        assert response.json()["data"]["_id"] == created["_id"]
+
+    def test_song_in_unpublished_collection_is_hidden(self, client, sample_song_data):
+        """A song in an unpublished collection should not be visible."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create a collection with future release date
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection_data = {
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "songIds": [song["_id"]],
+            "releaseDate": future_date
+        }
+        collection = client.post("/collections", json=collection_data).json()["data"]
+        
+        # Song should NOT be visible in list
+        response = client.get("/songs")
+        assert response.status_code == 200
+        songs = response.json()["data"]
+        assert len(songs) == 0
+        
+        # Song should NOT be accessible by ID
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.status_code == 404
+
+    def test_song_in_published_collection_is_visible(self, client, sample_song_data):
+        """A song in a published collection should be visible."""
+        from datetime import datetime, timezone
+        
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create a published collection (no future date)
+        collection_data = {
+            "name": "Published Album",
+            "type": "album",
+            "genre": "Rock",
+            "songIds": [song["_id"]],
+            "releaseDate": datetime.now(timezone.utc).isoformat()
+        }
+        collection = client.post("/collections", json=collection_data).json()["data"]
+        
+        # Song should be visible in list
+        response = client.get("/songs")
+        assert response.status_code == 200
+        songs = response.json()["data"]
+        assert len(songs) == 1
+        assert songs[0]["_id"] == song["_id"]
+        
+        # Song should be accessible by ID
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.status_code == 200
+        assert response.json()["data"]["_id"] == song["_id"]
+
+    def test_owner_can_see_unpublished_songs_with_flag(self, client, sample_song_data):
+        """Owner should see their unpublished songs when includeUnpublished=true."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create an unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection_data = {
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "songIds": [song["_id"]],
+            "releaseDate": future_date
+        }
+        collection = client.post("/collections", json=collection_data).json()["data"]
+        
+        # Without flag, song is not visible
+        response = client.get("/songs")
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 0
+        
+        # With flag, owner can see it
+        response = client.get("/songs?includeUnpublished=true")
+        assert response.status_code == 200
+        songs = response.json()["data"]
+        assert len(songs) == 1
+        assert songs[0]["_id"] == song["_id"]
+        
+        # Can also access by ID with flag
+        response = client.get(f"/songs/{song['_id']}?includeUnpublished=true")
+        assert response.status_code == 200
+        assert response.json()["data"]["_id"] == song["_id"]
+
+    def test_early_release_song_is_visible_after_early_date(self, client, sample_song_data):
+        """A song with early_release_date should be visible after that date."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create a collection with future release date and early release for the song
+        future_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        early_date = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()  # 1 hour ago
+        
+        collection_data = {
+            "name": "Future Album with Early Single",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song["_id"], "earlyReleaseDate": early_date}],
+            "releaseDate": future_date
+        }
+        collection = client.post("/collections", json=collection_data).json()["data"]
+        
+        # Song should be visible (early release date has passed)
+        response = client.get("/songs")
+        assert response.status_code == 200
+        songs = response.json()["data"]
+        assert len(songs) == 1
+        assert songs[0]["_id"] == song["_id"]
+        
+        # Song should be accessible by ID
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.status_code == 200
+        assert response.json()["data"]["_id"] == song["_id"]
+
+    def test_song_with_future_early_release_is_hidden(self, client, sample_song_data):
+        """A song with future early_release_date should not be visible yet."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create a collection with future dates
+        future_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        future_early = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        
+        collection_data = {
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song["_id"], "earlyReleaseDate": future_early}],
+            "releaseDate": future_date
+        }
+        collection = client.post("/collections", json=collection_data).json()["data"]
+        
+        # Song should NOT be visible
+        response = client.get("/songs")
+        assert response.status_code == 200
+        songs = response.json()["data"]
+        assert len(songs) == 0
+        
+        # Song should NOT be accessible by ID
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.status_code == 404
+
+    def test_owner_can_update_unpublished_song(self, client, sample_song_data):
+        """Owner should be able to update their unpublished songs."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create an unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection_data = {
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "songIds": [song["_id"]],
+            "releaseDate": future_date
+        }
+        collection = client.post("/collections", json=collection_data).json()["data"]
+        
+        # Owner should be able to update the song
+        update_data = {"title": "Updated Title", "artist": "Updated Artist", "duration": "180"}
+        response = client.put(f"/songs/{song['_id']}", json=update_data)
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["title"] == "Updated Title"
+        assert data["artist"] == "Updated Artist"
+
+    def test_owner_can_delete_unpublished_song(self, client, sample_song_data):
+        """Owner should be able to delete their unpublished songs."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create an unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection_data = {
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "songIds": [song["_id"]],
+            "releaseDate": future_date
+        }
+        collection = client.post("/collections", json=collection_data).json()["data"]
+        
+        # Owner should be able to delete the song
+        response = client.delete(f"/songs/{song['_id']}")
+        assert response.status_code == 204
+
