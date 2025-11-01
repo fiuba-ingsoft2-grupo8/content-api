@@ -136,3 +136,68 @@ export DATABASE_SSLMODE=disable
 
 python src/main.py
 ```
+
+## Sistema de Métricas de Reproducción
+
+### Arquitectura de Dos Tablas
+
+El sistema utiliza dos colecciones separadas en MongoDB para gestionar reproducciones:
+
+1. **`history`** - Historial personal del usuario
+   - Contiene el historial de reproducción de cada usuario
+   - Puede ser limpiado por el usuario (DELETE /history)
+   - Usado para mostrar "Escuchado recientemente"
+
+2. **`plays`** - Métricas permanentes
+   - Almacena todas las reproducciones de forma permanente
+   - NUNCA se elimina, ni siquiera cuando el usuario limpia su historial
+   - Usado para calcular popularidad, métricas de artistas y analytics
+
+### Flujo de Reproducción
+
+Cuando un usuario reproduce una canción (POST /history):
+```
+1. Se registra en `history` (historial personal)
+2. Se registra en `plays` (métrica permanente)
+```
+
+Cuando un usuario limpia su historial (DELETE /history):
+```
+1. Se elimina de `history` ✓
+2. Se mantiene en `plays` ✓
+```
+
+### Índices Recomendados
+
+Para optimizar el rendimiento, ejecuta el script de índices:
+
+```bash
+docker exec -it mongodb mongosh userdb /docker-entrypoint-initdb.d/mongo-indexes.js
+```
+
+O manualmente:
+```bash
+docker exec -it mongodb mongosh -u admin -p admin_password --authenticationDatabase admin userdb
+```
+
+```javascript
+db.plays.createIndex({ "song_id": 1 });
+db.plays.createIndex({ "user_id": 1, "played_at": -1 });
+db.plays.createIndex({ "song_id": 1, "played_at": -1 });
+```
+
+### Migración de Datos Existentes
+
+Si tienes datos existentes en `history` que quieres preservar en `plays`:
+
+```javascript
+db.history.find().forEach(function(doc) {
+    db.plays.insert({
+        user_id: doc.userId,
+        song_id: doc.songId,
+        played_at: doc.playedAt
+    });
+});
+```
+
+Para más detalles, consulta [MIGRATION_NOTES.md](./MIGRATION_NOTES.md)

@@ -83,7 +83,8 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
 
     try:
         # uploaded_file = await storage_db.upload_cover_image(collection.artistId, collection.type, file)
-        db_collection, e = await collections_db.create_collection(collection.name, user["user_id"], user["stage_name"], collection.type, "None", collection.songIds)
+        collection_type = collection.type.value if hasattr(collection.type, 'value') else collection.type
+        db_collection, e = await collections_db.create_collection(collection.name, user["user_id"], user["stage_name"], collection_type, "None", collection.songIds)
         if not db_collection:
             return JSONResponse(
                 status_code=400,
@@ -155,7 +156,7 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         if update_request.name is not None:
             update_data["name"] = update_request.name
         if update_request.type is not None:
-            update_data["type"] = update_request.type
+            update_data["type"] = update_request.type.value if hasattr(update_request.type, 'value') else update_request.type
         if update_request.coverUrl is not None:
             update_data["coverUrl"] = update_request.coverUrl
         
@@ -201,16 +202,19 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         )
 
 
-@router.get("/popular", status_code=200)
-async def get_popular_collections(limit: int = 50, type: str = None, user: dict = Depends(verify_token)):
+@router.get("/popular/{artistId}", status_code=200)
+async def get_popular_collections(artistId: str, limit: int = 50, type: str = None, user: dict = Depends(verify_token)):
     """
-    Get collections ordered by popularity (most played first).
+    Get collections ordered by popularity (most played first) for a specific artist.
+    
+    Path Parameters:
+    - artistId: Artist ID (required)
     
     Query Parameters:
     - limit: Maximum number of collections to return (default: 50, max: 100)
     - type: Optional filter by collection type (album, single, ep)
     """
-    logger.info(f"Fetching popular collections (limit={limit}, type={type})")
+    logger.info(f"Fetching popular collections for artist {artistId} (limit={limit}, type={type})")
     
     # Validate limit
     if limit > 100:
@@ -219,7 +223,7 @@ async def get_popular_collections(limit: int = 50, type: str = None, user: dict 
         limit = 10
     
     try:
-        collections = await collections_db.get_popular_collections(limit=limit, type=type)
+        collections = await collections_db.get_popular_collections(artistId=artistId, limit=limit, type=type)
         serialized_collections = []
         for collection in collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])

@@ -409,8 +409,9 @@ class TestCollectionsEndpoints:
         # Play song from unpopular collection once
         client.post("/history/", json={"songId": song3["_id"], "progress": 0})
         
-        # Get popular collections
-        response = client.get("/collections/popular")
+        # Get popular collections for the authenticated user (test_user_123)
+        artist_id = popular_collection["artistId"]
+        response = client.get(f"/collections/popular/{artist_id}")
         assert response.status_code == 200
         
         collections = response.json()["data"]
@@ -425,15 +426,19 @@ class TestCollectionsEndpoints:
         song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
         
         # Create multiple collections
+        first_collection = None
         for i in range(5):
-            client.post("/collections/", json={
+            collection = client.post("/collections/", json={
                 "name": f"Album {i}",
                 "type": "album",
                 "songIds": [song1['_id']]
-            })
+            }).json()["data"]
+            if i == 0:
+                first_collection = collection
         
         # Get popular collections with limit=3
-        response = client.get("/collections/popular?limit=3")
+        artist_id = first_collection["artistId"]
+        response = client.get(f"/collections/popular/{artist_id}?limit=3")
         assert response.status_code == 200
         
         collections = response.json()["data"]
@@ -456,8 +461,9 @@ class TestCollectionsEndpoints:
             "songIds": [song1['_id']]
         }).json()["data"]
         
-        # Get popular albums only
-        response = client.get("/collections/popular?type=album")
+        # Get popular albums only for the authenticated user
+        artist_id = album["artistId"]
+        response = client.get(f"/collections/popular/{artist_id}?type=album")
         assert response.status_code == 200
         
         collections = response.json()["data"]

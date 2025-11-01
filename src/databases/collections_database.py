@@ -165,11 +165,12 @@ async def update_collection(collection_id: str, update_data: dict):
         logger.error(f"Failed to update collection {collection_id}: {str(e)}")
         return False
 
-async def get_popular_collections(limit: int = 50, type: str = None):
+async def get_popular_collections(artistId: str, limit: int = 50, type: str = None):
     """
-    Get collections ordered by popularity (total plays descending).
+    Get collections ordered by popularity (total plays descending) for a specific artist.
     
     Args:
+        artistId: Artist ID (required)
         limit: Maximum number of collections to return
         type: Optional filter by collection type (album, single, ep)
         
@@ -178,8 +179,8 @@ async def get_popular_collections(limit: int = 50, type: str = None):
     """
     db = get_db()
     try:
-        # Get all collections with optional type filter
-        query = {}
+        # Get all collections for the artist with optional type filter
+        query = {"artistId": artistId}
         if type:
             query["type"] = type
             
@@ -195,10 +196,10 @@ async def get_popular_collections(limit: int = 50, type: str = None):
             ))
             song_ids = [cs["song_id"] for cs in collection_songs]
             
-            # Count total plays for all songs in collection
+            # Count total plays for all songs in collection from permanent plays table
             total_plays = 0
             if song_ids:
-                total_plays = db.history.count_documents({"songId": {"$in": song_ids}})
+                total_plays = db.plays.count_documents({"song_id": {"$in": song_ids}})
             
             # Add popularity metric to collection
             collection["totalPlays"] = total_plays

@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from resources.logger import logger
 from db.database import get_db
 from bson import ObjectId
-from db.models import Like, Share
+from db.models import Like, Share, Play
 
 # ============= LIKES =============
 
@@ -99,16 +99,34 @@ async def get_shares_count(target_id: str, target_type: str):
 
 # ============= PLAYS =============
 
+async def record_play(user_id: str, song_id: str):
+    """
+    Record a play in the permanent plays table.
+    This is separate from user history and is never deleted.
+    """
+    db = get_db()
+    try:
+        play = Play(
+            user_id=user_id,
+            song_id=ObjectId(song_id)
+        )
+        db.plays.insert_one(play.model_dump(by_alias=True))
+        logger.info(f"Recorded play for song {song_id} by user {user_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to record play: {str(e)}")
+        return e
+
 async def get_plays_count(target_id: str, target_type: str = "song"):
     """
-    Get total number of plays.
-    For songs: count history entries
+    Get total number of plays from the permanent plays table.
+    For songs: count play entries
     For collections: count all plays of songs in the collection
     """
     db = get_db()
     try:
         if target_type == "song":
-            count = db.history.count_documents({"songId": ObjectId(target_id)})
+            count = db.plays.count_documents({"song_id": ObjectId(target_id)})
             return count
         elif target_type == "collection":
             # Get all songs in the collection
@@ -122,7 +140,7 @@ async def get_plays_count(target_id: str, target_type: str = "song"):
                 return 0
             
             # Count plays for all songs in collection
-            count = db.history.count_documents({"songId": {"$in": song_ids}})
+            count = db.plays.count_documents({"song_id": {"$in": song_ids}})
             return count
         else:
             return 0
@@ -191,6 +209,7 @@ async def get_collection_metrics(collection_id: str):
 async def get_monthly_listeners(artist_id: str, current_period_start: datetime, previous_period_start: datetime):
     """
     Get unique listeners in the current month vs previous month.
+    Uses the permanent plays table instead of user history.
     """
     db = get_db()
     try:
@@ -202,16 +221,16 @@ async def get_monthly_listeners(artist_id: str, current_period_start: datetime, 
             return {"value": 0, "delta": 0, "percentChange": 0.0}
         
         # Current period listeners
-        current_listeners = db.history.distinct("userId", {
-            "songId": {"$in": song_ids},
-            "playedAt": {"$gte": current_period_start}
+        current_listeners = db.plays.distinct("user_id", {
+            "song_id": {"$in": song_ids},
+            "played_at": {"$gte": current_period_start}
         })
         current_count = len(current_listeners)
         
         # Previous period listeners
-        previous_listeners = db.history.distinct("userId", {
-            "songId": {"$in": song_ids},
-            "playedAt": {
+        previous_listeners = db.plays.distinct("user_id", {
+            "song_id": {"$in": song_ids},
+            "played_at": {
                 "$gte": previous_period_start,
                 "$lt": current_period_start
             }
@@ -231,7 +250,10 @@ async def get_monthly_listeners(artist_id: str, current_period_start: datetime, 
         return {"value": 0, "delta": 0, "percentChange": 0.0}
 
 async def get_period_plays(artist_id: str, current_period_start: datetime, previous_period_start: datetime):
-    """Get total plays in the current period vs previous period."""
+    """
+    Get total plays in the current period vs previous period.
+    Uses the permanent plays table instead of user history.
+    """
     db = get_db()
     try:
         # Get all songs by this artist
@@ -242,15 +264,15 @@ async def get_period_plays(artist_id: str, current_period_start: datetime, previ
             return {"value": 0, "delta": 0, "percentChange": 0.0}
         
         # Current period plays
-        current_plays = db.history.count_documents({
-            "songId": {"$in": song_ids},
-            "playedAt": {"$gte": current_period_start}
+        current_plays = db.plays.count_documents({
+            "song_id": {"$in": song_ids},
+            "played_at": {"$gte": current_period_start}
         })
         
         # Previous period plays
-        previous_plays = db.history.count_documents({
-            "songId": {"$in": song_ids},
-            "playedAt": {
+        previous_plays = db.plays.count_documents({
+            "song_id": {"$in": song_ids},
+            "played_at": {
                 "$gte": previous_period_start,
                 "$lt": current_period_start
             }
