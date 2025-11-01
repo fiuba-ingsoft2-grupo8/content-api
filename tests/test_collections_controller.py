@@ -12,7 +12,8 @@ def sample_collection_data():
         "artistId": "artist123",
         "artistName": "Test Artist",
         "type": "album",
-        "songIds": ["song1", "song2"]
+        "genre": "Rock",
+        "songs": [{"songId": "song1"}, {"songId": "song2"}]
     }
 
 class TestCollectionsEndpoints:
@@ -25,7 +26,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }
         response = client.post("/collections/", json=sample_collection)
         assert response.status_code == 201
@@ -67,7 +68,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }
         create_collection_response = client.post("/collections/", json=sample_collection).json()['data']
         response = client.delete(f"/collections/{create_collection_response['id']}")
@@ -88,14 +89,14 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }
 
         second_collection = {
             "name": "Test Segundo Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song3['_id'], song4['_id']]
+            "songs": [{"songId": song3['_id']}, {"songId": song4['_id']}]
         }
         client.post("/collections/", json=first_collection)
         client.post("/collections/", json=second_collection)
@@ -120,14 +121,14 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }
 
         second_collection = {
             "name": "Test Segundo Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song3['_id'], song4['_id']]
+            "songs": [{"songId": song3['_id']}, {"songId": song4['_id']}]
         }
         
         first_collection_created = client.post("/collections/", json=first_collection).json()["data"]
@@ -155,7 +156,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }
 
         collection_created_response = client.post("/collections/", json=collection)
@@ -165,7 +166,7 @@ class TestCollectionsEndpoints:
 
         # Update only songs
         updated_data = {
-            "songIds": [song3['_id']]
+            "songs": [{"songId": song3['_id']}]
         }
 
         collection_updated_response = client.put(f"/collections/{collection_created['id']}", json=updated_data)
@@ -184,7 +185,7 @@ class TestCollectionsEndpoints:
             "name": "Original Album Name",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
 
         collection_created = client.post("/collections/", json=collection).json()["data"]
@@ -210,7 +211,7 @@ class TestCollectionsEndpoints:
             "name": "Test Collection",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
 
         collection_created = client.post("/collections/", json=collection).json()["data"]
@@ -237,7 +238,7 @@ class TestCollectionsEndpoints:
             "name": "Original Name",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }
 
         collection_created = client.post("/collections/", json=collection).json()["data"]
@@ -247,7 +248,7 @@ class TestCollectionsEndpoints:
             "name": "New Name",
             "type": "ep",
             "genre": "Electronic",
-            "songIds": [song3['_id']]
+            "songs": [{"songId": song3['_id']}]
         }
 
         response = client.put(f"/collections/{collection_created['id']}", json=updated_data)
@@ -267,7 +268,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
 
         collection_created = client.post("/collections/", json=collection).json()["data"]
@@ -303,14 +304,14 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id'], song3['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}, {"songId": song3['_id']}]
         }
 
         collection_created = client.post("/collections/", json=collection).json()["data"]
         
         # Reorder songs
         updated_data = {
-            "songIds": [song3['_id'], song1['_id'], song2['_id']]
+            "songs": [{"songId": song3['_id']}, {"songId": song1['_id']}, {"songId": song2['_id']}]
         }
 
         response = client.put(f"/collections/{collection_created['id']}", json=updated_data)
@@ -330,7 +331,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
 
         collection_created = client.post("/collections/", json=collection).json()["data"]
@@ -351,7 +352,7 @@ class TestCollectionsEndpoints:
             "name": "Z Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
         client.post("/collections/", json=collection_z)
         
@@ -359,7 +360,7 @@ class TestCollectionsEndpoints:
             "name": "A Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
         client.post("/collections/", json=collection_a)
         
@@ -367,7 +368,7 @@ class TestCollectionsEndpoints:
             "name": "M Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
         client.post("/collections/", json=collection_m)
         
@@ -379,7 +380,7 @@ class TestCollectionsEndpoints:
             "name": "Old Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
         old_response = client.post("/collections/", json=collection_old).json()["data"]
         
@@ -412,14 +413,14 @@ class TestCollectionsEndpoints:
             "name": "Popular Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }).json()["data"]
         
         unpopular_collection = client.post("/collections/", json={
             "name": "Unpopular Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song3['_id']]
+            "songs": [{"songId": song3['_id']}]
         }).json()["data"]
         
         # Play songs from popular collection multiple times
@@ -463,14 +464,14 @@ class TestCollectionsEndpoints:
             "name": "Viral Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         deep_cut_collection = client.post("/collections/", json={
             "name": "Deep Cut Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song2['_id']]
+            "songs": [{"songId": song2['_id']}]
         }).json()["data"]
         
         # Add plays to viral album (fewer plays)
@@ -528,7 +529,7 @@ class TestCollectionsEndpoints:
                 "name": f"Album {i}",
                 "type": "album",
                 "genre": "Rock",
-                "songIds": [song1['_id']]
+                "songs": [{"songId": song1['_id']}]
             }).json()["data"]
             if i == 0:
                 first_collection = collection
@@ -550,14 +551,14 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         single = client.post("/collections/", json={
             "name": "Test Single",
             "type": "single",
             "genre": "Pop",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         # Get popular albums only for the authenticated user
@@ -583,7 +584,7 @@ class TestCollectionsEndpoints:
             "name": "Future Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "releaseDate": future_date
         }
         
@@ -603,7 +604,7 @@ class TestCollectionsEndpoints:
             "name": "Immediate Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
         
         response = client.post("/collections/", json=collection_data)
@@ -624,7 +625,7 @@ class TestCollectionsEndpoints:
             "name": "Published Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         # Create unpublished collection
@@ -633,7 +634,7 @@ class TestCollectionsEndpoints:
             "name": "Unpublished Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "releaseDate": future_date
         }).json()["data"]
         
@@ -660,7 +661,7 @@ class TestCollectionsEndpoints:
             "name": "Unpublished Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "releaseDate": future_date
         }).json()["data"]
         
@@ -686,7 +687,7 @@ class TestCollectionsEndpoints:
             "name": "Unpublished Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "releaseDate": future_date
         }).json()["data"]
         
@@ -709,7 +710,7 @@ class TestCollectionsEndpoints:
             "name": "Unpublished Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "releaseDate": future_date
         }).json()["data"]
         
@@ -732,7 +733,7 @@ class TestCollectionsEndpoints:
             "name": "Future Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "releaseDate": future_date
         }).json()["data"]
         
@@ -761,7 +762,7 @@ class TestCollectionsEndpoints:
             "name": "Published Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         # Try to publish it again
@@ -791,7 +792,7 @@ class TestCollectionsEndpoints:
             "name": "Published Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         # Create unpublished collection
@@ -800,7 +801,7 @@ class TestCollectionsEndpoints:
             "name": "Unpublished Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song2['_id']],
+            "songs": [{"songId": song2['_id']}],
             "releaseDate": future_date
         }).json()["data"]
         
@@ -828,7 +829,7 @@ class TestCollectionsEndpoints:
             "name": "Published Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         # Create unpublished collection
@@ -837,7 +838,7 @@ class TestCollectionsEndpoints:
             "name": "Unpublished Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song2['_id']],
+            "songs": [{"songId": song2['_id']}],
             "releaseDate": future_date
         }).json()["data"]
         
@@ -865,7 +866,7 @@ class TestCollectionsEndpoints:
             "name": "Past Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "releaseDate": past_date
         }).json()["data"]
         
@@ -889,7 +890,7 @@ class TestCollectionsEndpoints:
             "name": "Rock Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         assert collection["genre"] == "Rock"
@@ -906,7 +907,7 @@ class TestCollectionsEndpoints:
         collection_without_genre = {
             "name": "Album Without Genre",
             "type": "album",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }
         
         response = client.post("/collections/", json=collection_without_genre)
@@ -920,7 +921,7 @@ class TestCollectionsEndpoints:
             "name": "Collab Album",
             "type": "album",
             "genre": "Hip Hop",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "credits": ["Artist 2", "Artist 3"]
         }).json()["data"]
         
@@ -935,7 +936,7 @@ class TestCollectionsEndpoints:
             "name": "Solo Album",
             "type": "album",
             "genre": "Jazz",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         assert "credits" in collection
@@ -949,7 +950,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         # Update genre
@@ -970,7 +971,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Pop",
-            "songIds": [song1['_id']],
+            "songs": [{"songId": song1['_id']}],
             "credits": ["Original Collaborator"]
         }).json()["data"]
         
@@ -991,7 +992,7 @@ class TestCollectionsEndpoints:
             "name": "Test Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id']]
+            "songs": [{"songId": song1['_id']}]
         }).json()["data"]
         
         # Update both
@@ -1049,7 +1050,7 @@ class TestCollectionsEndpoints:
             "name": "Legacy Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }).json()["data"]
         
         assert collection["name"] == "Legacy Album"
@@ -1108,7 +1109,7 @@ class TestCollectionsEndpoints:
             "type": "album",
             "genre": "Rock",
             "releaseDate": album_date,
-            "songIds": [song1['_id'], song2['_id']]
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}]
         }).json()["data"]
         
         # Get early releases

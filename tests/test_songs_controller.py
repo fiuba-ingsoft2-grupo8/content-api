@@ -114,7 +114,7 @@ class TestSongPublishingRules:
             "name": "Future Album",
             "type": "album",
             "genre": "Pop",
-            "songIds": [song["_id"]],
+            "songs": [{"songId": song["_id"]}],
             "releaseDate": future_date
         }
         collection = client.post("/collections", json=collection_data).json()["data"]
@@ -141,7 +141,7 @@ class TestSongPublishingRules:
             "name": "Published Album",
             "type": "album",
             "genre": "Rock",
-            "songIds": [song["_id"]],
+            "songs": [{"songId": song["_id"]}],
             "releaseDate": datetime.now(timezone.utc).isoformat()
         }
         collection = client.post("/collections", json=collection_data).json()["data"]
@@ -171,7 +171,7 @@ class TestSongPublishingRules:
             "name": "Future Album",
             "type": "album",
             "genre": "Pop",
-            "songIds": [song["_id"]],
+            "songs": [{"songId": song["_id"]}],
             "releaseDate": future_date
         }
         collection = client.post("/collections", json=collection_data).json()["data"]
@@ -268,7 +268,7 @@ class TestSongPublishingRules:
             "name": "Future Album",
             "type": "album",
             "genre": "Pop",
-            "songIds": [song["_id"]],
+            "songs": [{"songId": song["_id"]}],
             "releaseDate": future_date
         }
         collection = client.post("/collections", json=collection_data).json()["data"]
@@ -294,7 +294,7 @@ class TestSongPublishingRules:
             "name": "Future Album",
             "type": "album",
             "genre": "Pop",
-            "songIds": [song["_id"]],
+            "songs": [{"songId": song["_id"]}],
             "releaseDate": future_date
         }
         collection = client.post("/collections", json=collection_data).json()["data"]

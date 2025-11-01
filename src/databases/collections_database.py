@@ -5,13 +5,12 @@ from db.database import get_db
 from db.models import CollectionSong
 from bson import ObjectId
 
-async def create_collection(name, artistId, artistName, type, genre, coverUrl, songIds, releaseDate=None, credits=None, songs_with_early_release=None):
+async def create_collection(name, artistId, artistName, type, genre, coverUrl, releaseDate=None, credits=None, songs_with_early_release=None):
     """
     Create a collection with songs.
     
     Args:
         songs_with_early_release: List of dicts with 'songId' and optional 'earlyReleaseDate'
-        songIds: Legacy format - list of song IDs (deprecated, use songs_with_early_release)
     """
     db = get_db()
     try:
@@ -29,21 +28,14 @@ async def create_collection(name, artistId, artistName, type, genre, coverUrl, s
         result = db.collections.insert_one(collection_doc)
         logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, genre={genre}, id={result.inserted_id}, releaseDate={releaseDate}")
 
-        # Add songs to collection
+        # Add songs to collection with early release support
         order = 0
         if songs_with_early_release:
-            # New format with early release support
             for song_info in songs_with_early_release:
                 song_id = song_info.get('songId')
                 early_date = song_info.get('earlyReleaseDate')
                 if not await add_song_to_collection(song_id, result.inserted_id, order, early_date):
                     logger.error(f"Failed to add song {song_id} to collection")
-                order += 1
-        else:
-            # Legacy format - just song IDs
-            for songId in songIds:
-                if not await add_song_to_collection(songId, result.inserted_id, order):
-                    logger.error(f"Failed to add song {songId} to collection")
                 order += 1
                 
         collection = db.collections.find_one({"_id": result.inserted_id})
