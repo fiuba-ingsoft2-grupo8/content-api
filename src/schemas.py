@@ -191,6 +191,8 @@ class CollectionBase(BaseModel):
     artistName: str
     type: CollectionType
     coverUrl: str
+    createdAt: datetime
+    releaseDate: Optional[datetime] = None
 
 class Collection(CollectionBase):
     """
@@ -201,6 +203,12 @@ class Collection(CollectionBase):
     returning complete playlist data.
     """
     songs: List[CollectionSong] = []
+    # Optional popularity metrics (only present in popular collections endpoint)
+    totalPlays: Optional[int] = None
+    totalLikes: Optional[int] = None
+    totalPlaylistSaves: Optional[int] = None
+    totalShares: Optional[int] = None
+    popularityScore: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -209,10 +217,53 @@ class CreateCollectionRequest(BaseModel):
     name: str
     type: CollectionType
     songIds: List[str]
+    releaseDate: Optional[datetime] = None
 
 class UpdateCollectionRequest(BaseModel):
     name: Optional[str] = None
     type: Optional[CollectionType] = None
     coverUrl: Optional[str] = None
     songIds: Optional[List[str]] = None
+
+# Metrics schemas
+class SongMetrics(BaseModel):
+    """Metrics for a single song."""
+    songId: str
+    plays: int
+    likes: int
+    shares: int
+
+class CollectionMetrics(BaseModel):
+    """
+    Metrics for a collection (album/EP/single).
+    Note: likes = sum of likes from all songs in the collection.
+    """
+    collectionId: str
+    totalPlays: int
+    likes: int  # Sum of likes from all songs
+    shares: int
+
+class PeriodMetrics(BaseModel):
+    """Metrics for a specific period with comparison to previous period."""
+    value: int
+    delta: int
+    percentChange: float
+
+class ArtistMetrics(BaseModel):
+    """Overall metrics for an artist."""
+    artistId: str
+    monthlyListeners: PeriodMetrics
+    plays: PeriodMetrics
+    saves: PeriodMetrics
+    shares: PeriodMetrics
+
+class LikeRequest(BaseModel):
+    """Request to like/unlike a song or collection."""
+    targetId: str
+    targetType: str  # 'song' or 'collection'
+
+class ShareRequest(BaseModel):
+    """Request to record a share."""
+    targetId: str
+    targetType: str  # 'song' or 'collection'
 

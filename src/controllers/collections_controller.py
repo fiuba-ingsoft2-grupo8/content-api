@@ -83,7 +83,16 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
 
     try:
         # uploaded_file = await storage_db.upload_cover_image(collection.artistId, collection.type, file)
-        db_collection, e = await collections_db.create_collection(collection.name, user["user_id"], user["stage_name"], collection.type, "None", collection.songIds)
+        collection_type = collection.type.value if hasattr(collection.type, 'value') else collection.type
+        db_collection, e = await collections_db.create_collection(
+            collection.name, 
+            user["user_id"], 
+            user["stage_name"], 
+            collection_type, 
+            "None", 
+            collection.songIds,
+            collection.releaseDate
+        )
         if not db_collection:
             return JSONResponse(
                 status_code=400,
@@ -155,7 +164,7 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         if update_request.name is not None:
             update_data["name"] = update_request.name
         if update_request.type is not None:
-            update_data["type"] = update_request.type
+            update_data["type"] = update_request.type.value if hasattr(update_request.type, 'value') else update_request.type
         if update_request.coverUrl is not None:
             update_data["coverUrl"] = update_request.coverUrl
         
@@ -201,11 +210,44 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         )
 
 
-@router.get("/", status_code=200)
-async def get_collections(type: str = None, artistId: str = None, user: dict = Depends(verify_token)):
-    logger.info(f"Fetching collections (type={type}, artistId={artistId})")
+@router.get("/popular/{artistId}", status_code=200)
+async def get_popular_collections(artistId: str, limit: int = 50, type: str = None, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
+    """
+    Get collections ordered by popularity (most played first) for a specific artist.
+    
+    Path Parameters:
+    - artistId: Artist ID (required)
+    
+    Query Parameters:
+    - limit: Maximum number of collections to return (default: 50, max: 100)
+    - type: Optional filter by collection type (album, single, ep)
+    - includeUnpublished: Include collections not yet released (default: False)
+    """
+    logger.info(f"Fetching popular collections for artist {artistId} (limit={limit}, type={type}, includeUnpublished={includeUnpublished})")
+    
+    # Validate limit
+    if limit > 100:
+        limit = 100
+    if limit < 1:
+        limit = 10
+    
     try:
-        collections = await collections_db.get_collections(type=type, artistId=artistId)
+        collections = await collections_db.get_popular_collections(artistId=artistId, limit=limit, type=type, includeUnpublished=includeUnpublished)
+        serialized_collections = []
+        for collection in collections:
+            songs = await collections_db.get_songs_from_collection(collection["_id"])
+            serialized_collections.append(serialize_collection(collection, songs))
+        return {"data": serialized_collections}
+
+    except Exception as e:
+        logger.error(f"Failed to fetch popular collections: {str(e)}")
+        raise
+
+@router.get("/", status_code=200)
+async def get_collections(type: str = None, artistId: str = None, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
+    logger.info(f"Fetching collections (type={type}, artistId={artistId}, includeUnpublished={includeUnpublished})")
+    try:
+        collections = await collections_db.get_collections(type=type, artistId=artistId, includeUnpublished=includeUnpublished)
         serialized_collections = []
         for collection in collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
@@ -217,11 +259,86 @@ async def get_collections(type: str = None, artistId: str = None, user: dict = D
         raise
 
 
-@router.get("/{collection_id}", status_code=200)
-async def get_collection(collection_id: str, user: dict = Depends(verify_token)):
-    logger.info(f"Fetching collection collection_id={collection_id}")
+@router.post("/{collection_id}/publish", status_code=200)
+async def publish_collection(collection_id: str, user: dict = Depends(verify_token)):
+    """
+    Publishes an unpublished collection immediately by setting its release date to now.
+    Only works if the collection belongs to the requesting artist and is not yet published.
+    
+    Path Parameters:
+    - collection_id: ID of the collection to publish
+    """
+    logger.info(f"Publishing collection {collection_id} by user {user['user_id']}")
+    
     try:
-        collection = await collections_db.get_collection(collection_id)
+        success, error = await collections_db.publish_collection_now(collection_id, user["user_id"])
+        
+        if not success:
+            if error == "Collection not found":
+                return JSONResponse(
+                    status_code=404,
+                    content=create_error_response(
+                        404,
+                        "Not Found",
+                        error,
+                        f"/collections/{collection_id}/publish",
+                    ),
+                )
+            elif error == "You are not authorized to publish this collection":
+                return JSONResponse(
+                    status_code=403,
+                    content=create_error_response(
+                        403,
+                        "Forbidden",
+                        error,
+                        f"/collections/{collection_id}/publish",
+                    ),
+                )
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content=create_error_response(
+                        400,
+                        "Bad Request",
+                        error,
+                        f"/collections/{collection_id}/publish",
+                    ),
+                )
+        
+        # Get the published collection with its songs
+        collection = await collections_db.get_collection(collection_id, includeUnpublished=False)
+        songs = await collections_db.get_songs_from_collection(collection["_id"])
+        
+        logger.info(f"Successfully published collection {collection_id}")
+        return {"data": serialize_collection(collection, songs)}
+        
+    except Exception as e:
+        logger.error(f"Failed to publish collection {collection_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                str(e),
+                f"/collections/{collection_id}/publish",
+            ),
+        )
+
+@router.get("/{collection_id}", status_code=200)
+async def get_collection(collection_id: str, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
+    logger.info(f"Fetching collection collection_id={collection_id}, includeUnpublished={includeUnpublished}")
+    try:
+        collection = await collections_db.get_collection(collection_id, includeUnpublished=includeUnpublished)
+        if not collection:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Collection with id {collection_id} not found or not yet released",
+                    f"/collections/{collection_id}",
+                ),
+            )
         songs = await collections_db.get_songs_from_collection(collection["_id"])
 
         return {"data": serialize_collection(collection, songs)}
