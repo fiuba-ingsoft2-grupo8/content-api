@@ -220,6 +220,14 @@ class SongWithEarlyRelease(BaseModel):
     """Song ID with optional early release date for collections."""
     songId: str
     earlyReleaseDate: Optional[datetime] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "songId": "507f1f77bcf86cd799439011",
+                "earlyReleaseDate": "2025-11-15T00:00:00Z"
+            }
+        }
 
 class CreateCollectionRequest(BaseModel):
     name: str
@@ -228,6 +236,29 @@ class CreateCollectionRequest(BaseModel):
     songs: List[SongWithEarlyRelease] = []  # List of songs with optional early release dates
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Clics Modernos",
+                "type": "album",
+                "genre": "Rock",
+                "songs": [
+                    {
+                        "songId": "507f1f77bcf86cd799439011",
+                        "earlyReleaseDate": "2025-11-15T00:00:00Z"
+                    },
+                    {
+                        "songId": "507f1f77bcf86cd799439012"
+                    },
+                    {
+                        "songId": "507f1f77bcf86cd799439013"
+                    }
+                ],
+                "releaseDate": "2025-12-01T00:00:00Z",
+                "credits": ["Charly García", "Pedro Aznar"]
+            }
+        }
 
 class UpdateCollectionRequest(BaseModel):
     name: Optional[str] = None
@@ -236,6 +267,24 @@ class UpdateCollectionRequest(BaseModel):
     coverUrl: Optional[str] = None
     songs: Optional[List[SongWithEarlyRelease]] = None
     credits: Optional[List[str]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Clics Modernos (Edición Especial)",
+                "genre": "Rock Argentino",
+                "songs": [
+                    {
+                        "songId": "507f1f77bcf86cd799439011"
+                    },
+                    {
+                        "songId": "507f1f77bcf86cd799439012",
+                        "earlyReleaseDate": "2025-11-20T00:00:00Z"
+                    }
+                ],
+                "credits": ["Charly García", "Pedro Aznar", "Willy Iturri"]
+            }
+        }
 
 # Metrics schemas
 class SongMetrics(BaseModel):
