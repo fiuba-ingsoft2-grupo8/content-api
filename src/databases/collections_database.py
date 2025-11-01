@@ -230,7 +230,13 @@ async def publish_collection_now(collection_id: str, artist_id: str):
 
 async def get_popular_collections(artistId: str, limit: int = 50, type: str = None, includeUnpublished: bool = False):
     """
-    Get collections ordered by popularity (total plays descending) for a specific artist.
+    Get collections ordered by popularity score for a specific artist.
+    
+    Popularity score is calculated from multiple metrics:
+    - Plays: reproductions of songs in the collection
+    - Likes: likes on songs in the collection
+    - Playlist saves: times songs are added to playlists
+    - Shares: times songs/collection are shared
     
     Args:
         artistId: Artist ID (required)
@@ -254,7 +260,7 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
             
         collections = list(db.collections.find(query))
         
-        # Calculate popularity for each collection (total plays)
+        # Calculate popularity for each collection
         collections_with_metrics = []
         for collection in collections:
             # Get all songs in the collection
@@ -264,21 +270,56 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
             ))
             song_ids = [cs["song_id"] for cs in collection_songs]
             
-            # Count total plays for all songs in collection from permanent plays table
+            # Initialize metrics
             total_plays = 0
-            if song_ids:
-                total_plays = db.plays.count_documents({"song_id": {"$in": song_ids}})
+            total_likes = 0
+            total_playlist_saves = 0
+            total_shares = 0
             
-            # Add popularity metric to collection
+            if song_ids:
+                # Count plays from permanent plays table
+                total_plays = db.plays.count_documents({"song_id": {"$in": song_ids}})
+                
+                # Count likes on songs in the collection
+                total_likes = db.likes.count_documents({
+                    "target_id": {"$in": song_ids},
+                    "target_type": "song"
+                })
+                
+                # Count how many times songs are saved in playlists
+                total_playlist_saves = db.playlist_songs.count_documents({
+                    "song_id": {"$in": song_ids}
+                })
+                
+                # Count shares of songs in the collection
+                total_shares = db.shares.count_documents({
+                    "target_id": {"$in": song_ids},
+                    "target_type": "song"
+                })
+            
+            # Calculate popularity score (weighted sum)
+            # Weights can be adjusted based on importance of each metric
+            popularity_score = (
+                total_plays * 1.0 +       # Plays have base weight
+                total_likes * 2.0 +       # Likes are more valuable
+                total_playlist_saves * 3.0 +  # Saves indicate strong interest
+                total_shares * 5.0        # Shares are most valuable (viral potential)
+            )
+            
+            # Add all metrics to collection
             collection["totalPlays"] = total_plays
+            collection["totalLikes"] = total_likes
+            collection["totalPlaylistSaves"] = total_playlist_saves
+            collection["totalShares"] = total_shares
+            collection["popularityScore"] = popularity_score
             collections_with_metrics.append(collection)
         
-        # Sort by total plays descending
-        collections_with_metrics.sort(key=lambda x: x["totalPlays"], reverse=True)
+        # Sort by popularity score descending
+        collections_with_metrics.sort(key=lambda x: x["popularityScore"], reverse=True)
         
         # Return limited results
         result = collections_with_metrics[:limit]
-        logger.info(f"Retrieved {len(result)} popular collections")
+        logger.info(f"Retrieved {len(result)} popular collections (sorted by popularity score)")
         return result
         
     except Exception as e:

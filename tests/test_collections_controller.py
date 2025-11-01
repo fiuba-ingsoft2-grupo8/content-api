@@ -421,6 +421,79 @@ class TestCollectionsEndpoints:
         assert collections[0]["name"] == "Popular Album"
         assert collections[1]["name"] == "Unpopular Album"
         
+        # Verify popularity metrics are present
+        assert "totalPlays" in collections[0]
+        assert "totalLikes" in collections[0]
+        assert "totalPlaylistSaves" in collections[0]
+        assert "totalShares" in collections[0]
+        assert "popularityScore" in collections[0]
+        
+        # Popular album should have more plays
+        assert collections[0]["totalPlays"] > collections[1]["totalPlays"]
+        
+    def test_get_popular_collections_with_multiple_metrics(self, client):
+        """Test that popularity metrics are calculated and present in response."""
+        # Create songs
+        song1 = client.post("/songs", json={"title": "Viral Hit", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Deep Cut", "duration": "200"}).json()["data"]
+        
+        # Create collections
+        viral_collection = client.post("/collections/", json={
+            "name": "Viral Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        deep_cut_collection = client.post("/collections/", json={
+            "name": "Deep Cut Album",
+            "type": "album",
+            "songIds": [song2['_id']]
+        }).json()["data"]
+        
+        # Add plays to viral album (fewer plays)
+        for _ in range(3):
+            client.post("/history/", json={"songId": song1["_id"], "progress": 0})
+        
+        # Add many plays to deep cut album
+        for _ in range(10):
+            client.post("/history/", json={"songId": song2["_id"], "progress": 0})
+        
+        # Get popular collections
+        artist_id = viral_collection["artistId"]
+        response = client.get(f"/collections/popular/{artist_id}")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        assert len(collections) >= 2
+        
+        # Find our collections
+        viral = next(c for c in collections if c["name"] == "Viral Album")
+        deep_cut = next(c for c in collections if c["name"] == "Deep Cut Album")
+        
+        # Verify all metrics are present in the response
+        assert "totalPlays" in viral
+        assert "totalLikes" in viral
+        assert "totalPlaylistSaves" in viral
+        assert "totalShares" in viral
+        assert "popularityScore" in viral
+        
+        assert "totalPlays" in deep_cut
+        assert "totalLikes" in deep_cut
+        assert "totalPlaylistSaves" in deep_cut
+        assert "totalShares" in deep_cut
+        assert "popularityScore" in deep_cut
+        
+        # Verify play counts are correct
+        assert viral["totalPlays"] == 3
+        assert deep_cut["totalPlays"] == 10
+        
+        # Verify popularity scores are calculated (should be equal to plays in this simple case)
+        assert viral["popularityScore"] >= 3.0
+        assert deep_cut["popularityScore"] >= 10.0
+        
+        # Deep cut should have higher popularity score due to more plays
+        assert deep_cut["popularityScore"] > viral["popularityScore"]
+        
     def test_get_popular_collections_with_limit(self, client):
         """Test getting popular collections with limit parameter."""
         song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]

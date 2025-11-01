@@ -71,6 +71,12 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
         coverUrl=collection["coverUrl"],
         createdAt=collection["createdAt"],
         releaseDate=collection.get("releaseDate"),
+        # Popularity metrics (optional, only in popular collections)
+        totalPlays=collection.get("totalPlays"),
+        totalLikes=collection.get("totalLikes"),
+        totalPlaylistSaves=collection.get("totalPlaylistSaves"),
+        totalShares=collection.get("totalShares"),
+        popularityScore=collection.get("popularityScore"),
         songs=[
             schemas.CollectionSong(
                 id=str(song["_id"]),

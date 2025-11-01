@@ -308,3 +308,64 @@ pytest tests/test_collections_controller.py -v
 # Solo tests de lanzamientos programados
 pytest tests/test_collections_controller.py -k "release_date or unpublished or publish" -v
 ```
+
+## Sistema de Popularidad Mejorado
+
+### Descripción
+
+El endpoint `/collections/popular/{artistId}` ahora calcula la popularidad usando múltiples métricas en lugar de solo reproducciones:
+
+### Métricas Consideradas
+
+1. **Plays** (reproducciones) - peso: 1.0
+2. **Likes** (me gusta) - peso: 2.0
+3. **Playlist Saves** (guardado en playlists) - peso: 3.0
+4. **Shares** (compartidos) - peso: 5.0
+
+### Fórmula de Popularidad
+
+```python
+popularityScore = (
+    totalPlays * 1.0 +
+    totalLikes * 2.0 +
+    totalPlaylistSaves * 3.0 +
+    totalShares * 5.0
+)
+```
+
+Los pesos reflejan el valor relativo de cada acción:
+- **Plays**: acción pasiva, menor peso
+- **Likes**: indica interés moderado
+- **Playlist Saves**: indica alto interés (quiere volver a escuchar)
+- **Shares**: máximo valor (potencial viral, recomienda a otros)
+
+### Respuesta del Endpoint
+
+```json
+GET /collections/popular/{artistId}
+
+{
+  "data": [
+    {
+      "id": "collection_id",
+      "name": "Álbum Popular",
+      "artistId": "artist_123",
+      "artistName": "Artista",
+      "type": "album",
+      "totalPlays": 1500,
+      "totalLikes": 234,
+      "totalPlaylistSaves": 89,
+      "totalShares": 45,
+      "popularityScore": 2443.0,
+      "songs": [...]
+    }
+  ]
+}
+```
+
+### Notas Importantes
+
+- Las métricas se calculan sumando los valores de **todas las canciones** de la colección
+- Los likes son a nivel de canción, no de colección
+- Las colecciones se ordenan por `popularityScore` descendente
+- Los pesos pueden ajustarse según las necesidades del negocio

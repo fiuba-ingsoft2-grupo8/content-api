@@ -203,6 +203,12 @@ class Collection(CollectionBase):
     returning complete playlist data.
     """
     songs: List[CollectionSong] = []
+    # Optional popularity metrics (only present in popular collections endpoint)
+    totalPlays: Optional[int] = None
+    totalLikes: Optional[int] = None
+    totalPlaylistSaves: Optional[int] = None
+    totalShares: Optional[int] = None
+    popularityScore: Optional[float] = None
 
     class Config:
         from_attributes = True
