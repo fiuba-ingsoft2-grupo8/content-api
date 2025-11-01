@@ -130,3 +130,36 @@ async def update_collection_cover(collection_id: str, cover_url: str):
         {"$set": {"coverUrl": cover_url}}
     )
     return result.modified_count > 0
+
+async def update_collection(collection_id: str, update_data: dict):
+    """
+    Updates collection fields based on the provided update_data dictionary.
+    Only updates fields that are present in update_data.
+    
+    Args:
+        collection_id: The ID of the collection to update
+        update_data: Dictionary containing the fields to update
+        
+    Returns:
+        Boolean indicating if the update was successful
+    """
+    db = get_db()
+    try:
+        if not update_data:
+            logger.warning(f"No fields to update for collection {collection_id}")
+            return True
+            
+        result = db.collections.update_one(
+            {"_id": ObjectId(collection_id)},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count > 0:
+            logger.info(f"Successfully updated collection {collection_id} with fields: {list(update_data.keys())}")
+        else:
+            logger.info(f"No changes made to collection {collection_id}")
+            
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update collection {collection_id}: {str(e)}")
+        return False
