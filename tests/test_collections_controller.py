@@ -24,6 +24,7 @@ class TestCollectionsEndpoints:
         sample_collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id']]
         }
         response = client.post("/collections/", json=sample_collection)
@@ -48,8 +49,9 @@ class TestCollectionsEndpoints:
     def test_create_collection_bad_request(self, client):
         """Test creation fails when missing required fields."""
         invalid_data = {
-            # Missing 'name'
+            # Missing 'name' and 'genre'
             "type": "album",
+            "genre": "Rock",
             "songIds": []
         }
 
@@ -64,6 +66,7 @@ class TestCollectionsEndpoints:
         sample_collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id']]
         }
         create_collection_response = client.post("/collections/", json=sample_collection).json()['data']
@@ -84,12 +87,14 @@ class TestCollectionsEndpoints:
         first_collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id']]
         }
 
         second_collection = {
             "name": "Test Segundo Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song3['_id'], song4['_id']]
         }
         client.post("/collections/", json=first_collection)
@@ -114,12 +119,14 @@ class TestCollectionsEndpoints:
         first_collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id']]
         }
 
         second_collection = {
             "name": "Test Segundo Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song3['_id'], song4['_id']]
         }
         
@@ -147,6 +154,7 @@ class TestCollectionsEndpoints:
         collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id']]
         }
 
@@ -175,6 +183,7 @@ class TestCollectionsEndpoints:
         collection = {
             "name": "Original Album Name",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
 
@@ -200,6 +209,7 @@ class TestCollectionsEndpoints:
         collection = {
             "name": "Test Collection",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
 
@@ -226,6 +236,7 @@ class TestCollectionsEndpoints:
         collection = {
             "name": "Original Name",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id']]
         }
 
@@ -235,6 +246,7 @@ class TestCollectionsEndpoints:
         updated_data = {
             "name": "New Name",
             "type": "ep",
+            "genre": "Electronic",
             "songIds": [song3['_id']]
         }
 
@@ -254,6 +266,7 @@ class TestCollectionsEndpoints:
         collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
 
@@ -289,6 +302,7 @@ class TestCollectionsEndpoints:
         collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id'], song3['_id']]
         }
 
@@ -315,6 +329,7 @@ class TestCollectionsEndpoints:
         collection = {
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
 
@@ -335,6 +350,7 @@ class TestCollectionsEndpoints:
         collection_z = {
             "name": "Z Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
         client.post("/collections/", json=collection_z)
@@ -342,6 +358,7 @@ class TestCollectionsEndpoints:
         collection_a = {
             "name": "A Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
         client.post("/collections/", json=collection_a)
@@ -349,6 +366,7 @@ class TestCollectionsEndpoints:
         collection_m = {
             "name": "M Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
         client.post("/collections/", json=collection_m)
@@ -360,6 +378,7 @@ class TestCollectionsEndpoints:
         collection_old = {
             "name": "Old Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
         old_response = client.post("/collections/", json=collection_old).json()["data"]
@@ -392,12 +411,14 @@ class TestCollectionsEndpoints:
         popular_collection = client.post("/collections/", json={
             "name": "Popular Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id'], song2['_id']]
         }).json()["data"]
         
         unpopular_collection = client.post("/collections/", json={
             "name": "Unpopular Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song3['_id']]
         }).json()["data"]
         
@@ -441,12 +462,14 @@ class TestCollectionsEndpoints:
         viral_collection = client.post("/collections/", json={
             "name": "Viral Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }).json()["data"]
         
         deep_cut_collection = client.post("/collections/", json={
             "name": "Deep Cut Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song2['_id']]
         }).json()["data"]
         
@@ -504,6 +527,7 @@ class TestCollectionsEndpoints:
             collection = client.post("/collections/", json={
                 "name": f"Album {i}",
                 "type": "album",
+                "genre": "Rock",
                 "songIds": [song1['_id']]
             }).json()["data"]
             if i == 0:
@@ -525,12 +549,14 @@ class TestCollectionsEndpoints:
         album = client.post("/collections/", json={
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }).json()["data"]
         
         single = client.post("/collections/", json={
             "name": "Test Single",
             "type": "single",
+            "genre": "Pop",
             "songIds": [song1['_id']]
         }).json()["data"]
         
@@ -556,6 +582,7 @@ class TestCollectionsEndpoints:
         collection_data = {
             "name": "Future Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']],
             "releaseDate": future_date
         }
@@ -575,6 +602,7 @@ class TestCollectionsEndpoints:
         collection_data = {
             "name": "Immediate Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }
         
@@ -595,6 +623,7 @@ class TestCollectionsEndpoints:
         published_collection = client.post("/collections/", json={
             "name": "Published Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }).json()["data"]
         
@@ -603,6 +632,7 @@ class TestCollectionsEndpoints:
         unpublished_collection = client.post("/collections/", json={
             "name": "Unpublished Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']],
             "releaseDate": future_date
         }).json()["data"]
@@ -629,6 +659,7 @@ class TestCollectionsEndpoints:
         unpublished_collection = client.post("/collections/", json={
             "name": "Unpublished Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']],
             "releaseDate": future_date
         }).json()["data"]
@@ -654,6 +685,7 @@ class TestCollectionsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Unpublished Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']],
             "releaseDate": future_date
         }).json()["data"]
@@ -676,6 +708,7 @@ class TestCollectionsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Unpublished Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']],
             "releaseDate": future_date
         }).json()["data"]
@@ -698,6 +731,7 @@ class TestCollectionsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Future Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']],
             "releaseDate": future_date
         }).json()["data"]
@@ -726,6 +760,7 @@ class TestCollectionsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Published Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }).json()["data"]
         
@@ -755,6 +790,7 @@ class TestCollectionsEndpoints:
         published = client.post("/collections/", json={
             "name": "Published Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }).json()["data"]
         
@@ -763,6 +799,7 @@ class TestCollectionsEndpoints:
         unpublished = client.post("/collections/", json={
             "name": "Unpublished Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song2['_id']],
             "releaseDate": future_date
         }).json()["data"]
@@ -790,6 +827,7 @@ class TestCollectionsEndpoints:
         published = client.post("/collections/", json={
             "name": "Published Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']]
         }).json()["data"]
         
@@ -798,6 +836,7 @@ class TestCollectionsEndpoints:
         unpublished = client.post("/collections/", json={
             "name": "Unpublished Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song2['_id']],
             "releaseDate": future_date
         }).json()["data"]
@@ -825,6 +864,7 @@ class TestCollectionsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Past Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1['_id']],
             "releaseDate": past_date
         }).json()["data"]
@@ -839,3 +879,271 @@ class TestCollectionsEndpoints:
         assert response.status_code == 200
         collection_names = [c["name"] for c in response.json()["data"]]
         assert "Past Album" in collection_names
+
+    # Tests for genre and credits
+    def test_create_collection_with_genre(self, client):
+        """Test that genre is required and included in collection."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection = client.post("/collections/", json={
+            "name": "Rock Album",
+            "type": "album",
+            "genre": "Rock",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        assert collection["genre"] == "Rock"
+        
+        # Verify it's also returned when fetching
+        response = client.get(f"/collections/{collection['id']}")
+        assert response.status_code == 200
+        assert response.json()["data"]["genre"] == "Rock"
+
+    def test_create_collection_without_genre_fails(self, client):
+        """Test that creating a collection without genre fails."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_without_genre = {
+            "name": "Album Without Genre",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }
+        
+        response = client.post("/collections/", json=collection_without_genre)
+        assert response.status_code == 400  # Validation error
+
+    def test_create_collection_with_credits(self, client):
+        """Test creating a collection with credits (collaborators)."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection = client.post("/collections/", json={
+            "name": "Collab Album",
+            "type": "album",
+            "genre": "Hip Hop",
+            "songIds": [song1['_id']],
+            "credits": ["Artist 2", "Artist 3"]
+        }).json()["data"]
+        
+        assert "credits" in collection
+        assert collection["credits"] == ["Artist 2", "Artist 3"]
+
+    def test_create_collection_without_credits_defaults_empty(self, client):
+        """Test that collections without credits get an empty list."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection = client.post("/collections/", json={
+            "name": "Solo Album",
+            "type": "album",
+            "genre": "Jazz",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        assert "credits" in collection
+        assert collection["credits"] == []
+
+    def test_update_collection_genre(self, client):
+        """Test updating only the genre of a collection."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection = client.post("/collections/", json={
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Rock",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        # Update genre
+        response = client.put(f"/collections/{collection['id']}", json={
+            "genre": "Alternative Rock"
+        })
+        assert response.status_code == 200
+        
+        updated = response.json()["data"]
+        assert updated["genre"] == "Alternative Rock"
+        assert updated["name"] == "Test Album"  # Name should remain the same
+
+    def test_update_collection_credits(self, client):
+        """Test updating the credits of a collection."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection = client.post("/collections/", json={
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songIds": [song1['_id']],
+            "credits": ["Original Collaborator"]
+        }).json()["data"]
+        
+        # Update credits
+        response = client.put(f"/collections/{collection['id']}", json={
+            "credits": ["New Collaborator 1", "New Collaborator 2"]
+        })
+        assert response.status_code == 200
+        
+        updated = response.json()["data"]
+        assert updated["credits"] == ["New Collaborator 1", "New Collaborator 2"]
+
+    def test_update_collection_genre_and_credits(self, client):
+        """Test updating both genre and credits at once."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection = client.post("/collections/", json={
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Rock",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        # Update both
+        response = client.put(f"/collections/{collection['id']}", json={
+            "genre": "Progressive Rock",
+            "credits": ["Bass Player", "Drummer"]
+        })
+        assert response.status_code == 200
+        
+        updated = response.json()["data"]
+        assert updated["genre"] == "Progressive Rock"
+        assert updated["credits"] == ["Bass Player", "Drummer"]
+
+    # Tests for early releases (singles anticipados)
+    def test_create_collection_with_early_releases(self, client):
+        """Test creating a collection with early release dates for some songs."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Single 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Single 2", "duration": "200"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Album Track", "duration": "150"}).json()["data"]
+        
+        # Create collection with future release date
+        album_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        single1_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()  # Already released
+        single2_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()  # Future single
+        
+        collection = client.post("/collections/", json={
+            "name": "Upcoming Album",
+            "type": "album",
+            "genre": "Pop",
+            "releaseDate": album_date,
+            "songs": [
+                {"songId": song1['_id'], "earlyReleaseDate": single1_date},
+                {"songId": song2['_id'], "earlyReleaseDate": single2_date},
+                {"songId": song3['_id']}  # No early release
+            ]
+        }).json()["data"]
+        
+        assert collection["name"] == "Upcoming Album"
+        assert len(collection["songs"]) == 3
+        
+        # Verify earlyReleaseDate is included in response
+        song_with_early = [s for s in collection["songs"] if s["id"] == song1['_id']][0]
+        assert "earlyReleaseDate" in song_with_early
+        assert song_with_early["earlyReleaseDate"] is not None
+
+    def test_create_collection_legacy_format(self, client):
+        """Test that legacy songIds format still works."""
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Song 2", "duration": "200"}).json()["data"]
+        
+        # Use old format with songIds
+        collection = client.post("/collections/", json={
+            "name": "Legacy Album",
+            "type": "album",
+            "genre": "Rock",
+            "songIds": [song1['_id'], song2['_id']]
+        }).json()["data"]
+        
+        assert collection["name"] == "Legacy Album"
+        assert len(collection["songs"]) == 2
+
+    def test_get_early_releases_from_collection(self, client):
+        """Test getting only early released songs from a collection."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Released Single", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Future Single", "duration": "200"}).json()["data"]
+        song3 = client.post("/songs", json={"title": "Album Only", "duration": "150"}).json()["data"]
+        
+        # Create collection
+        album_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        released_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        
+        collection = client.post("/collections/", json={
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "releaseDate": album_date,
+            "songs": [
+                {"songId": song1['_id'], "earlyReleaseDate": released_date},
+                {"songId": song2['_id'], "earlyReleaseDate": future_date},
+                {"songId": song3['_id']}
+            ]
+        }).json()["data"]
+        
+        # Get early releases
+        response = client.get(f"/collections/{collection['id']}/early-releases")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert data["collectionName"] == "Future Album"
+        assert "earlyReleasedSongs" in data
+        
+        # Should only return the one already released
+        early_songs = data["earlyReleasedSongs"]
+        assert len(early_songs) == 1
+        assert early_songs[0]["title"] == "Released Single"
+
+    def test_early_releases_empty_if_none_released(self, client):
+        """Test that early-releases endpoint returns empty if no songs are early released."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Song 2", "duration": "200"}).json()["data"]
+        
+        # Create collection with future release, no early releases
+        album_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        
+        collection = client.post("/collections/", json={
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Rock",
+            "releaseDate": album_date,
+            "songIds": [song1['_id'], song2['_id']]
+        }).json()["data"]
+        
+        # Get early releases
+        response = client.get(f"/collections/{collection['id']}/early-releases")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data["earlyReleasedSongs"]) == 0
+
+    def test_collection_with_all_early_releases(self, client):
+        """Test collection where all songs have early release dates."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Single 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Single 2", "duration": "200"}).json()["data"]
+        
+        # Both songs released early
+        date1 = (datetime.now(timezone.utc) - timedelta(days=14)).isoformat()
+        date2 = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        album_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        
+        collection = client.post("/collections/", json={
+            "name": "EP with Pre-releases",
+            "type": "ep",
+            "genre": "Electronic",
+            "releaseDate": album_date,
+            "songs": [
+                {"songId": song1['_id'], "earlyReleaseDate": date1},
+                {"songId": song2['_id'], "earlyReleaseDate": date2}
+            ]
+        }).json()["data"]
+        
+        # Get early releases
+        response = client.get(f"/collections/{collection['id']}/early-releases")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data["earlyReleasedSongs"]) == 2

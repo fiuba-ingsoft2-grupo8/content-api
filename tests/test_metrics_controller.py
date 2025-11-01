@@ -49,6 +49,7 @@ class TestMetricsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1["_id"]]
         }).json()["data"]
         
@@ -103,6 +104,7 @@ class TestMetricsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1["_id"]]
         }).json()["data"]
         
@@ -181,6 +183,7 @@ class TestMetricsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1["_id"], song2["_id"], song3["_id"]]
         }).json()["data"]
         
@@ -233,6 +236,7 @@ class TestMetricsEndpoints:
         collection = client.post("/collections/", json={
             "name": "Test Album",
             "type": "album",
+            "genre": "Rock",
             "songIds": [song1["_id"], song2["_id"]]
         }).json()["data"]
         

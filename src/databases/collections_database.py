@@ -5,7 +5,14 @@ from db.database import get_db
 from db.models import CollectionSong
 from bson import ObjectId
 
-async def create_collection(name, artistId, artistName, type, coverUrl, songIds, releaseDate=None):
+async def create_collection(name, artistId, artistName, type, genre, coverUrl, songIds, releaseDate=None, credits=None, songs_with_early_release=None):
+    """
+    Create a collection with songs.
+    
+    Args:
+        songs_with_early_release: List of dicts with 'songId' and optional 'earlyReleaseDate'
+        songIds: Legacy format - list of song IDs (deprecated, use songs_with_early_release)
+    """
     db = get_db()
     try:
         collection_doc = {
@@ -13,18 +20,32 @@ async def create_collection(name, artistId, artistName, type, coverUrl, songIds,
             "artistId": artistId,
             "artistName": artistName,
             "type": type,
+            "genre": genre,
             "coverUrl": coverUrl,
             "createdAt": datetime.now(timezone.utc),
             "releaseDate": releaseDate if releaseDate else datetime.now(timezone.utc),
+            "credits": credits if credits else [],
         }
         result = db.collections.insert_one(collection_doc)
-        logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, id={result.inserted_id}, releaseDate={releaseDate}")
+        logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, genre={genre}, id={result.inserted_id}, releaseDate={releaseDate}")
 
+        # Add songs to collection
         order = 0
-        for songId in songIds:
-            if not await add_song_to_collection(songId, result.inserted_id, order):
-                logger.error(f"Failed to add song {songId} to collection")
-            order += 1
+        if songs_with_early_release:
+            # New format with early release support
+            for song_info in songs_with_early_release:
+                song_id = song_info.get('songId')
+                early_date = song_info.get('earlyReleaseDate')
+                if not await add_song_to_collection(song_id, result.inserted_id, order, early_date):
+                    logger.error(f"Failed to add song {song_id} to collection")
+                order += 1
+        else:
+            # Legacy format - just song IDs
+            for songId in songIds:
+                if not await add_song_to_collection(songId, result.inserted_id, order):
+                    logger.error(f"Failed to add song {songId} to collection")
+                order += 1
+                
         collection = db.collections.find_one({"_id": result.inserted_id})
         return (collection, None)
 
@@ -33,14 +54,22 @@ async def create_collection(name, artistId, artistName, type, coverUrl, songIds,
         return (None, e)
 
 
-async def add_song_to_collection(song_id: str, collection_id: str, order):
+async def add_song_to_collection(song_id: str, collection_id: str, order, early_release_date=None):
     db = get_db()
     song_oid = ObjectId(song_id)
     collection_oid = ObjectId(collection_id)
 
-    collection_song = CollectionSong(song_id=song_oid, collection_id=collection_oid, order=order)
+    collection_song = CollectionSong(
+        song_id=song_oid, 
+        collection_id=collection_oid, 
+        order=order,
+        early_release_date=early_release_date
+    )
     db.collection_songs.insert_one(collection_song.model_dump(by_alias=True))
-    logger.info(f"Added song {song_id} to collection")
+    if early_release_date:
+        logger.info(f"Added song {song_id} to collection with early release date {early_release_date}")
+    else:
+        logger.info(f"Added song {song_id} to collection")
     return True
 
 
@@ -77,16 +106,35 @@ async def get_collection(id, includeUnpublished: bool = False):
         logger.error(f"Failed to get collection with id={id}: {str(e)}")
         return None
 
-async def get_songs_from_collection(collection_id: str):
+async def get_songs_from_collection(collection_id: str, include_unreleased=True):
+    """
+    Get songs from a collection.
+    
+    Args:
+        collection_id: ID of the collection
+        include_unreleased: If False, only returns songs that have been early released or collection is released
+    """
     db = get_db()
 
     collection_songs = list(db.collection_songs.find(
         {"collection_id": ObjectId(collection_id)},
-        {"song_id": 1, "order": 1}
+        {"song_id": 1, "order": 1, "early_release_date": 1}
     ))
 
     if not collection_songs:
         return []
+
+    # Filter by early release date if requested
+    if not include_unreleased:
+        now = datetime.now(timezone.utc)
+        collection_songs = [
+            cs for cs in collection_songs 
+            if cs.get("early_release_date") and (
+                # Ensure both datetimes are timezone-aware for comparison
+                cs["early_release_date"].replace(tzinfo=timezone.utc) if cs["early_release_date"].tzinfo is None 
+                else cs["early_release_date"]
+            ) <= now
+        ]
 
     song_ids = [ps["song_id"] for ps in collection_songs]
     if not song_ids:
@@ -95,7 +143,11 @@ async def get_songs_from_collection(collection_id: str):
     songs = list(db.songs.find({"_id": {"$in": song_ids}}))
     song_map = {song["_id"]: song for song in songs}
     return [
-        {**song_map[ps["song_id"]], "order": ps["order"]}
+        {
+            **song_map[ps["song_id"]], 
+            "order": ps["order"],
+            "early_release_date": ps.get("early_release_date")
+        }
         for ps in collection_songs
         if ps["song_id"] in song_map
     ]
