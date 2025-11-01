@@ -470,3 +470,299 @@ class TestCollectionsEndpoints:
         # Should only include albums
         for collection in collections:
             assert collection["type"] == "album"
+
+    # Tests for scheduled releases
+    def test_create_collection_with_future_release_date(self, client):
+        """Test creating a collection with a future release date."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Future Song", "duration": "180"}).json()["data"]
+        
+        # Create collection with release date 7 days in the future
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection_data = {
+            "name": "Future Album",
+            "type": "album",
+            "songIds": [song1['_id']],
+            "releaseDate": future_date
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        assert data["name"] == "Future Album"
+        assert "releaseDate" in data
+        assert data["releaseDate"] is not None
+
+    def test_create_collection_without_release_date(self, client):
+        """Test creating a collection without a release date defaults to now."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Immediate Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        assert data["name"] == "Immediate Album"
+        assert "releaseDate" in data
+
+    def test_unpublished_collection_not_visible_by_default(self, client):
+        """Test that unpublished collections are not visible in list without includeUnpublished."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create published collection
+        published_collection = client.post("/collections/", json={
+            "name": "Published Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        # Create unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        unpublished_collection = client.post("/collections/", json={
+            "name": "Unpublished Album",
+            "type": "album",
+            "songIds": [song1['_id']],
+            "releaseDate": future_date
+        }).json()["data"]
+        
+        # Get all collections without includeUnpublished
+        response = client.get("/collections")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        collection_names = [c["name"] for c in collections]
+        
+        # Should include published but not unpublished
+        assert "Published Album" in collection_names
+        assert "Unpublished Album" not in collection_names
+
+    def test_unpublished_collection_visible_with_flag(self, client):
+        """Test that unpublished collections are visible when includeUnpublished=True."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        unpublished_collection = client.post("/collections/", json={
+            "name": "Unpublished Album",
+            "type": "album",
+            "songIds": [song1['_id']],
+            "releaseDate": future_date
+        }).json()["data"]
+        
+        # Get collections with includeUnpublished=True
+        response = client.get("/collections?includeUnpublished=true")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        collection_names = [c["name"] for c in collections]
+        
+        # Should include unpublished
+        assert "Unpublished Album" in collection_names
+
+    def test_get_unpublished_collection_by_id_without_flag(self, client):
+        """Test that getting an unpublished collection by ID fails without includeUnpublished flag."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection = client.post("/collections/", json={
+            "name": "Unpublished Album",
+            "type": "album",
+            "songIds": [song1['_id']],
+            "releaseDate": future_date
+        }).json()["data"]
+        
+        # Try to get it without includeUnpublished flag
+        response = client.get(f"/collections/{collection['id']}")
+        assert response.status_code == 404
+        
+        error = response.json()
+        assert "not found or not yet released" in error["detail"].lower()
+
+    def test_get_unpublished_collection_by_id_with_flag(self, client):
+        """Test that getting an unpublished collection by ID works with includeUnpublished flag."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection = client.post("/collections/", json={
+            "name": "Unpublished Album",
+            "type": "album",
+            "songIds": [song1['_id']],
+            "releaseDate": future_date
+        }).json()["data"]
+        
+        # Get it with includeUnpublished flag
+        response = client.get(f"/collections/{collection['id']}?includeUnpublished=true")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert data["name"] == "Unpublished Album"
+
+    def test_publish_collection_immediately(self, client):
+        """Test publishing an unpublished collection immediately."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        collection = client.post("/collections/", json={
+            "name": "Future Album",
+            "type": "album",
+            "songIds": [song1['_id']],
+            "releaseDate": future_date
+        }).json()["data"]
+        
+        # Verify it's not visible without flag
+        response = client.get(f"/collections/{collection['id']}")
+        assert response.status_code == 404
+        
+        # Publish it immediately
+        publish_response = client.post(f"/collections/{collection['id']}/publish")
+        assert publish_response.status_code == 200
+        
+        published_data = publish_response.json()["data"]
+        assert published_data["name"] == "Future Album"
+        
+        # Now it should be visible without flag
+        response = client.get(f"/collections/{collection['id']}")
+        assert response.status_code == 200
+        assert response.json()["data"]["name"] == "Future Album"
+
+    def test_publish_already_published_collection_fails(self, client):
+        """Test that publishing an already published collection fails."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create published collection (no future date)
+        collection = client.post("/collections/", json={
+            "name": "Published Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        # Try to publish it again
+        response = client.post(f"/collections/{collection['id']}/publish")
+        assert response.status_code == 400
+        
+        error = response.json()
+        assert "already published" in error["detail"].lower()
+
+    def test_publish_nonexistent_collection_fails(self, client):
+        """Test that publishing a non-existent collection fails."""
+        response = client.post("/collections/507f1f77bcf86cd799439011/publish")
+        assert response.status_code == 404
+        
+        error = response.json()
+        assert "not found" in error["detail"].lower()
+
+    def test_popular_collections_exclude_unpublished_by_default(self, client):
+        """Test that popular endpoint excludes unpublished collections by default."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Hit Song", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Future Hit", "duration": "180"}).json()["data"]
+        
+        # Create published collection
+        published = client.post("/collections/", json={
+            "name": "Published Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        # Create unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        unpublished = client.post("/collections/", json={
+            "name": "Unpublished Album",
+            "type": "album",
+            "songIds": [song2['_id']],
+            "releaseDate": future_date
+        }).json()["data"]
+        
+        # Get popular collections
+        artist_id = published["artistId"]
+        response = client.get(f"/collections/popular/{artist_id}")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        collection_names = [c["name"] for c in collections]
+        
+        # Should include published but not unpublished
+        assert "Published Album" in collection_names
+        assert "Unpublished Album" not in collection_names
+
+    def test_popular_collections_include_unpublished_with_flag(self, client):
+        """Test that popular endpoint includes unpublished collections with flag."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Hit Song", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Future Hit", "duration": "180"}).json()["data"]
+        
+        # Create published collection
+        published = client.post("/collections/", json={
+            "name": "Published Album",
+            "type": "album",
+            "songIds": [song1['_id']]
+        }).json()["data"]
+        
+        # Create unpublished collection
+        future_date = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        unpublished = client.post("/collections/", json={
+            "name": "Unpublished Album",
+            "type": "album",
+            "songIds": [song2['_id']],
+            "releaseDate": future_date
+        }).json()["data"]
+        
+        # Get popular collections with includeUnpublished
+        artist_id = published["artistId"]
+        response = client.get(f"/collections/popular/{artist_id}?includeUnpublished=true")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        collection_names = [c["name"] for c in collections]
+        
+        # Should include both
+        assert "Published Album" in collection_names
+        assert "Unpublished Album" in collection_names
+
+    def test_collection_with_past_release_date_is_published(self, client):
+        """Test that a collection with a past release date is treated as published."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create collection with release date in the past
+        past_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        collection = client.post("/collections/", json={
+            "name": "Past Album",
+            "type": "album",
+            "songIds": [song1['_id']],
+            "releaseDate": past_date
+        }).json()["data"]
+        
+        # Should be visible without includeUnpublished flag
+        response = client.get(f"/collections/{collection['id']}")
+        assert response.status_code == 200
+        assert response.json()["data"]["name"] == "Past Album"
+        
+        # Should appear in list without flag
+        response = client.get("/collections")
+        assert response.status_code == 200
+        collection_names = [c["name"] for c in response.json()["data"]]
+        assert "Past Album" in collection_names

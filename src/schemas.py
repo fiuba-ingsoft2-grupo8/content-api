@@ -192,6 +192,7 @@ class CollectionBase(BaseModel):
     type: CollectionType
     coverUrl: str
     createdAt: datetime
+    releaseDate: Optional[datetime] = None
 
 class Collection(CollectionBase):
     """
@@ -210,6 +211,7 @@ class CreateCollectionRequest(BaseModel):
     name: str
     type: CollectionType
     songIds: List[str]
+    releaseDate: Optional[datetime] = None
 
 class UpdateCollectionRequest(BaseModel):
     name: Optional[str] = None

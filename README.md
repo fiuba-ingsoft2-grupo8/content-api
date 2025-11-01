@@ -201,3 +201,110 @@ db.history.find().forEach(function(doc) {
 ```
 
 Para más detalles, consulta [MIGRATION_NOTES.md](./MIGRATION_NOTES.md)
+
+## Sistema de Lanzamientos Programados
+
+### Descripción
+
+Las colecciones (álbumes, singles, EPs) ahora soportan lanzamientos programados. Esto permite a los artistas crear colecciones con una fecha de lanzamiento futura, manteniéndolas ocultas hasta que llegue esa fecha.
+
+### Características
+
+1. **Fecha de lanzamiento opcional**
+   - Al crear una colección, puedes especificar un campo `releaseDate`
+   - Si no se especifica, la colección se publica inmediatamente (fecha = ahora)
+   - Las colecciones con fecha futura no son visibles por defecto
+
+2. **Control de visibilidad**
+   - Por defecto, solo las colecciones publicadas (releaseDate ≤ ahora) son visibles
+   - Parámetro `includeUnpublished=true` permite ver colecciones no publicadas
+   - Aplica a todos los endpoints de obtención de colecciones
+
+3. **Publicación anticipada**
+   - Endpoint especial para publicar una colección inmediatamente
+   - Solo el artista propietario puede publicar su colección
+   - No se puede "despublicar" una colección ya lanzada
+
+### Endpoints Actualizados
+
+#### Crear colección con fecha de lanzamiento
+```bash
+POST /collections/
+{
+  "name": "Mi Nuevo Álbum",
+  "type": "album",
+  "songIds": ["song_id_1", "song_id_2"],
+  "releaseDate": "2025-12-31T00:00:00Z"  # Opcional
+}
+```
+
+#### Obtener colecciones (solo publicadas por defecto)
+```bash
+GET /collections/
+GET /collections/?type=album
+GET /collections/?artistId=artist_123
+GET /collections/{collection_id}
+GET /collections/popular/{artistId}
+```
+
+#### Obtener colecciones incluyendo no publicadas
+```bash
+GET /collections/?includeUnpublished=true
+GET /collections/{collection_id}?includeUnpublished=true
+GET /collections/popular/{artistId}?includeUnpublished=true
+```
+
+#### Publicar colección inmediatamente
+```bash
+POST /collections/{collection_id}/publish
+```
+
+Responde con:
+- `200 OK` - Colección publicada exitosamente
+- `400 Bad Request` - Colección ya está publicada
+- `403 Forbidden` - No eres el propietario de la colección
+- `404 Not Found` - Colección no encontrada
+
+### Casos de Uso
+
+**Artista programa un lanzamiento:**
+```bash
+# 1. Crear colección con fecha futura
+POST /collections/
+{
+  "name": "Summer Hits 2025",
+  "type": "album",
+  "songIds": [...],
+  "releaseDate": "2025-06-21T00:00:00Z"
+}
+
+# 2. Verificar que no es visible públicamente
+GET /collections/  # No aparece
+
+# 3. Verificar como artista (con includeUnpublished)
+GET /collections/?includeUnpublished=true  # Sí aparece
+
+# 4. Publicar anticipadamente si es necesario
+POST /collections/{collection_id}/publish
+```
+
+### Tests
+
+Se agregaron 12 tests completos que cubren:
+- ✅ Creación de colecciones con fecha futura
+- ✅ Creación de colecciones sin fecha (publicación inmediata)
+- ✅ Visibilidad de colecciones no publicadas
+- ✅ Filtrado con parámetro includeUnpublished
+- ✅ Publicación inmediata de colecciones
+- ✅ Validación de permisos de publicación
+- ✅ Colecciones con fechas pasadas (ya publicadas)
+- ✅ Endpoints populares con/sin includeUnpublished
+
+Ejecutar tests:
+```bash
+# Todos los tests de colecciones
+pytest tests/test_collections_controller.py -v
+
+# Solo tests de lanzamientos programados
+pytest tests/test_collections_controller.py -k "release_date or unpublished or publish" -v
+```

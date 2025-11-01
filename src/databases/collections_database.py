@@ -5,7 +5,7 @@ from db.database import get_db
 from db.models import CollectionSong
 from bson import ObjectId
 
-async def create_collection(name, artistId, artistName, type, coverUrl, songIds):
+async def create_collection(name, artistId, artistName, type, coverUrl, songIds, releaseDate=None):
     db = get_db()
     try:
         collection_doc = {
@@ -15,9 +15,10 @@ async def create_collection(name, artistId, artistName, type, coverUrl, songIds)
             "type": type,
             "coverUrl": coverUrl,
             "createdAt": datetime.now(timezone.utc),
+            "releaseDate": releaseDate if releaseDate else datetime.now(timezone.utc),
         }
         result = db.collections.insert_one(collection_doc)
-        logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, id={result.inserted_id}")
+        logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, id={result.inserted_id}, releaseDate={releaseDate}")
 
         order = 0
         for songId in songIds:
@@ -56,12 +57,18 @@ async def delete_collection(existing_collection):
         logger.error(f"Failed to delete collection with id={existing_collection['_id']}: {str(e)}")
 
 
-async def get_collection(id):
+async def get_collection(id, includeUnpublished: bool = False):
     db = get_db()
     try:
-        collection = db.collections.find_one({"_id": ObjectId(id)})
+        query = {"_id": ObjectId(id)}
+        
+        # Filter by release date unless includeUnpublished is True
+        if not includeUnpublished:
+            query["releaseDate"] = {"$lte": datetime.now(timezone.utc)}
+        
+        collection = db.collections.find_one(query)
         if collection is None:
-            logger.warning(f"Collection with id={id} not found")
+            logger.warning(f"Collection with id={id} not found or not yet released")
             return None
                 
         logger.info(f"Successfully retrieved collection '{collection['name']}'")
@@ -93,7 +100,7 @@ async def get_songs_from_collection(collection_id: str):
         if ps["song_id"] in song_map
     ]
 
-async def get_collections(type: str = None, artistId: str = None):
+async def get_collections(type: str = None, artistId: str = None, includeUnpublished: bool = False):
     db = get_db()
 
     try:
@@ -102,12 +109,16 @@ async def get_collections(type: str = None, artistId: str = None):
             query["type"] = type
         if artistId:
             query["artistId"] = artistId
+        
+        # Filter by release date unless includeUnpublished is True
+        if not includeUnpublished:
+            query["releaseDate"] = {"$lte": datetime.now(timezone.utc)}
 
         collections = list(
             db.collections.find(query)
             .sort([("createdAt", DESCENDING), ("name", 1)])
         )
-        logger.info(f"Retrieved {len(collections)} collections from database")
+        logger.info(f"Retrieved {len(collections)} collections from database (includeUnpublished={includeUnpublished})")
         return collections
     except Exception as e:
         logger.error(f"Failed to retrieve collections: {str(e)}")
@@ -165,7 +176,59 @@ async def update_collection(collection_id: str, update_data: dict):
         logger.error(f"Failed to update collection {collection_id}: {str(e)}")
         return False
 
-async def get_popular_collections(artistId: str, limit: int = 50, type: str = None):
+async def publish_collection_now(collection_id: str, artist_id: str):
+    """
+    Publishes a collection immediately by setting its release date to now.
+    Only works if the collection is unpublished and belongs to the requesting artist.
+    
+    Args:
+        collection_id: The ID of the collection to publish
+        artist_id: The ID of the artist making the request
+        
+    Returns:
+        Tuple of (success: bool, error_message: str or None)
+    """
+    db = get_db()
+    try:
+        # Get collection including unpublished ones
+        collection = await get_collection(collection_id, includeUnpublished=True)
+        
+        if not collection:
+            return (False, "Collection not found")
+        
+        # Check if artist owns the collection
+        if collection["artistId"] != artist_id:
+            return (False, "You are not authorized to publish this collection")
+        
+        # Check if collection is already published
+        if collection.get("releaseDate"):
+            release_date = collection["releaseDate"]
+            # Ensure both datetimes are timezone-aware for comparison
+            if release_date.tzinfo is None:
+                release_date = release_date.replace(tzinfo=timezone.utc)
+            
+            now = datetime.now(timezone.utc)
+            if release_date <= now:
+                return (False, "Collection is already published")
+        
+        # Update release date to now
+        result = db.collections.update_one(
+            {"_id": ObjectId(collection_id)},
+            {"$set": {"releaseDate": datetime.now(timezone.utc)}}
+        )
+        
+        if result.modified_count > 0:
+            logger.info(f"Successfully published collection {collection_id}")
+            return (True, None)
+        else:
+            logger.warning(f"Failed to publish collection {collection_id}")
+            return (False, "Failed to publish collection")
+            
+    except Exception as e:
+        logger.error(f"Failed to publish collection {collection_id}: {str(e)}")
+        return (False, str(e))
+
+async def get_popular_collections(artistId: str, limit: int = 50, type: str = None, includeUnpublished: bool = False):
     """
     Get collections ordered by popularity (total plays descending) for a specific artist.
     
@@ -173,6 +236,7 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         artistId: Artist ID (required)
         limit: Maximum number of collections to return
         type: Optional filter by collection type (album, single, ep)
+        includeUnpublished: Whether to include unpublished collections (default: False)
         
     Returns:
         List of collections with popularity metrics
@@ -183,6 +247,10 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         query = {"artistId": artistId}
         if type:
             query["type"] = type
+        
+        # Filter by release date unless includeUnpublished is True
+        if not includeUnpublished:
+            query["releaseDate"] = {"$lte": datetime.now(timezone.utc)}
             
         collections = list(db.collections.find(query))
         
