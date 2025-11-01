@@ -88,10 +88,12 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
             collection.name, 
             user["user_id"], 
             user["stage_name"], 
-            collection_type, 
+            collection_type,
+            collection.genre,
             "None", 
             collection.songIds,
-            collection.releaseDate
+            collection.releaseDate,
+            collection.credits
         )
         if not db_collection:
             return JSONResponse(
@@ -165,8 +167,12 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
             update_data["name"] = update_request.name
         if update_request.type is not None:
             update_data["type"] = update_request.type.value if hasattr(update_request.type, 'value') else update_request.type
+        if update_request.genre is not None:
+            update_data["genre"] = update_request.genre
         if update_request.coverUrl is not None:
             update_data["coverUrl"] = update_request.coverUrl
+        if update_request.credits is not None:
+            update_data["credits"] = update_request.credits
         
         # Update collection metadata if there are fields to update
         if update_data:

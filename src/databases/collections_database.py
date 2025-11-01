@@ -5,7 +5,7 @@ from db.database import get_db
 from db.models import CollectionSong
 from bson import ObjectId
 
-async def create_collection(name, artistId, artistName, type, coverUrl, songIds, releaseDate=None):
+async def create_collection(name, artistId, artistName, type, genre, coverUrl, songIds, releaseDate=None, credits=None):
     db = get_db()
     try:
         collection_doc = {
@@ -13,12 +13,14 @@ async def create_collection(name, artistId, artistName, type, coverUrl, songIds,
             "artistId": artistId,
             "artistName": artistName,
             "type": type,
+            "genre": genre,
             "coverUrl": coverUrl,
             "createdAt": datetime.now(timezone.utc),
             "releaseDate": releaseDate if releaseDate else datetime.now(timezone.utc),
+            "credits": credits if credits else [],
         }
         result = db.collections.insert_one(collection_doc)
-        logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, id={result.inserted_id}, releaseDate={releaseDate}")
+        logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, genre={genre}, id={result.inserted_id}, releaseDate={releaseDate}")
 
         order = 0
         for songId in songIds:
