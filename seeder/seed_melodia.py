@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = os.getenv("BASE_URL", "http://localhost:8082").rstrip("/")
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8080").rstrip("/")
 AUTH_TOKEN = os.getenv("AUTH_TOKEN", "")
 SEED_TAG = os.getenv("SEED_TAG", "[SEED]")
 

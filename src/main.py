@@ -17,7 +17,7 @@ logger.info("Load configurations")
 load_dotenv()
 
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8082"))
+PORT = int(os.getenv("PORT", "8080"))
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 def is_testing():
