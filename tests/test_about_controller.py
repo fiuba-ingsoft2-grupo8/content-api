@@ -526,3 +526,197 @@ class TestSetPrimaryCarouselImage:
         about = self.client.get("/about/test_user_123").json()
         assert about["data"]["carouselImages"][0]["isPrimary"] is True
         assert about["data"]["carouselImages"][1]["isPrimary"] is False
+
+
+class TestDeleteCarouselImage:
+    """Test suite for deleting carousel images endpoint."""
+    
+    @pytest.fixture(autouse=True)
+    def setup(self, client, mock_db):
+        """Setup for each test."""
+        self.client = client
+        self.db = mock_db
+        
+        # Clear the artist_about collection before each test
+        self.db.artist_about.delete_many({})
+    
+    def create_test_image(self):
+        """Helper to create a test image file."""
+        image_bytes = io.BytesIO(
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+            b'\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x00\x01'
+            b'\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
+        return ("test_image.png", image_bytes, "image/png")
+    
+    def test_delete_carousel_image_success(self):
+        """Test successfully deleting a carousel image."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 3 images
+        image_ids = []
+        for i in range(3):
+            response = self.client.post(
+                "/about/carousel",
+                files={"file": self.create_test_image()}
+            )
+            image_ids.append(response.json()["data"]["imageId"])
+        
+        # Delete the second image
+        response = self.client.delete(f"/about/carousel/{image_ids[1]}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["deletedImageId"] == image_ids[1]
+        assert data["data"]["remainingImages"] == 2
+        
+        # Verify the image was deleted
+        about = self.client.get("/about/test_user_123").json()
+        carousel = about["data"]["carouselImages"]
+        assert len(carousel) == 2
+        assert image_ids[1] not in [img["id"] for img in carousel]
+    
+    def test_delete_primary_image_sets_new_primary(self):
+        """Test that deleting primary image sets the first remaining as primary."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 3 images (first one is primary)
+        image_ids = []
+        for i in range(3):
+            response = self.client.post(
+                "/about/carousel",
+                files={"file": self.create_test_image()}
+            )
+            image_ids.append(response.json()["data"]["imageId"])
+        
+        # Verify first is primary
+        about = self.client.get("/about/test_user_123").json()
+        assert about["data"]["carouselImages"][0]["isPrimary"] is True
+        
+        # Delete the first (primary) image
+        response = self.client.delete(f"/about/carousel/{image_ids[0]}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["newPrimarySet"] is True
+        
+        # Verify the new first image is now primary
+        about = self.client.get("/about/test_user_123").json()
+        carousel = about["data"]["carouselImages"]
+        assert len(carousel) == 2
+        assert carousel[0]["isPrimary"] is True
+        assert carousel[0]["id"] == image_ids[1]  # Originally second image
+    
+    def test_delete_non_primary_image_keeps_primary(self):
+        """Test that deleting non-primary image doesn't affect primary."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 3 images
+        image_ids = []
+        for i in range(3):
+            response = self.client.post(
+                "/about/carousel",
+                files={"file": self.create_test_image()}
+            )
+            image_ids.append(response.json()["data"]["imageId"])
+        
+        # Delete a non-primary image
+        response = self.client.delete(f"/about/carousel/{image_ids[2]}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["newPrimarySet"] is False
+        
+        # Verify first image is still primary
+        about = self.client.get("/about/test_user_123").json()
+        carousel = about["data"]["carouselImages"]
+        assert len(carousel) == 2
+        assert carousel[0]["isPrimary"] is True
+        assert carousel[0]["id"] == image_ids[0]
+    
+    def test_delete_last_image_empties_carousel(self):
+        """Test that deleting the last image results in empty carousel."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 1 image
+        response = self.client.post(
+            "/about/carousel",
+            files={"file": self.create_test_image()}
+        )
+        image_id = response.json()["data"]["imageId"]
+        
+        # Delete the only image
+        response = self.client.delete(f"/about/carousel/{image_id}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["data"]["remainingImages"] == 0
+        assert data["data"]["newPrimarySet"] is False  # No images left to set as primary
+        
+        # Verify carousel is empty
+        about = self.client.get("/about/test_user_123").json()
+        assert about["data"]["carouselImages"] == []
+    
+    def test_delete_image_without_about_page(self):
+        """Test that deleting fails if about page doesn't exist."""
+        response = self.client.delete("/about/carousel/fake-id-123")
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+    
+    def test_delete_image_with_invalid_id(self):
+        """Test that deleting fails with invalid image ID."""
+        # Create about page and upload an image
+        self.client.post("/about")
+        self.client.post("/about/carousel", files={"file": self.create_test_image()})
+        
+        # Try to delete a non-existent image
+        response = self.client.delete("/about/carousel/invalid-id-999")
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+    
+    def test_delete_image_from_empty_carousel(self):
+        """Test that deleting fails when carousel is empty."""
+        # Create about page without images
+        self.client.post("/about")
+        
+        response = self.client.delete("/about/carousel/any-id")
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "no carousel images" in data["detail"].lower() or "not found" in data["detail"].lower()
+    
+    def test_delete_multiple_images_in_sequence(self):
+        """Test deleting multiple images one by one."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 5 images
+        image_ids = []
+        for i in range(5):
+            response = self.client.post(
+                "/about/carousel",
+                files={"file": self.create_test_image()}
+            )
+            image_ids.append(response.json()["data"]["imageId"])
+        
+        # Delete 3 images
+        for i in [1, 3, 4]:
+            response = self.client.delete(f"/about/carousel/{image_ids[i]}")
+            assert response.status_code == 200
+        
+        # Verify only 2 images remain
+        about = self.client.get("/about/test_user_123").json()
+        carousel = about["data"]["carouselImages"]
+        assert len(carousel) == 2
+        remaining_ids = [img["id"] for img in carousel]
+        assert image_ids[0] in remaining_ids
+        assert image_ids[2] in remaining_ids

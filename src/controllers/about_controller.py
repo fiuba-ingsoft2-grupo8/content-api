@@ -388,3 +388,117 @@ async def set_primary_carousel_image(
             )
         )
 
+
+@router.delete("/carousel/{image_id}", status_code=200)
+async def delete_carousel_image(
+    image_id: str,
+    user: dict = Depends(verify_token)
+):
+    """
+    Delete a carousel image by its ID.
+    If the deleted image was primary and other images exist,
+    the first remaining image will be set as primary.
+    """
+    try:
+        artist_id = user["user_id"]
+        
+        # Get artist's current about page
+        about_doc = await about_db.get_artist_about_by_id(artist_id)
+        
+        if about_doc is None:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    "Artist about page not found",
+                    f"/about/carousel/{image_id}"
+                )
+            )
+        
+        # Get current carousel images
+        current_images = about_doc.get("carousel_images", [])
+        
+        if not current_images:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    "No carousel images found",
+                    f"/about/carousel/{image_id}"
+                )
+            )
+        
+        # Find and remove the image with the given ID
+        image_found = False
+        was_primary = False
+        updated_images = []
+        
+        for img in current_images:
+            if img.get("id") == image_id:
+                image_found = True
+                was_primary = img.get("isPrimary", False)
+                # Don't add this image to updated_images (effectively deleting it)
+            else:
+                updated_images.append(img)
+        
+        if not image_found:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Carousel image with ID {image_id} not found",
+                    f"/about/carousel/{image_id}"
+                )
+            )
+        
+        # If the deleted image was primary and there are remaining images,
+        # set the first one as primary
+        if was_primary and len(updated_images) > 0:
+            updated_images[0]["isPrimary"] = True
+        
+        # Update the about page with the modified carousel
+        update_data = {
+            "carouselImages": updated_images
+        }
+        
+        updated_doc = await about_db.update_artist_about(artist_id, update_data)
+        
+        if updated_doc is None:
+            return JSONResponse(
+                status_code=500,
+                content=create_error_response(
+                    500,
+                    "Internal Server Error",
+                    "Failed to delete carousel image",
+                    f"/about/carousel/{image_id}"
+                )
+            )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"Image {image_id} deleted successfully",
+                "data": {
+                    "deletedImageId": image_id,
+                    "remainingImages": len(updated_images),
+                    "newPrimarySet": was_primary and len(updated_images) > 0
+                }
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error deleting carousel image: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                "An error occurred while deleting the carousel image",
+                f"/about/carousel/{image_id}"
+            )
+        )
+
