@@ -60,6 +60,14 @@ app.include_router(search_controller.router, prefix="/search", tags=["search"])
 app.include_router(metrics_controller.router, prefix="/metrics", tags=["metrics"])
 app.include_router(about_controller.router, prefix="/about", tags=["about"])
 
+# Health check endpoint
+@app.get("/health", tags=["health"])
+async def health_check():
+    """
+    Health check endpoint to verify the API is running.
+    """
+    return JSONResponse(status_code=200, content={})
+
 # Global validation handler
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
