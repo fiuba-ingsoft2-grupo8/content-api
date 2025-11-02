@@ -112,3 +112,15 @@ class Play(BaseModel):
     played_at: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class ArtistAbout(BaseModel):
+    """Artist about page with bio, social media, images, and featured pick."""
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    artist_id: str  # User ID of the artist
+    artist: str  # Stage name
+    bio: str | None = None
+    social_media: dict | None = None  # {"x": "username", "instagram": "username"}
+    carousel_images: list[dict] = []  # [{"url": "...", "isPrimary": bool}], max 5
+    artist_pick: dict | None = None  # {"type": "collection/playlist", "id": "..."}
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}

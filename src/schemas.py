@@ -328,3 +328,64 @@ class ShareRequest(BaseModel):
     targetId: str
     targetType: str  # 'song' or 'collection'
 
+# Artist About schemas
+class SocialMedia(BaseModel):
+    """Social media links for an artist."""
+    x: Optional[str] = None  # Twitter/X username or URL
+    instagram: Optional[str] = None  # Instagram username or URL
+
+class CarouselImage(BaseModel):
+    """Image in artist carousel."""
+    id: str  # Unique identifier for the image
+    url: str
+    isPrimary: bool = False  # Only one can be primary
+
+class ArtistPick(BaseModel):
+    """Artist's featured collection or playlist."""
+    type: str  # 'collection' or 'playlist'
+    id: str
+
+class ArtistAbout(BaseModel):
+    """Artist about page information."""
+    artistId: str
+    artist: str
+    bio: Optional[str] = None
+    socialMedia: Optional[SocialMedia] = None
+    carouselImages: List[CarouselImage] = []  # Max 5 images
+    artistPick: Optional[ArtistPick] = None
+    
+    class Config:
+        from_attributes = True
+
+class UpdateArtistAboutRequest(BaseModel):
+    """Request to update artist about page (cannot edit artistId or artist)."""
+    bio: Optional[str] = None
+    socialMedia: Optional[SocialMedia] = None
+    carouselImages: Optional[List[CarouselImage]] = None
+    artistPick: Optional[ArtistPick] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "bio": "Músico argentino, pionero del rock nacional.",
+                "socialMedia": {
+                    "x": "@charlygarcia",
+                    "instagram": "@charlygarcia_oficial"
+                },
+                "carouselImages": [
+                    {
+                        "url": "https://example.com/image1.jpg",
+                        "isPrimary": True
+                    },
+                    {
+                        "url": "https://example.com/image2.jpg",
+                        "isPrimary": False
+                    }
+                ],
+                "artistPick": {
+                    "type": "collection",
+                    "id": "507f1f77bcf86cd799439011"
+                }
+            }
+        }
+

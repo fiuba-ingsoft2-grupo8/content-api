@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from resources.logger import logger, LOGGING_CONFIG
-from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, metrics_controller, search_controller
+from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, metrics_controller, search_controller, about_controller
 from common.utils import create_error_response
 from db.database import Database
 from db.supabase import Supabase
@@ -58,6 +58,7 @@ app.include_router(history_controller.router, prefix="/history", tags=["history"
 app.include_router(collections_controller.router, prefix="/collections", tags=["collections"])
 app.include_router(search_controller.router, prefix="/search", tags=["search"])
 app.include_router(metrics_controller.router, prefix="/metrics", tags=["metrics"])
+app.include_router(about_controller.router, prefix="/about", tags=["about"])
 
 # Global validation handler
 @app.exception_handler(RequestValidationError)
