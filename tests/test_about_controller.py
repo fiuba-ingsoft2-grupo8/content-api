@@ -1,4 +1,5 @@
 import pytest
+import io
 
 
 class TestAboutEndpoints:
@@ -275,3 +276,134 @@ class TestAboutEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert len(data["data"]["carouselImages"]) == 5
+
+
+class TestCarouselImageUpload:
+    """Test suite for carousel image upload endpoint."""
+    
+    @pytest.fixture(autouse=True)
+    def setup(self, client, mock_db):
+        """Setup for each test."""
+        self.client = client
+        self.db = mock_db
+        
+        # Clear the artist_about collection before each test
+        self.db.artist_about.delete_many({})
+    
+    def create_test_image(self):
+        """Helper to create a test image file."""
+        # Create a simple test image (1x1 pixel PNG)
+        image_bytes = io.BytesIO(
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+            b'\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x00\x01'
+            b'\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
+        return ("test_image.png", image_bytes, "image/png")
+    
+    def test_upload_first_carousel_image_success(self):
+        """Test uploading the first carousel image (should be marked as primary)."""
+        # Create about page first
+        self.client.post("/about")
+        
+        # Upload first image
+        image_file = self.create_test_image()
+        response = self.client.post(
+            "/about/carousel",
+            files={"file": image_file}
+        )
+        
+        assert response.status_code == 201
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["imageNumber"] == 1
+        assert data["data"]["isPrimary"] is True
+        assert data["data"]["totalImages"] == 1
+        assert "imageUrl" in data["data"]
+    
+    def test_upload_second_carousel_image_not_primary(self):
+        """Test that second image is not marked as primary."""
+        # Create about page and add first image
+        self.client.post("/about")
+        self.client.post("/about/carousel", files={"file": self.create_test_image()})
+        
+        # Upload second image
+        response = self.client.post(
+            "/about/carousel",
+            files={"file": self.create_test_image()}
+        )
+        
+        assert response.status_code == 201
+        data = response.json()
+        assert data["data"]["imageNumber"] == 2
+        assert data["data"]["isPrimary"] is False
+        assert data["data"]["totalImages"] == 2
+    
+    def test_upload_carousel_image_without_about_page(self):
+        """Test that upload fails if about page doesn't exist."""
+        response = self.client.post(
+            "/about/carousel",
+            files={"file": self.create_test_image()}
+        )
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+    
+    def test_upload_carousel_image_max_five(self):
+        """Test that uploading more than 5 images fails."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 5 images
+        for i in range(5):
+            response = self.client.post(
+                "/about/carousel",
+                files={"file": self.create_test_image()}
+            )
+            assert response.status_code == 201
+        
+        # Try to upload 6th image
+        response = self.client.post(
+            "/about/carousel",
+            files={"file": self.create_test_image()}
+        )
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert "maximum" in data["detail"].lower() or "5" in data["detail"]
+    
+    def test_upload_carousel_image_updates_about_page(self):
+        """Test that uploading image updates the about page with the carousel."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload image
+        self.client.post(
+            "/about/carousel",
+            files={"file": self.create_test_image()}
+        )
+        
+        # Get about page and verify carousel was updated
+        response = self.client.get("/about/test_user_123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["data"]["carouselImages"]) == 1
+        assert data["data"]["carouselImages"][0]["isPrimary"] is True
+    
+    def test_upload_multiple_carousel_images_correct_numbering(self):
+        """Test that multiple uploads have correct numbering."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 3 images
+        for expected_num in range(1, 4):
+            response = self.client.post(
+                "/about/carousel",
+                files={"file": self.create_test_image()}
+            )
+            
+            assert response.status_code == 201
+            data = response.json()
+            assert data["data"]["imageNumber"] == expected_num
+            assert data["data"]["totalImages"] == expected_num

@@ -1,5 +1,6 @@
 import databases.about_database as about_db
-from fastapi import Depends, APIRouter
+import databases.storage_database as storage_db
+from fastapi import Depends, APIRouter, UploadFile, File
 from fastapi.responses import JSONResponse
 from auth import verify_token
 from resources.logger import logger
@@ -162,6 +163,111 @@ async def get_artist_about(artist_id: str):
                 "Internal Server Error",
                 "An error occurred while retrieving the artist about page",
                 f"/about/{artist_id}"
+            )
+        )
+
+
+@router.post("/carousel", status_code=201)
+async def upload_carousel_image(
+    file: UploadFile = File(...),
+    user: dict = Depends(verify_token)
+):
+    """
+    Upload an image to the artist's carousel.
+    - Maximum 5 images allowed
+    - First image uploaded will be marked as primary
+    - Images are stored with format: {artist_id}-carousel-{number}
+    """
+    try:
+        artist_id = user["user_id"]
+        
+        # Get artist's current about page
+        about_doc = await about_db.get_artist_about_by_id(artist_id)
+        
+        if about_doc is None:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    "Artist about page not found. Please create it first using POST /about",
+                    "/about/carousel-image"
+                )
+            )
+        
+        # Get current carousel images
+        current_images = about_doc.get("carousel_images", [])
+        
+        # Check if we already have 5 images
+        if len(current_images) >= 5:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400,
+                    "Bad Request",
+                    "Maximum of 5 carousel images allowed. Please delete an existing image first.",
+                    "/about/carousel-image"
+                )
+            )
+        
+        # Determine image number (1-5) based on current count
+        image_number = len(current_images) + 1
+        
+        # Upload the image to Supabase
+        upload_result = await storage_db.upload_carousel_image(artist_id, image_number, file)
+        image_url = upload_result["imageUrl"]
+        
+        # Determine if this is the primary image (first one)
+        is_primary = len(current_images) == 0
+        
+        # Add the new image to the carousel
+        new_image = {
+            "url": image_url,
+            "isPrimary": is_primary
+        }
+        current_images.append(new_image)
+        
+        # Update the about page with the new carousel
+        update_data = {
+            "carouselImages": current_images
+        }
+        
+        updated_doc = await about_db.update_artist_about(artist_id, update_data)
+        
+        if updated_doc is None:
+            return JSONResponse(
+                status_code=500,
+                content=create_error_response(
+                    500,
+                    "Internal Server Error",
+                    "Failed to update artist about with new carousel image",
+                    "/about/carousel-image"
+                )
+            )
+        
+        return JSONResponse(
+            status_code=201,
+            content={
+                "success": True,
+                "message": f"Carousel image uploaded successfully as image #{image_number}",
+                "data": {
+                    "imageUrl": image_url,
+                    "imageNumber": image_number,
+                    "isPrimary": is_primary,
+                    "totalImages": len(current_images)
+                }
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error uploading carousel image: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                "An error occurred while uploading the carousel image",
+                "/about/carousel-image"
             )
         )
 
