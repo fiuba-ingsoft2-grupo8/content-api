@@ -50,6 +50,7 @@ class Song(SongBase):
     when returning song data from the database.
     """
     _id: str
+    isLiked: Optional[bool] = None
 
     class Config:
         from_attributes = True

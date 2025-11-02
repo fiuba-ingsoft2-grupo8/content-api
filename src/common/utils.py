@@ -56,8 +56,10 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
         isLikedSongs=isLikedSongs
     )
 
-def serialize_song(song):
+def serialize_song(song, is_liked=None):
     song["_id"] = str(song["_id"])
+    if is_liked is not None:
+        song["isLiked"] = is_liked
     return song
 
 def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
