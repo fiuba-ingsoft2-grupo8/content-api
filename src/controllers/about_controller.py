@@ -1,8 +1,8 @@
 import databases.about_database as about_db
 import databases.storage_database as storage_db
-from fastapi import Depends, APIRouter, UploadFile, File
+from fastapi import Depends, APIRouter, UploadFile, File, Query
 from fastapi.responses import JSONResponse
-from auth import verify_token
+from auth import verify_token, is_authorized
 from resources.logger import logger
 from common.utils import create_error_response
 from schemas import ArtistAbout, UpdateArtistAboutRequest
@@ -76,10 +76,13 @@ async def create_artist_about(user: dict = Depends(verify_token)):
 @router.put("/", status_code=200)
 async def update_artist_about(
     update_request: UpdateArtistAboutRequest,
-    user: dict = Depends(verify_token)
+    user: dict = Depends(verify_token),
+    artist_id: str = Query(None, description="Artist ID to update (backoffice only)")
 ):
     """
-    Update the authenticated user's artist about page.
+    Update an artist about page.
+    Regular users can only update their own page.
+    Backoffice users can update any page by specifying artist_id query parameter.
     Cannot update artistId or artist fields.
     
     Validates:
@@ -87,13 +90,26 @@ async def update_artist_about(
     - Only one primary image in carousel
     """
     try:
-        artist_id = user["user_id"]
+        # Determine target artist_id
+        target_artist_id = artist_id if artist_id and user.get("user_type") == "backoffice" else user["user_id"]
+        
+        # Verify authorization
+        if not is_authorized(user, target_artist_id):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to update this artist about page",
+                    "/about"
+                )
+            )
         
         # Convert Pydantic model to dict, excluding None values
         update_data = update_request.model_dump(exclude_none=True)
         
         # Update the artist about page
-        about_doc = await about_db.update_artist_about(artist_id, update_data)
+        about_doc = await about_db.update_artist_about(target_artist_id, update_data)
         
         if about_doc is None:
             return JSONResponse(
@@ -171,19 +187,35 @@ async def get_artist_about(artist_id: str):
 @router.post("/carousel", status_code=201)
 async def upload_carousel_image(
     file: UploadFile = File(...),
-    user: dict = Depends(verify_token)
+    user: dict = Depends(verify_token),
+    artist_id: str = Query(None, description="Artist ID to upload for (backoffice only)")
 ):
     """
-    Upload an image to the artist's carousel.
+    Upload an image to an artist's carousel.
+    Regular users can only upload to their own carousel.
+    Backoffice users can upload to any artist by specifying artist_id query parameter.
     - Maximum 5 images allowed
     - First image uploaded will be marked as primary
     - Images are stored with format: {artist_id}-carousel-{number}
     """
     try:
-        artist_id = user["user_id"]
+        # Determine target artist_id
+        target_artist_id = artist_id if artist_id and user.get("user_type") == "backoffice" else user["user_id"]
+        
+        # Verify authorization
+        if not is_authorized(user, target_artist_id):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to upload images for this artist",
+                    "/about/carousel"
+                )
+            )
         
         # Get artist's current about page
-        about_doc = await about_db.get_artist_about_by_id(artist_id)
+        about_doc = await about_db.get_artist_about_by_id(target_artist_id)
         
         if about_doc is None:
             return JSONResponse(
@@ -215,7 +247,7 @@ async def upload_carousel_image(
         image_number = len(current_images) + 1
         
         # Upload the image to Supabase
-        upload_result = await storage_db.upload_carousel_image(artist_id, image_number, file)
+        upload_result = await storage_db.upload_carousel_image(target_artist_id, image_number, file)
         image_url = upload_result["imageUrl"]
         
         # Generate unique ID for the image
@@ -237,7 +269,7 @@ async def upload_carousel_image(
             "carouselImages": current_images
         }
         
-        updated_doc = await about_db.update_artist_about(artist_id, update_data)
+        updated_doc = await about_db.update_artist_about(target_artist_id, update_data)
         
         if updated_doc is None:
             return JSONResponse(
@@ -281,18 +313,34 @@ async def upload_carousel_image(
 @router.put("/carousel/primary/{image_id}", status_code=200)
 async def set_primary_carousel_image(
     image_id: str,
-    user: dict = Depends(verify_token)
+    user: dict = Depends(verify_token),
+    artist_id: str = Query(None, description="Artist ID to update (backoffice only)")
 ):
     """
     Set a carousel image as the primary image.
+    Regular users can only update their own carousel.
+    Backoffice users can update any artist by specifying artist_id query parameter.
     Only one image can be primary at a time.
     All other images will be set to isPrimary: false.
     """
     try:
-        artist_id = user["user_id"]
+        # Determine target artist_id
+        target_artist_id = artist_id if artist_id and user.get("user_type") == "backoffice" else user["user_id"]
+        
+        # Verify authorization
+        if not is_authorized(user, target_artist_id):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to modify this artist's carousel",
+                    f"/about/carousel/primary/{image_id}"
+                )
+            )
         
         # Get artist's current about page
-        about_doc = await about_db.get_artist_about_by_id(artist_id)
+        about_doc = await about_db.get_artist_about_by_id(target_artist_id)
         
         if about_doc is None:
             return JSONResponse(
@@ -354,7 +402,7 @@ async def set_primary_carousel_image(
             "carouselImages": updated_images
         }
         
-        updated_doc = await about_db.update_artist_about(artist_id, update_data)
+        updated_doc = await about_db.update_artist_about(target_artist_id, update_data)
         
         if updated_doc is None:
             return JSONResponse(
@@ -392,18 +440,34 @@ async def set_primary_carousel_image(
 @router.delete("/carousel/{image_id}", status_code=200)
 async def delete_carousel_image(
     image_id: str,
-    user: dict = Depends(verify_token)
+    user: dict = Depends(verify_token),
+    artist_id: str = Query(None, description="Artist ID to delete from (backoffice only)")
 ):
     """
     Delete a carousel image by its ID.
+    Regular users can only delete from their own carousel.
+    Backoffice users can delete from any artist by specifying artist_id query parameter.
     If the deleted image was primary and other images exist,
     the first remaining image will be set as primary.
     """
     try:
-        artist_id = user["user_id"]
+        # Determine target artist_id
+        target_artist_id = artist_id if artist_id and user.get("user_type") == "backoffice" else user["user_id"]
+        
+        # Verify authorization
+        if not is_authorized(user, target_artist_id):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to modify this artist's carousel",
+                    f"/about/carousel/{image_id}"
+                )
+            )
         
         # Get artist's current about page
-        about_doc = await about_db.get_artist_about_by_id(artist_id)
+        about_doc = await about_db.get_artist_about_by_id(target_artist_id)
         
         if about_doc is None:
             return JSONResponse(
@@ -464,7 +528,7 @@ async def delete_carousel_image(
             "carouselImages": updated_images
         }
         
-        updated_doc = await about_db.update_artist_about(artist_id, update_data)
+        updated_doc = await about_db.update_artist_about(target_artist_id, update_data)
         
         if updated_doc is None:
             return JSONResponse(

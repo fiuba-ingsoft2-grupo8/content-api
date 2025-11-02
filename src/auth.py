@@ -10,6 +10,15 @@ def is_testing():
     """Check if we're currently running tests."""
     return "pytest" in sys.modules or os.getenv("TESTING") == "true"
 
+def is_authorized(user: dict, resource_owner_id: str) -> bool:
+    """
+    Check if user is authorized to perform an action on a resource.
+    Returns True if:
+    - User is a backoffice user (user_type == "backoffice"), OR
+    - User is the owner of the resource (user_id == resource_owner_id)
+    """
+    return user.get("user_type") == "backoffice" or user.get("user_id") == resource_owner_id
+
 def verify_token(authorization: Optional[str] = Header(None)):
     """
     Dependency to verify JWT token

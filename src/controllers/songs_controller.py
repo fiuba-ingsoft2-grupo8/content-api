@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter, Depends
 from common.utils import create_error_response, serialize_song
-from auth import verify_token
+from auth import verify_token, is_authorized
 
 router = APIRouter()
 
@@ -90,20 +90,35 @@ async def update_song(id: str, song: schemas.UpdateSongRequest, user: dict = Dep
     This endpoint updates the title and artist of an existing song identified by ID.
     If the song doesn't exist, returns a 404 Not Found error. The update operation
     is performed within a database transaction for data consistency.
-    Only the owner can update their songs (including unpublished ones).
+    Only the owner or backoffice users can update songs (including unpublished ones).
     """
     logger.info(
         f"Updating song with id={id}: title='{song.title}', artist='{song.artist}, duration='{song.duration}'"
     )
 
-    # Allow owner to update their unpublished songs
-    db_song = await songs_db.get_song(id, includeUnpublished=True, userId=user["user_id"])
+    # Backoffice can update any song, owner can only update their own
+    if user.get("user_type") == "backoffice":
+        # Backoffice: get song without user restriction
+        db_song = await songs_db.get_song(id, includeUnpublished=True, userId=None)
+    else:
+        # Regular user: only get their own songs
+        db_song = await songs_db.get_song(id, includeUnpublished=True, userId=user["user_id"])
+    
     if db_song is None:
         logger.warning(f"Song with id={id} not found for update")
         return JSONResponse(
             status_code=404,
             content=create_error_response(
                 404, "Not Found", f"Song with id {id} not found", f"/songs/{id}"
+            ),
+        )
+    
+    # Verify authorization (owner or backoffice)
+    if not is_authorized(user, db_song.get("artistId")):
+        return JSONResponse(
+            status_code=403,
+            content=create_error_response(
+                403, "Forbidden", "You are not authorized to update this song", f"/songs/{id}"
             ),
         )
 
@@ -127,17 +142,33 @@ async def delete_song(id: str, user: dict = Depends(verify_token)):
     This endpoint permanently removes a song record from the database.
     If the song doesn't exist, returns a 404 Not Found error.
     The operation also removes the song from all playlists due to foreign key constraints.
-    Only the owner can delete their songs (including unpublished ones).
+    Only the owner or backoffice users can delete songs (including unpublished ones).
     """
     logger.info(f"Deleting song with id={id}")
-    # Allow owner to delete their unpublished songs
-    db_song = await songs_db.get_song(id, includeUnpublished=True, userId=user["user_id"])
+    
+    # Backoffice can delete any song, owner can only delete their own
+    if user.get("user_type") == "backoffice":
+        # Backoffice: get song without user restriction
+        db_song = await songs_db.get_song(id, includeUnpublished=True, userId=None)
+    else:
+        # Regular user: only get their own songs
+        db_song = await songs_db.get_song(id, includeUnpublished=True, userId=user["user_id"])
+    
     if db_song is None:
         logger.warning(f"Song with id={id} not found for deletion")
         return JSONResponse(
             status_code=404,
             content=create_error_response(
                 404, "Not Found", f"Song with id {id} not found", f"/songs/{id}"
+            ),
+        )
+    
+    # Verify authorization (owner or backoffice)
+    if not is_authorized(user, db_song.get("artistId")):
+        return JSONResponse(
+            status_code=403,
+            content=create_error_response(
+                403, "Forbidden", "You are not authorized to delete this song", f"/songs/{id}"
             ),
         )
 
