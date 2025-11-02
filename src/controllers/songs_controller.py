@@ -1,5 +1,6 @@
 import schemas
 import databases.songs_database as songs_db
+import databases.metrics_database as metrics_db
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter, Depends
@@ -71,7 +72,11 @@ async def get_song(id: str, includeUnpublished: bool = False, user: dict = Depen
                     404, "Not Found", f"Song with id {id} not found or not published", f"/songs/{id}"
                 ),
             )
-        return {"data": serialize_song(song)}
+        
+        # Check if the song is liked by the authenticated user
+        is_liked = await metrics_db.is_liked_by_user(user["user_id"], id, "song")
+        
+        return {"data": serialize_song(song, is_liked)}
     except Exception as e:
         logger.error(f"Failed to fetch song with id={id}: {str(e)}")
         raise

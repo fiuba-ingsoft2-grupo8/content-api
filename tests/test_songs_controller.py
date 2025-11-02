@@ -303,3 +303,85 @@ class TestSongPublishingRules:
         response = client.delete(f"/songs/{song['_id']}")
         assert response.status_code == 204
 
+
+class TestSongLikedStatus:
+    """Test suite for checking if a song is liked by the authenticated user."""
+
+    def test_song_not_liked_returns_false(self, client, sample_song_data):
+        """Get song should return isLiked=false when song is not liked."""
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Get the song - should show isLiked=false
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "isLiked" in data
+        assert data["isLiked"] is False
+
+    def test_song_liked_returns_true(self, client, sample_song_data):
+        """Get song should return isLiked=true when song is liked."""
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create liked songs playlist first
+        client.post("/likedSongs")
+        
+        # Like the song
+        client.post(f"/likedSongs/{song['_id']}")
+        
+        # Get the song - should show isLiked=true
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "isLiked" in data
+        assert data["isLiked"] is True
+
+    def test_song_unliked_returns_false(self, client, sample_song_data):
+        """Get song should return isLiked=false after unliking."""
+        # Create a song
+        song = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create liked songs playlist first
+        client.post("/likedSongs")
+        
+        # Like the song
+        client.post(f"/likedSongs/{song['_id']}")
+        
+        # Verify it's liked
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.json()["data"]["isLiked"] is True
+        
+        # Unlike the song
+        client.delete(f"/likedSongs/{song['_id']}")
+        
+        # Get the song - should show isLiked=false
+        response = client.get(f"/songs/{song['_id']}")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "isLiked" in data
+        assert data["isLiked"] is False
+
+    def test_multiple_songs_different_liked_status(self, client, sample_song_data):
+        """Test that different songs can have different liked status."""
+        # Create two songs
+        song1 = client.post("/songs", json=sample_song_data).json()["data"]
+        sample_song_data["title"] = "Another Song"
+        song2 = client.post("/songs", json=sample_song_data).json()["data"]
+        
+        # Create liked songs playlist
+        client.post("/likedSongs")
+        
+        # Like only the first song
+        client.post(f"/likedSongs/{song1['_id']}")
+        
+        # Check first song - should be liked
+        response1 = client.get(f"/songs/{song1['_id']}")
+        assert response1.status_code == 200
+        assert response1.json()["data"]["isLiked"] is True
+        
+        # Check second song - should not be liked
+        response2 = client.get(f"/songs/{song2['_id']}")
+        assert response2.status_code == 200
+        assert response2.json()["data"]["isLiked"] is False
+
