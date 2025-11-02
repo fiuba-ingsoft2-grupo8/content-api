@@ -6,7 +6,7 @@ from fastapi import Body, Depends
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
-from auth import verify_token
+from auth import verify_token, is_authorized
 from fastapi import UploadFile, File, Form
 from common.utils import create_error_response, serialize_playlist, DEFAULT_COVERS
 import random
@@ -112,20 +112,8 @@ async def delete_playlist(playlist_id: str, user: dict = Depends(verify_token)):
     If the playlist doesn't exist, returns a 404 Not Found error.
     The operation also removes all song associations from the playlist
     due to foreign key constraints, but the songs themselves remain in the database.
+    Only the owner or backoffice users can delete playlists.
     """
-    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
-    if not belongs_to_user:
-        logger.warning(f"Playlist does not belong to user, cannot delete")
-        return JSONResponse(
-            status_code=404,
-            content=create_error_response(
-                401,
-                "Authentication Error",
-                f"Playlist does not belong to user",
-                f"/playlists/{playlist_id}",
-            ),
-        )
-
     logger.info(f"Deleting playlist with id={playlist_id}")
 
     playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
@@ -137,6 +125,19 @@ async def delete_playlist(playlist_id: str, user: dict = Depends(verify_token)):
                 404,
                 "Not Found",
                 f"Playlist with id {playlist_id} not found",
+                f"/playlists/{playlist_id}",
+            ),
+        )
+    
+    # Verify user is the owner or is backoffice
+    if not is_authorized(user, playlist["userId"]):
+        logger.warning(f"User not authorized to delete playlist {playlist_id}")
+        return JSONResponse(
+            status_code=403,
+            content=create_error_response(
+                403,
+                "Forbidden",
+                "You are not authorized to delete this playlist",
                 f"/playlists/{playlist_id}",
             ),
         )
@@ -153,20 +154,8 @@ async def add_song_to_playlist(playlist_id: str, song_id: str, user: dict = Depe
     This endpoint adds a song (identified by songId) to an existing playlist.
     It validates that both the playlist and song exist, and that the song
     is not already in the playlist. The song is added with the current timestamp.
+    Only the owner or backoffice users can add songs to playlists.
     """
-
-    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
-    if not belongs_to_user:
-        logger.warning(f"Playlist does not belong to user, cannot add song")
-        return JSONResponse(
-            status_code=404,
-            content=create_error_response(
-                401,
-                "Authentication Error",
-                f"Playlist does not belong to user",
-                f"/playlists/{playlist_id}/songs/{song_id}",
-            ),
-        )  
 
     logger.info(f"Adding song {song_id} to playlist {playlist_id}")
     try:
@@ -179,7 +168,19 @@ async def add_song_to_playlist(playlist_id: str, song_id: str, user: dict = Depe
                     f"Playlist with id {playlist_id} not found",
                     f"/playlists/{playlist_id}/songs/{song_id}"
                 ),
-            )      
+            )
+        
+        # Verify user is the owner or is backoffice
+        if not is_authorized(user, playlist["userId"]):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to modify this playlist",
+                    f"/playlists/{playlist_id}/songs/{song_id}"
+                ),
+            )
 
         song = await songs_db.get_song(song_id)
         if not song:
@@ -223,20 +224,8 @@ async def remove_song_from_playlist(playlist_id: str, song_id: str, user: dict =
     This endpoint removes a song (identified by song_id) from an existing playlist.
     It validates that both the playlist and song exist, and that the song is currently
     in the playlist. If found, the song is removed and the updated playlist is returned.
+    Only the owner or backoffice users can remove songs from playlists.
     """
-
-    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
-    if not belongs_to_user:
-        logger.warning(f"Playlist does not belong to user, cannot remove song")
-        return JSONResponse(
-            status_code=404,
-            content=create_error_response(
-                401,
-                "Authentication Error",
-                f"Playlist does not belong to user",
-                f"/playlists/{playlist_id}/songs/{song_id}",
-            ),
-        )
 
     logger.info(f"Removing song {song_id} from playlist {playlist_id}")
     try:
@@ -247,6 +236,18 @@ async def remove_song_from_playlist(playlist_id: str, song_id: str, user: dict =
                 content=create_error_response(
                     404, "Not Found",
                     f"Playlist with id {playlist_id} not found",
+                    f"/playlists/{playlist_id}/songs/{song_id}"
+                ),
+            )
+        
+        # Verify user is the owner or is backoffice
+        if not is_authorized(user, playlist["userId"]):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to modify this playlist",
                     f"/playlists/{playlist_id}/songs/{song_id}"
                 ),
             )
@@ -296,20 +297,8 @@ async def publish_playlist(playlist_id: str, user: dict = Depends(verify_token))
 
     This endpoint marks the specified playlist, identified by it's unique ID, as published (is_published = True).
     It first verifies that the playlist exists.
+    Only the owner or backoffice users can publish playlists.
     """
-
-    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
-    if not belongs_to_user:
-        logger.warning(f"Playlist does not belong to user, cannot publish")
-        return JSONResponse(
-            status_code=404,
-            content=create_error_response(
-                401,
-                "Authentication Error",
-                f"Playlist does not belong to user",
-                f"/playlists/{playlist_id}/publish",
-            ),
-        )
 
     logger.info(f"Publishing playlist with id {playlist_id}")
     playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
@@ -319,7 +308,19 @@ async def publish_playlist(playlist_id: str, user: dict = Depends(verify_token))
             content=create_error_response(
                 404, "Not Found",
                 f"Playlist with id {playlist_id} not found",
-                f"/playlists/{playlist_id}/songs"
+                f"/playlists/{playlist_id}/publish"
+            ),
+        )
+    
+    # Verify user is the owner or is backoffice
+    if not is_authorized(user, playlist["userId"]):
+        return JSONResponse(
+            status_code=403,
+            content=create_error_response(
+                403,
+                "Forbidden",
+                "You are not authorized to publish this playlist",
+                f"/playlists/{playlist_id}/publish",
             ),
         )
     try:
@@ -345,22 +346,10 @@ async def private_playlist(playlist_id: str, user: dict = Depends(verify_token))
     """
     Make a playlist private.
 
-    This endpoint marks the specified playlist, identified by it's unique ID, as private (is_published = True).
+    This endpoint marks the specified playlist, identified by it's unique ID, as private (is_published = False).
     It first verifies that the playlist exists.
+    Only the owner or backoffice users can make playlists private.
     """
-
-    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
-    if not belongs_to_user:
-        logger.warning(f"Playlist does not belong to user, cannot make private")
-        return JSONResponse(
-            status_code=404,
-            content=create_error_response(
-                401,
-                "Authentication Error",
-                f"Playlist does not belong to user",
-                f"/playlists/{playlist_id}/private",
-            ),
-        )
 
     logger.info(f"Making playlist with id {playlist_id} private")
     playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
@@ -370,9 +359,22 @@ async def private_playlist(playlist_id: str, user: dict = Depends(verify_token))
             content=create_error_response(
                 404, "Not Found",
                 f"Playlist with id {playlist_id} not found",
-                f"/playlists/{playlist_id}/songs"
+                f"/playlists/{playlist_id}/private"
             ),
         )
+    
+    # Verify user is the owner or is backoffice
+    if not is_authorized(user, playlist["userId"]):
+        return JSONResponse(
+            status_code=403,
+            content=create_error_response(
+                403,
+                "Forbidden",
+                "You are not authorized to modify this playlist",
+                f"/playlists/{playlist_id}/private",
+            ),
+        )
+    
     try:
         private = await playlists_db.change_playlist_state(playlist, False)
         if not private:
@@ -395,20 +397,8 @@ async def private_playlist(playlist_id: str, user: dict = Depends(verify_token))
 async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), user: dict = Depends(verify_token)):
     """
     Uploads a playlist cover image to Supabase Storage and updates the playlist document.
+    Only the owner or backoffice users can upload covers.
     """
-
-    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
-    if not belongs_to_user:
-        logger.warning(f"Playlist does not belong to user, cannot upload cover")
-        return JSONResponse(
-            status_code=401,
-            content=create_error_response(
-                401,
-                "Authentication Error",
-                "Playlist does not belong to user",
-                f"/playlists/{playlist_id}/upload-cover",
-            ),
-        )
 
 
     playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
@@ -420,6 +410,18 @@ async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), 
                 "Not Found",
                 f"Playlist with id {playlist_id} not found",
                 f"/playlists/{playlist_id}/upload-cover"
+            ),
+        )
+    
+    # Verify user is the owner or is backoffice
+    if not is_authorized(user, playlist["userId"]):
+        return JSONResponse(
+            status_code=403,
+            content=create_error_response(
+                403,
+                "Forbidden",
+                "You are not authorized to upload a cover for this playlist",
+                f"/playlists/{playlist_id}/upload-cover",
             ),
         )
 

@@ -2,7 +2,7 @@ import databases.storage_database as storage_db
 import databases.collections_database as collections_db
 import schemas
 from fastapi import Depends
-from auth import verify_token
+from auth import verify_token, is_authorized
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from resources.logger import logger
@@ -27,7 +27,7 @@ async def upload_collection_cover(collection_id: str, file: UploadFile = File(..
                 ),
             )
         
-        if collection["artistId"] != user["user_id"]:
+        if not is_authorized(user, collection["artistId"]):
             return JSONResponse(
                 status_code=401,
                 content=create_error_response(
@@ -136,6 +136,18 @@ async def delete_collection(collection_id: str, user: dict = Depends(verify_toke
                 f"/collections/{collection_id}",
             ),
         )
+    
+    # Verify user is the owner of the collection or is backoffice
+    if not is_authorized(user, collection["artistId"]):
+        return JSONResponse(
+            status_code=403,
+            content=create_error_response(
+                403,
+                "Forbidden",
+                "You are not authorized to delete this collection",
+                f"/collections/{collection_id}",
+            ),
+        )
 
     await collections_db.delete_collection(collection)
     return JSONResponse(status_code=204, content=None)
@@ -158,8 +170,8 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
                 ),
             )
         
-        # Verify user is the owner of the collection
-        if collection["artistId"] != user["user_id"]:
+        # Verify user is the owner of the collection or is backoffice
+        if not is_authorized(user, collection["artistId"]):
             return JSONResponse(
                 status_code=403,
                 content=create_error_response(
