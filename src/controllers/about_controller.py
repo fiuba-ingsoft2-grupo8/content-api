@@ -71,7 +71,7 @@ async def create_artist_about(user: dict = Depends(verify_token)):
         )
 
 
-@router.put("", status_code=200)
+@router.put("/", status_code=200)
 async def update_artist_about(
     update_request: UpdateArtistAboutRequest,
     user: dict = Depends(verify_token)
