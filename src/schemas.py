@@ -336,6 +336,7 @@ class SocialMedia(BaseModel):
 
 class CarouselImage(BaseModel):
     """Image in artist carousel."""
+    id: str  # Unique identifier for the image
     url: str
     isPrimary: bool = False  # Only one can be primary
 

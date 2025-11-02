@@ -29,6 +29,7 @@ async def upload_cover_image(entity_type: str, user_id: str, file: UploadFile, p
 async def upload_carousel_image(artist_id: str, image_number: int, file: UploadFile):
     """
     Upload a carousel image for an artist's about page.
+    Images are stored in: bucket 'images' -> folder 'carousel'
     
     Args:
         artist_id: The artist's user ID
@@ -44,7 +45,7 @@ async def upload_carousel_image(artist_id: str, image_number: int, file: UploadF
         file_bytes = await file.read()
         ext = file.filename.split(".")[-1]
         filename = f"{artist_id}-carousel-{image_number}.{ext}"
-        file_path = f"artists/carousel/{filename}"
+        file_path = f"carousel/{filename}"
 
         # Delete existing file with same name if it exists (to allow updates)
         try:

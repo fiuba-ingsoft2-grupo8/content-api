@@ -6,6 +6,7 @@ from auth import verify_token
 from resources.logger import logger
 from common.utils import create_error_response
 from schemas import ArtistAbout, UpdateArtistAboutRequest
+import uuid
 
 router = APIRouter()
 
@@ -191,7 +192,7 @@ async def upload_carousel_image(
                     404,
                     "Not Found",
                     "Artist about page not found. Please create it first using POST /about",
-                    "/about/carousel-image"
+                    "/about/carousel"
                 )
             )
         
@@ -206,7 +207,7 @@ async def upload_carousel_image(
                     400,
                     "Bad Request",
                     "Maximum of 5 carousel images allowed. Please delete an existing image first.",
-                    "/about/carousel-image"
+                    "/about/carousel"
                 )
             )
         
@@ -217,11 +218,15 @@ async def upload_carousel_image(
         upload_result = await storage_db.upload_carousel_image(artist_id, image_number, file)
         image_url = upload_result["imageUrl"]
         
+        # Generate unique ID for the image
+        image_id = str(uuid.uuid4())
+        
         # Determine if this is the primary image (first one)
         is_primary = len(current_images) == 0
         
         # Add the new image to the carousel
         new_image = {
+            "id": image_id,
             "url": image_url,
             "isPrimary": is_primary
         }
@@ -241,7 +246,7 @@ async def upload_carousel_image(
                     500,
                     "Internal Server Error",
                     "Failed to update artist about with new carousel image",
-                    "/about/carousel-image"
+                    "/about/carousel"
                 )
             )
         
@@ -251,6 +256,7 @@ async def upload_carousel_image(
                 "success": True,
                 "message": f"Carousel image uploaded successfully as image #{image_number}",
                 "data": {
+                    "imageId": image_id,
                     "imageUrl": image_url,
                     "imageNumber": image_number,
                     "isPrimary": is_primary,
@@ -267,7 +273,118 @@ async def upload_carousel_image(
                 500,
                 "Internal Server Error",
                 "An error occurred while uploading the carousel image",
-                "/about/carousel-image"
+                "/about/carousel"
+            )
+        )
+
+
+@router.put("/carousel/primary/{image_id}", status_code=200)
+async def set_primary_carousel_image(
+    image_id: str,
+    user: dict = Depends(verify_token)
+):
+    """
+    Set a carousel image as the primary image.
+    Only one image can be primary at a time.
+    All other images will be set to isPrimary: false.
+    """
+    try:
+        artist_id = user["user_id"]
+        
+        # Get artist's current about page
+        about_doc = await about_db.get_artist_about_by_id(artist_id)
+        
+        if about_doc is None:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    "Artist about page not found",
+                    f"/about/carousel/primary/{image_id}"
+                )
+            )
+        
+        # Get current carousel images
+        current_images = about_doc.get("carousel_images", [])
+        
+        if not current_images:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    "No carousel images found",
+                    f"/about/carousel/primary/{image_id}"
+                )
+            )
+        
+        # Find the image with the given ID
+        image_found = False
+        updated_images = []
+        
+        for img in current_images:
+            if img.get("id") == image_id:
+                image_found = True
+                updated_images.append({
+                    "id": img["id"],
+                    "url": img["url"],
+                    "isPrimary": True
+                })
+            else:
+                updated_images.append({
+                    "id": img["id"],
+                    "url": img["url"],
+                    "isPrimary": False
+                })
+        
+        if not image_found:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Carousel image with ID {image_id} not found",
+                    f"/about/carousel/primary/{image_id}"
+                )
+            )
+        
+        # Update the about page with the modified carousel
+        update_data = {
+            "carouselImages": updated_images
+        }
+        
+        updated_doc = await about_db.update_artist_about(artist_id, update_data)
+        
+        if updated_doc is None:
+            return JSONResponse(
+                status_code=500,
+                content=create_error_response(
+                    500,
+                    "Internal Server Error",
+                    "Failed to update primary image",
+                    f"/about/carousel/primary/{image_id}"
+                )
+            )
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "message": f"Image {image_id} set as primary",
+                "data": serialize_artist_about(updated_doc)
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error setting primary carousel image: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                "An error occurred while setting the primary image",
+                f"/about/carousel/primary/{image_id}"
             )
         )
 

@@ -54,6 +54,7 @@ class TestAboutEndpoints:
             },
             "carouselImages": [
                 {
+                    "id": "test-id-1",
                     "url": "https://example.com/image1.jpg",
                     "isPrimary": True
                 }
@@ -154,7 +155,7 @@ class TestAboutEndpoints:
         # Try to add 6 images
         update_data = {
             "carouselImages": [
-                {"url": f"https://example.com/image{i}.jpg", "isPrimary": i == 0}
+                {"id": f"test-id-{i}", "url": f"https://example.com/image{i}.jpg", "isPrimary": i == 0}
                 for i in range(6)
             ]
         }
@@ -172,8 +173,8 @@ class TestAboutEndpoints:
         # Try to add multiple primary images
         update_data = {
             "carouselImages": [
-                {"url": "https://example.com/image1.jpg", "isPrimary": True},
-                {"url": "https://example.com/image2.jpg", "isPrimary": True}
+                {"id": "test-id-1", "url": "https://example.com/image1.jpg", "isPrimary": True},
+                {"id": "test-id-2", "url": "https://example.com/image2.jpg", "isPrimary": True}
             ]
         }
         
@@ -243,7 +244,7 @@ class TestAboutEndpoints:
         # Add images first
         update_data = {
             "carouselImages": [
-                {"url": "https://example.com/image1.jpg", "isPrimary": True}
+                {"id": "test-id-1", "url": "https://example.com/image1.jpg", "isPrimary": True}
             ]
         }
         self.client.put("/about", json=update_data)
@@ -266,7 +267,7 @@ class TestAboutEndpoints:
         # Add exactly 5 images (should succeed)
         update_data = {
             "carouselImages": [
-                {"url": f"https://example.com/image{i}.jpg", "isPrimary": i == 0}
+                {"id": f"test-id-{i}", "url": f"https://example.com/image{i}.jpg", "isPrimary": i == 0}
                 for i in range(5)
             ]
         }
@@ -319,6 +320,8 @@ class TestCarouselImageUpload:
         assert data["data"]["isPrimary"] is True
         assert data["data"]["totalImages"] == 1
         assert "imageUrl" in data["data"]
+        assert "imageId" in data["data"]
+        assert len(data["data"]["imageId"]) > 0  # UUID should not be empty
     
     def test_upload_second_carousel_image_not_primary(self):
         """Test that second image is not marked as primary."""
@@ -407,3 +410,119 @@ class TestCarouselImageUpload:
             data = response.json()
             assert data["data"]["imageNumber"] == expected_num
             assert data["data"]["totalImages"] == expected_num
+
+
+class TestSetPrimaryCarouselImage:
+    """Test suite for setting primary carousel image endpoint."""
+    
+    @pytest.fixture(autouse=True)
+    def setup(self, client, mock_db):
+        """Setup for each test."""
+        self.client = client
+        self.db = mock_db
+        
+        # Clear the artist_about collection before each test
+        self.db.artist_about.delete_many({})
+    
+    def create_test_image(self):
+        """Helper to create a test image file."""
+        image_bytes = io.BytesIO(
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+            b'\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\x00\x01'
+            b'\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
+        return ("test_image.png", image_bytes, "image/png")
+    
+    def test_set_primary_image_success(self):
+        """Test successfully setting a new primary image."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 3 images
+        image_ids = []
+        for i in range(3):
+            response = self.client.post(
+                "/about/carousel",
+                files={"file": self.create_test_image()}
+            )
+            image_ids.append(response.json()["data"]["imageId"])
+        
+        # Set the third image as primary
+        response = self.client.put(f"/about/carousel/primary/{image_ids[2]}")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        
+        # Verify only the third image is primary
+        carousel = data["data"]["carouselImages"]
+        assert len(carousel) == 3
+        assert carousel[0]["isPrimary"] is False
+        assert carousel[1]["isPrimary"] is False
+        assert carousel[2]["isPrimary"] is True
+        assert carousel[2]["id"] == image_ids[2]
+    
+    def test_set_primary_image_without_about_page(self):
+        """Test that setting primary fails if about page doesn't exist."""
+        response = self.client.put("/about/carousel/primary/fake-id-123")
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+    
+    def test_set_primary_image_with_invalid_id(self):
+        """Test that setting primary fails with invalid image ID."""
+        # Create about page and upload an image
+        self.client.post("/about")
+        self.client.post("/about/carousel", files={"file": self.create_test_image()})
+        
+        # Try to set a non-existent image as primary
+        response = self.client.put("/about/carousel/primary/invalid-id-999")
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+    
+    def test_set_primary_image_with_no_carousel(self):
+        """Test that setting primary fails when carousel is empty."""
+        # Create about page without images
+        self.client.post("/about")
+        
+        response = self.client.put("/about/carousel/primary/any-id")
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "no carousel images" in data["detail"].lower() or "not found" in data["detail"].lower()
+    
+    def test_set_primary_only_one_primary_at_time(self):
+        """Test that only one image can be primary at a time."""
+        # Create about page
+        self.client.post("/about")
+        
+        # Upload 2 images
+        response1 = self.client.post("/about/carousel", files={"file": self.create_test_image()})
+        image_id_1 = response1.json()["data"]["imageId"]
+        
+        response2 = self.client.post("/about/carousel", files={"file": self.create_test_image()})
+        image_id_2 = response2.json()["data"]["imageId"]
+        
+        # First image should be primary initially
+        about = self.client.get("/about/test_user_123").json()
+        assert about["data"]["carouselImages"][0]["isPrimary"] is True
+        assert about["data"]["carouselImages"][1]["isPrimary"] is False
+        
+        # Set second image as primary
+        self.client.put(f"/about/carousel/primary/{image_id_2}")
+        
+        # Verify first is no longer primary
+        about = self.client.get("/about/test_user_123").json()
+        assert about["data"]["carouselImages"][0]["isPrimary"] is False
+        assert about["data"]["carouselImages"][1]["isPrimary"] is True
+        
+        # Set first image as primary again
+        self.client.put(f"/about/carousel/primary/{image_id_1}")
+        
+        # Verify second is no longer primary
+        about = self.client.get("/about/test_user_123").json()
+        assert about["data"]["carouselImages"][0]["isPrimary"] is True
+        assert about["data"]["carouselImages"][1]["isPrimary"] is False
