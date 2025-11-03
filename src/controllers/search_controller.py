@@ -3,38 +3,49 @@ import databases.collections_database as collections_db, databases.songs_databas
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter, Depends
-from common.utils import create_error_response, serialize_song
+from common.utils import create_error_response, serialize_song, serialize_playlist, serialize_collection
 from auth import verify_token
 
 router = APIRouter()
 
 @router.get("/")
 async def search(str_name: str, user: dict = Depends(verify_token)):
+    logger.info(f"Buscando collections con nombre parecido a: {str_name}")
 
-    # Entiendo que no hay que hacer nada con el User por ahora, porque no hay que validar nada para buscar canciones
-    # Va a servir para el tema de regiones y eso.
-
-    print(f"Buscando collections con nombre parecido a: {str_name}")
     collection_ids = await collections_db.get_ids_by_name(str_name)
     if not collection_ids:
         return create_error_response(404, "Not Found", "No collections found")
 
-    logger.info(f'Collection IDs: {collection_ids}, type: {type(collection_ids)}')
+    logger.info(f"Collection IDs: {collection_ids}, type: {type(collection_ids)}")
 
-    for coleccion, elementos in collection_ids.items():
-        collections_to_return = []
-        if coleccion == 'playlists':
-            for cid in elementos:
-                playlist = await collections_db.get_collection(cid)
-                if playlist:
-                    collections_to_return.append(serialize_song(playlist))
-        elif coleccion == 'songs':
-            for cid in elementos:
-                song = await songs_db.get_song(cid)
-                if song:
-                    collections_to_return.append(serialize_song(song))
-        
-    
-    #collections = [serialize_song(collection) for collection in await collections_db.get_collections_by_ids(collection_ids)]
-    return JSONResponse(content={"collections": collections_to_return})
+    # Acumulador por tipo (no se pisa entre sí)
+    result = {
+        "playlists": [],
+        "songs": [],
+        "users": [],   # si todavía no vas a expandir usuarios, al menos devolvé sus IDs
+    }
 
+    # Playlists (cada item suele ser {"_id": ObjectId(...)})
+    for item in collection_ids.get("playlists", []):
+        pid = item.get("_id") if isinstance(item, dict) else item
+        if pid:
+            playlist = await collections_db.get_collection(pid)
+            if playlist:
+                result["playlists"].append(serialize_playlist(playlist))  # usa serializer de playlist
+
+    # Songs
+    for item in collection_ids.get("songs", []):
+        sid = item.get("_id") if isinstance(item, dict) else item
+        if sid:
+            song = await songs_db.get_song(sid)
+            if song:
+                result["songs"].append(serialize_song(song))
+
+    # Users (tu get_ids_by_name hoy devuelve [{"id": "uuid"}, ...])
+    # Si por ahora no tenés cómo expandirlos, devolvé los IDs tal cual:
+    for item in collection_ids.get("users", []):
+        uid = item.get("id") if isinstance(item, dict) else item
+        if uid:
+            result["users"].append({"id": uid})
+
+    return JSONResponse(content={"collections": result})
