@@ -369,3 +369,83 @@ GET /collections/popular/{artistId}
 - Los likes son a nivel de canción, no de colección
 - Las colecciones se ordenan por `popularityScore` descendente
 - Los pesos pueden ajustarse según las necesidades del negocio
+
+## 📦 Copiar Base de Datos Remota a Local
+
+### Descripción
+
+Script de utilidad para copiar todos los datos desde la base de datos remota (MongoDB Atlas) a la base de datos local. Útil para:
+- Desarrollo con datos reales
+- Testing con datos de producción
+- Depuración de problemas
+- Sincronización de entornos
+
+### Uso
+
+```bash
+# 1. Asegurarse que la base de datos local esté corriendo
+make up-local
+
+# 2. Copiar datos desde remoto
+make copy
+```
+
+### ¿Qué hace el comando?
+
+1. ✅ Se conecta a la base de datos remota (usando `DATABASE_URL` del `.env`)
+2. ✅ Se conecta a la base de datos local (Docker)
+3. ✅ Copia todas las colecciones:
+   - songs
+   - playlists
+   - playlist_songs
+   - collections
+   - collection_songs
+   - likes
+   - shares
+   - plays
+   - history
+   - artist_about
+
+4. ⚠️ **Importante**: Elimina el contenido local de cada colección antes de copiar
+
+### Ejemplo de Salida
+
+```
+📦 Copying database from remote to local...
+⚠️  Make sure your local MongoDB is running first!
+
+============================================================
+  📦 MongoDB Database Copy Tool
+  Remote → Local
+============================================================
+
+🔌 Connecting to databases...
+✅ Connected to REMOTE database: mongodb+srv://...
+✅ Connected to LOCAL database: mongodb://admin:admin_password@localhost:27017/...
+
+📋 Starting copy process...
+
+  ✅ songs: Copied 150 documents
+  ✅ playlists: Copied 45 documents
+  ✅ playlist_songs: Copied 320 documents
+  ✅ collections: Copied 25 documents
+  ✅ collection_songs: Copied 180 documents
+  ✅ likes: Copied 500 documents
+  ✅ shares: Copied 120 documents
+  ✅ plays: Copied 2500 documents
+  ⚠️  history: No documents found (skipping)
+  ✅ artist_about: Copied 10 documents
+
+============================================================
+  ✨ Copy completed successfully!
+  Total documents copied: 3850
+============================================================
+```
+
+### ⚠️ Advertencias
+
+- **Este script BORRA los datos existentes en la base de datos local** antes de copiar
+- No lo ejecutes si tienes cambios locales que quieras conservar
+- Solo copia datos, no copia índices ni configuraciones especiales de MongoDB
+
+Para más detalles, consulta [scripts/README.md](./scripts/README.md)
