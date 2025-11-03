@@ -5,14 +5,16 @@ from resources.logger import logger
 from fastapi import APIRouter, Depends
 from common.utils import create_error_response, serialize_song, serialize_playlist, serialize_collection
 from auth import verify_token
+from fastapi import Header
+
 
 router = APIRouter()
 
 @router.get("/")
-async def search(str_name: str, user: dict = Depends(verify_token)):
+async def search(str_name: str, user: dict = Depends(verify_token), authorization: str = Header(None)):
     logger.info(f"Buscando collections con nombre parecido a: {str_name}")
 
-    collection_ids = await collections_db.get_ids_by_name(str_name)
+    collection_ids = await collections_db.get_ids_by_name(str_name, token=authorization)
     if not collection_ids:
         return create_error_response(404, "Not Found", "No collections found")
 
