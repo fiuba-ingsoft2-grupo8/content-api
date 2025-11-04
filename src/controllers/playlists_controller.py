@@ -50,54 +50,60 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest, user: dict = 
 async def get_playlists(isPublished: bool = False, user: dict = Depends(verify_token)):
     """
     Retrieve all playlists with their songs.
-    
-    This endpoint fetches all playlists, ordered by publication date
-    (newest first) and includes all songs in each playlist with
-    their metadata.
+    Backoffice: ve todas. Usuario normal: ve solo las suyas (y/o publicadas según flag).
     """
-    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={user['user_id']})")
+    is_backoffice = user.get("user_type") == "backoffice"
+    owner_id = None if is_backoffice else user["user_id"]
+
+    logger.info(f"Fetching playlists (isPublished={isPublished}, userId={owner_id})")
     try:
-        playlists = await playlists_db.get_playlists(isPublished, user["user_id"])
+        playlists = await playlists_db.get_playlists(isPublished, owner_id)
         serialized_playlists = []
         for playlist in playlists:
             songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
             serialized_playlists.append(serialize_playlist(playlist, songs))
         return {"data": serialized_playlists}
-
     except Exception as e:
         logger.error(f"Failed to fetch published playlists: {str(e)}")
         raise
 
 
+
 @router.get("/{id}")
 async def get_playlist(id: str, user: dict = Depends(verify_token)):
     """
-    Retrieve a specific playlist by its ID with all songs.
-    
-    This endpoint fetches a single playlist from the database using its unique ID,
-    including all songs in the playlist with their metadata. Unlike the get all
-    playlists endpoint, this returns the playlist regardless of its publication status.
+    Devuelve una playlist por ID con sus canciones.
+    - Si está publicada: cualquiera con token la puede ver.
+    - Si NO está publicada: sólo owner o backoffice.
     """
     logger.info(f"Fetching playlist with id={id}")
     try:
-        playlist = await playlists_db.get_playlist(id, user["user_id"])
-
+        # 1) Traer sin filtrar por usuario (necesitamos ver si está publicada)
+        playlist = await playlists_db.get_playlist(id, userId=None)
         if playlist is None:
             logger.warning(f"Playlist with id={id} not found")
             return JSONResponse(
                 status_code=404,
                 content=create_error_response(
-                    404,
-                    "Not Found",
-                    f"Playlist with id {id} not found",
-                    f"/playlists/{id}",
+                    404, "Not Found", f"Playlist with id {id} not found", f"/playlists/{id}"
                 ),
             )
 
+        # 2) Si no está publicada, exigir autorización (owner o backoffice)
+        if not playlist.get("is_published", False) and not is_authorized(user, playlist["userId"]):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403, "Forbidden", "You are not authorized to view this playlist", f"/playlists/{id}"
+                ),
+            )
+
+        # 3) Armar respuesta
         songs = await playlists_db.get_songs_from_playlist(id)
         serialized_playlist = serialize_playlist(playlist, songs)
-        logger.info(f"Successfully retrieved playlist {id} with {len(playlist['songs'])} songs")
+        logger.info(f"Successfully retrieved playlist {id} with {len(playlist.get('songs', []))} songs")
         return {"data": serialized_playlist}
+
     except Exception as e:
         logger.error(f"Failed to fetch playlist with id={id}: {str(e)}")
         raise
