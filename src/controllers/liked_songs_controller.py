@@ -78,7 +78,7 @@ async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
             if error:
                 logger.warning(f"Failed to record like metric for song {song_id}: {error}")
 
-        updated_playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+        updated_playlist = await playlists_db.get_playlist(playlist_id, user)
         songs = await playlists_db.get_songs_from_playlist(playlist_id)
         return {"data": serialize_playlist(updated_playlist, songs)}
 
@@ -136,7 +136,7 @@ async def remove_from_liked_songs(song_id: str, user: dict = Depends(verify_toke
             if error:
                 logger.warning(f"Failed to remove like metric for song {song_id}: {error}")
 
-        updated_playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+        updated_playlist = await playlists_db.get_playlist(playlist_id, user)
         songs = await playlists_db.get_songs_from_playlist(playlist_id)
         return {"data": serialize_playlist(updated_playlist, songs)}
 

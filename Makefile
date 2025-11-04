@@ -30,3 +30,9 @@ test:
 test3:
 	python3 -m pytest --cov=src --cov-report=xml tests/ -v
 .PHONY: test3
+
+copy:
+	@echo "📦 Copying database from remote to local..."
+	@echo "⚠️  Make sure your local MongoDB is running first!"
+	@python scripts/copy_db.py
+.PHONY: copy
