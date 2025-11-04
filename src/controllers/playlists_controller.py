@@ -75,21 +75,24 @@ async def get_playlist(id: str, user: dict = Depends(verify_token)):
     Retrieve a specific playlist by its ID with all songs.
     
     This endpoint fetches a single playlist from the database using its unique ID,
-    including all songs in the playlist with their metadata. Unlike the get all
-    playlists endpoint, this returns the playlist regardless of its publication status.
+    including all songs in the playlist with their metadata. 
+    
+    Access rules:
+    - Published playlists: accessible by anyone
+    - Unpublished playlists: only accessible by owner or backoffice users
     """
-    logger.info(f"Fetching playlist with id={id}")
+    logger.info(f"Fetching playlist with id={id}, user={user.get('user_id')}, user_type={user.get('user_type')}")
     try:
-        playlist = await playlists_db.get_playlist(id, user["user_id"])
+        playlist = await playlists_db.get_playlist(id, user)
 
         if playlist is None:
-            logger.warning(f"Playlist with id={id} not found")
+            logger.warning(f"Playlist with id={id} not found or access denied")
             return JSONResponse(
                 status_code=404,
                 content=create_error_response(
                     404,
                     "Not Found",
-                    f"Playlist with id {id} not found",
+                    f"Playlist with id {id} not found or you don't have access",
                     f"/playlists/{id}",
                 ),
             )
@@ -116,7 +119,7 @@ async def delete_playlist(playlist_id: str, user: dict = Depends(verify_token)):
     """
     logger.info(f"Deleting playlist with id={playlist_id}")
 
-    playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+    playlist = await playlists_db.get_playlist(playlist_id, user)
     if playlist is None:
         logger.warning(f"Playlist with id={playlist_id} not found for deletion")
         return JSONResponse(
@@ -159,7 +162,7 @@ async def add_song_to_playlist(playlist_id: str, song_id: str, user: dict = Depe
 
     logger.info(f"Adding song {song_id} to playlist {playlist_id}")
     try:
-        playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+        playlist = await playlists_db.get_playlist(playlist_id, user)
         if not playlist:
             return JSONResponse(
                 status_code=404,
@@ -204,7 +207,7 @@ async def add_song_to_playlist(playlist_id: str, song_id: str, user: dict = Depe
                 ),
             )
 
-        updated_playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+        updated_playlist = await playlists_db.get_playlist(playlist_id, user)
         songs = await playlists_db.get_songs_from_playlist(playlist_id)
         return {"data": serialize_playlist(updated_playlist, songs)}
 
@@ -229,7 +232,7 @@ async def remove_song_from_playlist(playlist_id: str, song_id: str, user: dict =
 
     logger.info(f"Removing song {song_id} from playlist {playlist_id}")
     try:
-        playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+        playlist = await playlists_db.get_playlist(playlist_id, user)
         if not playlist:
             return JSONResponse(
                 status_code=404,
@@ -274,7 +277,7 @@ async def remove_song_from_playlist(playlist_id: str, song_id: str, user: dict =
                 ),
             )
 
-        updated_playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+        updated_playlist = await playlists_db.get_playlist(playlist_id, user)
         songs = await playlists_db.get_songs_from_playlist(playlist_id)
         return {"data": serialize_playlist(updated_playlist, songs)}
 
@@ -301,7 +304,7 @@ async def publish_playlist(playlist_id: str, user: dict = Depends(verify_token))
     """
 
     logger.info(f"Publishing playlist with id {playlist_id}")
-    playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+    playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
         return JSONResponse(
             status_code=404,
@@ -352,7 +355,7 @@ async def private_playlist(playlist_id: str, user: dict = Depends(verify_token))
     """
 
     logger.info(f"Making playlist with id {playlist_id} private")
-    playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+    playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
         return JSONResponse(
             status_code=404,
@@ -401,7 +404,7 @@ async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), 
     """
 
 
-    playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+    playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
         return JSONResponse(
             status_code=404,
