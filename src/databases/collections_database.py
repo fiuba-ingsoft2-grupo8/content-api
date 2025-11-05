@@ -143,30 +143,63 @@ async def get_songs_from_collection(collection_id: str, include_unreleased=True)
         for ps in collection_songs
         if ps["song_id"] in song_map
     ]
-
-async def get_collections(type: str = None, artistId: str = None, includeUnpublished: bool = False):
+async def get_collections(
+    type: str = None,
+    artistId: str = None,
+    includeUnpublished: bool = False,
+    # nuevos filtros
+    state: str = "",
+    published_from=None,
+    published_to=None,
+):
+    """
+    Filtros:
+    - state: "publicado" (releaseDate <= now) / "programado" (releaseDate > now)
+    - published_from / published_to: rango sobre releaseDate
+    """
     db = get_db()
-
     try:
         query = {}
         if type:
             query["type"] = type
         if artistId:
             query["artistId"] = artistId
-        
-        # Filter by release date unless includeUnpublished is True
+
+        st = (state or "").strip().lower()
+        now = datetime.now(timezone.utc)
+
         if not includeUnpublished:
-            query["releaseDate"] = {"$lte": datetime.now(timezone.utc)}
+            # comportamiento público: sólo publicadas
+            query["releaseDate"] = {"$lte": now}
+        else:
+            # backoffice/owner: se puede filtrar por estado
+            if st == "publicado":
+                query["releaseDate"] = {"$lte": now}
+            elif st == "programado":
+                query["releaseDate"] = {"$gt": now}
+
+        # rango de fechas (siempre sobre releaseDate)
+        if published_from or published_to:
+            range_q = {}
+            if published_from:
+                range_q["$gte"] = published_from
+            if published_to:
+                range_q["$lte"] = published_to
+            # combinar con lo que ya haya
+            if "releaseDate" in query and isinstance(query["releaseDate"], dict):
+                query["releaseDate"].update(range_q)
+            else:
+                query["releaseDate"] = range_q
 
         collections = list(
-            db.collections.find(query)
-            .sort([("createdAt", DESCENDING), ("name", 1)])
+            db.collections.find(query).sort([("createdAt", DESCENDING), ("name", 1)])
         )
         logger.info(f"Retrieved {len(collections)} collections from database (includeUnpublished={includeUnpublished})")
         return collections
     except Exception as e:
         logger.error(f"Failed to retrieve collections: {str(e)}")
         return []
+
     
 async def delete_songs_from_collection(collection_id: str):
     db = get_db()

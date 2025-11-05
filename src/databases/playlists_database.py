@@ -29,23 +29,39 @@ async def create_playlist(name, description, is_published, userId, coverUrl=None
         return (None, e)
     
     
-async def get_playlists(published: bool, userId: str = None):
+async def get_playlists(published: bool, userId: str = None, state: str = "", published_from=None, published_to=None):
+    """
+    Filtros:
+    - published (bool): mantener compatibilidad existente
+    - state: "publicado" / "programado" (case-insensitive)
+    - published_from/published_to: rango sobre published_at (aplica cuando is_published=True)
+    """
     db = get_db()
-
-    missing_userid = list(db.playlists.find({"userId": {"$exists": False}}))
-    print("Playlists missing userId:", missing_userid)
-
-    db.playlists.update_many(
-        {"userId": {"$exists": False}},
-        {"$set": {"userId": "unknown"}}
-    )
 
     try:
         query = {}
+        # compatibilidad: si viene published=True, forzamos is_published=True
         if published:
             query["is_published"] = True
+
+        # por user (cuando no es backoffice)
         if userId:
             query["userId"] = userId
+
+        st = (state or "").strip().lower()
+        if st == "publicado":
+            query["is_published"] = True
+        elif st == "programado":
+            query["is_published"] = False
+
+        # Rango de fechas sobre published_at sólo si filtramos publicados
+        if query.get("is_published") is True and (published_from or published_to):
+            range_q = {}
+            if published_from:
+                range_q["$gte"] = published_from
+            if published_to:
+                range_q["$lte"] = published_to
+            query["published_at"] = range_q
 
         playlists = list(
             db.playlists.find(query)
@@ -58,29 +74,35 @@ async def get_playlists(published: bool, userId: str = None):
         return []
 
 
-async def get_playlist(id, userId: str = None):
+async def get_playlist(id, user=None):
     db = get_db()
-    print(f"\nid: {id}\n")
     try:
         playlist = db.playlists.find_one({"_id": ObjectId(id)})
         if playlist is None:
             logger.warning(f"Playlist with id={id} not found")
             return None
 
-        if not playlist.get("isPublished", False):
-            if userId is None or str(playlist.get("userId")) != str(userId):
-                logger.warning(f"Access denied to private playlist id={id} for user={userId}")
-                return None
-                
-        logger.info(f"Successfully retrieved playlist '{playlist['name']}'")
-        return playlist
+        # Si está publicada, devolverla
+        if bool(playlist.get("is_published", False)):
+            logger.info(f"Successfully retrieved playlist '{playlist['name']}' (published)")
+            return playlist
+
+        # Es privada: sólo backoffice o dueño
+        if isinstance(user, dict):
+            if user.get("user_type") == "backoffice":
+                logger.info(f"Backoffice access to private playlist id={id}")
+                return playlist
+            if str(playlist.get("userId")) == str(user.get("user_id")):
+                logger.info(f"Owner access to private playlist id={id}")
+                return playlist
+
+        logger.warning(f"Access denied to private playlist id={id} for user={user}")
+        return None
     except Exception as e:
         logger.error(f"Failed to get playlist with id={id}: {str(e)}")
         return None
 
-
 async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
-    print(f"\nid in add song to playlist: {playlist_id}\n")
     db = get_db()
     song_oid = ObjectId(song_id)
     playlist_oid = ObjectId(playlist_id)
@@ -93,14 +115,13 @@ async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
 
 async def remove_song_from_playlist(song_id: str, playlist_id: str) -> bool:
     db = get_db()
-
     song_oid = ObjectId(song_id)
     playlist_oid = ObjectId(playlist_id)
 
     result = db.playlist_songs.delete_one({
-            "song_id": song_oid,
-            "playlist_id": playlist_oid
-        })
+        "song_id": song_oid,
+        "playlist_id": playlist_oid
+    })
 
     if result.deleted_count > 0:
         logger.info(f"Removed song {song_id} from playlist {playlist_id}")
@@ -112,7 +133,6 @@ async def remove_song_from_playlist(song_id: str, playlist_id: str) -> bool:
 
 async def get_songs_from_playlist(playlist_id: str):
     db = get_db()
-
     playlist_songs = list(db.playlist_songs.find(
         {"playlist_id": ObjectId(playlist_id)},
         {"song_id": 1, "added_at": 1} 
@@ -168,9 +188,9 @@ async def update_playlist_cover(existing_playlist: str, cover_url: str):
 async def playlist_belongs_to_user(playlist_id, userId):
     db = get_db()
     try:
-        found_playlist = db.playlists.find({"_id": playlist_id, "userId": userId})
-        return True if found_playlist else False
-    except Exception as e:
+        found = db.playlists.find_one({"_id": ObjectId(playlist_id), "userId": userId})
+        return bool(found)
+    except Exception:
         return False
 
 
@@ -186,3 +206,14 @@ async def get_liked_songs_playlist(userId):
     except Exception as e:
         logger.error(f"Failed to get liked songs for user{userId}: {str(e)}")
         return None
+
+
+async def update_playlist_description(playlist_id: str, description: str) -> bool:
+    db = get_db()
+    try:
+        oid = ObjectId(playlist_id) if isinstance(playlist_id, str) else playlist_id
+        res = db.playlists.update_one({"_id": oid}, {"$set": {"description": description}})
+        return res.modified_count > 0
+    except Exception as e:
+        logger.error(f"Failed to update description for playlist {playlist_id}: {e}")
+        return False

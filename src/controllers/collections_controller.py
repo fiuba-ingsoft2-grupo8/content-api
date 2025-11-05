@@ -11,6 +11,17 @@ from fastapi import UploadFile, File, Form
 
 router = APIRouter()
 
+def _parse_iso(dt: str | None):
+    if not dt:
+        return None
+    try:
+        if len(dt) == 10:
+            return datetime.fromisoformat(dt).replace(tzinfo=timezone.utc)
+        d = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
 @router.post("/{collection_id}/upload-cover", status_code=201)
 async def upload_collection_cover(collection_id: str, file: UploadFile = File(...), user: dict = Depends(verify_token)):
     try:
@@ -271,10 +282,33 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         raise
 
 @router.get("/", status_code=200)
-async def get_collections(type: str = None, artistId: str = None, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
-    logger.info(f"Fetching collections (type={type}, artistId={artistId}, includeUnpublished={includeUnpublished})")
+async def get_collections(
+    type: str = None,
+    artistId: str = None,
+    includeUnpublished: bool = False,
+    # nuevos filtros catálogo:
+    state: str | None = None,          # "Publicado" | "Programado"
+    publishedFrom: str | None = None,  # ISO date/datetime -> sobre releaseDate
+    publishedTo: str | None = None,    # ISO date/datetime
+    user: dict = Depends(verify_token),
+):
+    st = (state or "").strip().lower()
+    if st not in ("", "publicado", "programado"):
+        st = ""
+
+    dt_from = _parse_iso(publishedFrom)
+    dt_to = _parse_iso(publishedTo)
+
+    logger.info(f"Fetching collections (type={type}, artistId={artistId}, includeUnpublished={includeUnpublished}, state={st}, from={dt_from}, to={dt_to})")
     try:
-        collections = await collections_db.get_collections(type=type, artistId=artistId, includeUnpublished=includeUnpublished)
+        collections = await collections_db.get_collections(
+            type=type,
+            artistId=artistId,
+            includeUnpublished=includeUnpublished,
+            state=st,
+            published_from=dt_from,
+            published_to=dt_to,
+        )
         serialized_collections = []
         for collection in collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
