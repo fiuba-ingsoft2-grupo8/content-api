@@ -31,6 +31,22 @@ def client(mock_db):
         # Also patch in the database modules that import get_db
         with patch("databases.songs_database.get_db", side_effect=_get_test_db), \
              patch("databases.playlists_database.get_db", side_effect=_get_test_db), \
-             patch("databases.history_database.get_db", side_effect=_get_test_db):
+             patch("databases.history_database.get_db", side_effect=_get_test_db), \
+             patch("databases.collections_database.get_db", side_effect=_get_test_db), \
+             patch("databases.metrics_database.get_db", side_effect=_get_test_db), \
+             patch("databases.about_database.get_db", side_effect=_get_test_db), \
+             patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db):
             with TestClient(app) as test_client:
                 yield test_client
+
+
+@pytest.fixture
+def sample_song_data():
+    """Fixture providing sample song data for tests."""
+    return {"title": "Test Song", "duration": "60"}
+
+
+@pytest.fixture  
+def sample_playlist_data():
+    """Fixture providing sample playlist data for tests."""
+    return {"name": "Test Playlist", "description": "A test playlist", "userId": "uu8432"}

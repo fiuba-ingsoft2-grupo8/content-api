@@ -57,6 +57,40 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
         isLikedSongs=isLikedSongs
     )
 
-def serialize_song(song):
+def serialize_song(song, is_liked=None):
     song["_id"] = str(song["_id"])
+    if is_liked is not None:
+        song["isLiked"] = is_liked
     return song
+
+def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
+
+    return schemas.Collection(
+        id=str(collection["_id"]),
+        name=collection["name"],
+        artistId=collection["artistId"],
+        artistName=collection["artistName"],
+        type=collection["type"],
+        genre=collection.get("genre", "Unknown"),
+        coverUrl=collection["coverUrl"],
+        createdAt=collection["createdAt"],
+        releaseDate=collection.get("releaseDate"),
+        credits=collection.get("credits", []),
+        # Popularity metrics (optional, only in popular collections)
+        totalPlays=collection.get("totalPlays"),
+        totalLikes=collection.get("totalLikes"),
+        totalPlaylistSaves=collection.get("totalPlaylistSaves"),
+        totalShares=collection.get("totalShares"),
+        popularityScore=collection.get("popularityScore"),
+        songs=[
+            schemas.CollectionSong(
+                id=str(song["_id"]),
+                title=song["title"],
+                artist=song["artist"],
+                duration=song.get("duration", "0"),
+                order=song['order'],
+                earlyReleaseDate=song.get('early_release_date'),
+            )
+            for song in songs
+        ]
+    )

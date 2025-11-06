@@ -2,7 +2,13 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from fastapi import UploadFile, File
+from enum import Enum
 
+
+class CollectionType(str, Enum):
+    ALBUM = "album"
+    SINGLE = "single"
+    EP = "ep"
 
 class SongBase(BaseModel):
     """
@@ -16,15 +22,15 @@ class SongBase(BaseModel):
     duration: str
 
 
-class CreateSongRequest(SongBase):
+class CreateSongRequest(BaseModel):
     """
     Request schema for creating a new song.
     
-    Inherits title and artist from SongBase. Used for POST /songs endpoint
-    to validate incoming song creation requests.
+    Artist is derived from the user's stage_name in the authentication token,
+    so it's not included in the request body.
     """
-    pass
-
+    title: str
+    duration: str
 
 class UpdateSongRequest(SongBase):
     """
@@ -44,6 +50,7 @@ class Song(SongBase):
     when returning song data from the database.
     """
     _id: str
+    isLiked: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -172,3 +179,221 @@ class SongOrder(BaseModel):
 
 class ReorderRequest(BaseModel):
     songs: list[SongOrder]
+class CollectionSong(SongBase):
+    id: str
+    order: int
+    earlyReleaseDate: Optional[datetime] = None  # Fecha de lanzamiento anticipado
+    
+    class Config:
+        from_attributes = True
+
+class CollectionBase(BaseModel):
+    """
+    Base Pydantic model for playlist data with common fields.
+    
+    This base class contains the core attributes that all collecttion-related
+    schemas share, promoting code reuse and consistency.
+    """
+    id: str
+    name: str
+    artistId: str
+    artistName: str
+    type: CollectionType
+    genre: str
+    coverUrl: str
+    createdAt: datetime
+    releaseDate: Optional[datetime] = None
+    credits: Optional[List[str]] = None
+
+class Collection(CollectionBase):
+    """
+    Complete playlist representation with all metadata and songs.
+    
+    Extends PlaylistBase with database ID, publication status, timestamps,
+    and the list of songs in the playlist. Used for API responses when
+    returning complete playlist data.
+    """
+    songs: List[CollectionSong] = []
+    # Optional popularity metrics (only present in popular collections endpoint)
+    totalPlays: Optional[int] = None
+    totalLikes: Optional[int] = None
+    totalPlaylistSaves: Optional[int] = None
+    totalShares: Optional[int] = None
+    popularityScore: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+class SongWithEarlyRelease(BaseModel):
+    """Song ID with optional early release date for collections."""
+    songId: str
+    earlyReleaseDate: Optional[datetime] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "songId": "507f1f77bcf86cd799439011",
+                "earlyReleaseDate": "2025-11-15T00:00:00Z"
+            }
+        }
+
+class CreateCollectionRequest(BaseModel):
+    name: str
+    type: CollectionType
+    genre: str
+    songs: List[SongWithEarlyRelease] = []  # List of songs with optional early release dates
+    releaseDate: Optional[datetime] = None
+    credits: Optional[List[str]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Clics Modernos",
+                "type": "album",
+                "genre": "Rock",
+                "songs": [
+                    {
+                        "songId": "507f1f77bcf86cd799439011",
+                        "earlyReleaseDate": "2025-11-15T00:00:00Z"
+                    },
+                    {
+                        "songId": "507f1f77bcf86cd799439012"
+                    },
+                    {
+                        "songId": "507f1f77bcf86cd799439013"
+                    }
+                ],
+                "releaseDate": "2025-12-01T00:00:00Z",
+                "credits": ["Charly García", "Pedro Aznar"]
+            }
+        }
+
+class UpdateCollectionRequest(BaseModel):
+    name: Optional[str] = None
+    type: Optional[CollectionType] = None
+    genre: Optional[str] = None
+    coverUrl: Optional[str] = None
+    songs: Optional[List[SongWithEarlyRelease]] = None
+    credits: Optional[List[str]] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Clics Modernos (Edición Especial)",
+                "genre": "Rock Argentino",
+                "songs": [
+                    {
+                        "songId": "507f1f77bcf86cd799439011"
+                    },
+                    {
+                        "songId": "507f1f77bcf86cd799439012",
+                        "earlyReleaseDate": "2025-11-20T00:00:00Z"
+                    }
+                ],
+                "credits": ["Charly García", "Pedro Aznar", "Willy Iturri"]
+            }
+        }
+
+# Metrics schemas
+class SongMetrics(BaseModel):
+    """Metrics for a single song."""
+    songId: str
+    plays: int
+    likes: int
+    shares: int
+
+class CollectionMetrics(BaseModel):
+    """
+    Metrics for a collection (album/EP/single).
+    Note: likes = sum of likes from all songs in the collection.
+    """
+    collectionId: str
+    totalPlays: int
+    likes: int  # Sum of likes from all songs
+    shares: int
+
+class PeriodMetrics(BaseModel):
+    """Metrics for a specific period with comparison to previous period."""
+    value: int
+    delta: int
+    percentChange: float
+
+class ArtistMetrics(BaseModel):
+    """Overall metrics for an artist."""
+    artistId: str
+    monthlyListeners: PeriodMetrics
+    plays: PeriodMetrics
+    saves: PeriodMetrics
+    shares: PeriodMetrics
+
+class LikeRequest(BaseModel):
+    """Request to like/unlike a song or collection."""
+    targetId: str
+    targetType: str  # 'song' or 'collection'
+
+class ShareRequest(BaseModel):
+    """Request to record a share."""
+    targetId: str
+    targetType: str  # 'song' or 'collection'
+
+# Artist About schemas
+class SocialMedia(BaseModel):
+    """Social media links for an artist."""
+    x: Optional[str] = None  # Twitter/X username or URL
+    instagram: Optional[str] = None  # Instagram username or URL
+
+class CarouselImage(BaseModel):
+    """Image in artist carousel."""
+    id: str  # Unique identifier for the image
+    url: str
+    isPrimary: bool = False  # Only one can be primary
+
+class ArtistPick(BaseModel):
+    """Artist's featured collection or playlist."""
+    type: str  # 'collection' or 'playlist'
+    id: str
+
+class ArtistAbout(BaseModel):
+    """Artist about page information."""
+    artistId: str
+    artist: str
+    bio: Optional[str] = None
+    socialMedia: Optional[SocialMedia] = None
+    carouselImages: List[CarouselImage] = []  # Max 5 images
+    artistPick: Optional[ArtistPick] = None
+    
+    class Config:
+        from_attributes = True
+
+class UpdateArtistAboutRequest(BaseModel):
+    """Request to update artist about page (cannot edit artistId or artist)."""
+    bio: Optional[str] = None
+    socialMedia: Optional[SocialMedia] = None
+    carouselImages: Optional[List[CarouselImage]] = None
+    artistPick: Optional[ArtistPick] = None
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "bio": "Músico argentino, pionero del rock nacional.",
+                "socialMedia": {
+                    "x": "@charlygarcia",
+                    "instagram": "@charlygarcia_oficial"
+                },
+                "carouselImages": [
+                    {
+                        "url": "https://example.com/image1.jpg",
+                        "isPrimary": True
+                    },
+                    {
+                        "url": "https://example.com/image2.jpg",
+                        "isPrimary": False
+                    }
+                ],
+                "artistPick": {
+                    "type": "collection",
+                    "id": "507f1f77bcf86cd799439011"
+                }
+            }
+        }
+

@@ -1,5 +1,6 @@
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
+import databases.metrics_database as metrics_db
 import schemas
 from fastapi import Body, Depends
 from fastapi.responses import JSONResponse
@@ -45,7 +46,7 @@ async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
         )
     playlist_id = str(liked_songs_playlist["_id"])    
 
-    logger.info(f"Adding song {song_id} to playlist {playlist_id}")
+    logger.info(f"Adding song {song_id} to liked songs and recording like metric")
     try:
         song = await songs_db.get_song(song_id)
         if not song:
@@ -58,7 +59,7 @@ async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
                 ),
             )
 
-        print(f"\n1. passing id: {playlist_id}\n")
+        # Add to liked songs playlist
         added = await playlists_db.add_song_to_playlist(song_id, playlist_id)
         if not added:
             return JSONResponse(
@@ -70,15 +71,19 @@ async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
                 ),
             )
 
-        print(f"\n2. passing id: {playlist_id}\n")
-        updated_playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
-        print("aaa1")
+        # Also record the like in metrics (only if not already liked)
+        is_already_liked = await metrics_db.is_liked_by_user(user["user_id"], song_id, "song")
+        if not is_already_liked:
+            _, error = await metrics_db.toggle_like(user["user_id"], song_id, "song")
+            if error:
+                logger.warning(f"Failed to record like metric for song {song_id}: {error}")
+
+        updated_playlist = await playlists_db.get_playlist(playlist_id, user)
         songs = await playlists_db.get_songs_from_playlist(playlist_id)
-        print("aaa2")
         return {"data": serialize_playlist(updated_playlist, songs)}
 
     except Exception as e:
-        logger.error(f"Failed to add song {song_id} to playlist {playlist_id}: {str(e)}")
+        logger.error(f"Failed to add song {song_id} to liked songs: {str(e)}")
         return JSONResponse(
             status_code=400,
             content=create_error_response(400, "Bad Request", str(e), f"/likedSongs/{user['user_id']}/songs"),
@@ -100,7 +105,7 @@ async def remove_from_liked_songs(song_id: str, user: dict = Depends(verify_toke
         )
     playlist_id = str(liked_songs_playlist["_id"])
 
-    logger.info(f"Removing song {song_id} from playlist {playlist_id}")
+    logger.info(f"Removing song {song_id} from liked songs and removing like metric")
     try:
         song = await songs_db.get_song(song_id)
         if not song:
@@ -124,12 +129,19 @@ async def remove_from_liked_songs(song_id: str, user: dict = Depends(verify_toke
                 ),
             )
 
-        updated_playlist = await playlists_db.get_playlist(playlist_id, user["user_id"])
+        # Also remove the like from metrics (only if currently liked)
+        is_liked = await metrics_db.is_liked_by_user(user["user_id"], song_id, "song")
+        if is_liked:
+            _, error = await metrics_db.toggle_like(user["user_id"], song_id, "song")
+            if error:
+                logger.warning(f"Failed to remove like metric for song {song_id}: {error}")
+
+        updated_playlist = await playlists_db.get_playlist(playlist_id, user)
         songs = await playlists_db.get_songs_from_playlist(playlist_id)
         return {"data": serialize_playlist(updated_playlist, songs)}
 
     except Exception as e:
-        logger.error(f"Failed to remove song {song_id} from playlist {playlist_id}: {str(e)}")
+        logger.error(f"Failed to remove song {song_id} from liked songs: {str(e)}")
         return JSONResponse(
             status_code=400,
             content=create_error_response(

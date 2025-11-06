@@ -12,7 +12,8 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongodb_data:/data/db
+      - ./mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
       - melodia-network
     healthcheck:
@@ -34,6 +35,7 @@ services:
       SUPABASE_BUCKET: ${SUPABASE_BUCKET}
       SUPABASE_URL: ${SUPABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
+      USER_API_BASE: "http://host.docker.internal:8081"
     ports:
       - "8080:8080"
     depends_on:

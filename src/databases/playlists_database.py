@@ -58,7 +58,19 @@ async def get_playlists(published: bool, userId: str = None):
         return []
 
 
-async def get_playlist(id, userId: str = None):
+async def get_playlist(id, user: dict = None):
+    """
+    Get a playlist by ID.
+    
+    Args:
+        id: Playlist ID
+        user: User object with user_id and user_type
+    
+    Returns:
+        Playlist if found and user has access, None otherwise
+    """
+    from auth import is_authorized
+    
     db = get_db()
     print(f"\nid: {id}\n")
     try:
@@ -67,9 +79,16 @@ async def get_playlist(id, userId: str = None):
             logger.warning(f"Playlist with id={id} not found")
             return None
 
+        # If playlist is not published, check authorization
         if not playlist.get("isPublished", False):
-            if userId is None or str(playlist.get("userId")) != str(userId):
-                logger.warning(f"Access denied to private playlist id={id} for user={userId}")
+            # If no user provided, deny access
+            if user is None:
+                logger.warning(f"Access denied to private playlist id={id} - no user provided")
+                return None
+            
+            # Check if user is authorized (owner or backoffice)
+            if not is_authorized(user, str(playlist.get("userId"))):
+                logger.warning(f"Access denied to private playlist id={id} for user={user.get('user_id')}")
                 return None
                 
         logger.info(f"Successfully retrieved playlist '{playlist['name']}'")

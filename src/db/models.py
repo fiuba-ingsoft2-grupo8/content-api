@@ -73,3 +73,54 @@ class PlaylistSong(BaseModel):
     added_at: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class CollectionSong(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    collection_id: ObjectIdStr
+    song_id: ObjectIdStr
+    order: int
+    early_release_date: datetime | None = None  # Fecha de lanzamiento anticipado (None = no anticipado)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Like(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    target_id: ObjectIdStr  # Can be song_id or collection_id
+    target_type: str  # 'song' or 'collection'
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Share(BaseModel):
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    target_id: ObjectIdStr  # Can be song_id or collection_id
+    target_type: str  # 'song' or 'collection'
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class Play(BaseModel):
+    """
+    Permanent play metrics that are NOT deleted when users clear their history.
+    This is separate from the history table which is user-specific and can be cleared.
+    """
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    user_id: str
+    song_id: ObjectIdStr
+    played_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class ArtistAbout(BaseModel):
+    """Artist about page with bio, social media, images, and featured pick."""
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    artist_id: str  # User ID of the artist
+    artist: str  # Stage name
+    bio: str | None = None
+    social_media: dict | None = None  # {"x": "username", "instagram": "username"}
+    carousel_images: list[dict] = []  # [{"url": "...", "isPrimary": bool}], max 5
+    artist_pick: dict | None = None  # {"type": "collection/playlist", "id": "..."}
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}

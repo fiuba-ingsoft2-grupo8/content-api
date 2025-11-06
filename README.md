@@ -136,3 +136,316 @@ export DATABASE_SSLMODE=disable
 
 python src/main.py
 ```
+
+## Sistema de Métricas de Reproducción
+
+### Arquitectura de Dos Tablas
+
+El sistema utiliza dos colecciones separadas en MongoDB para gestionar reproducciones:
+
+1. **`history`** - Historial personal del usuario
+   - Contiene el historial de reproducción de cada usuario
+   - Puede ser limpiado por el usuario (DELETE /history)
+   - Usado para mostrar "Escuchado recientemente"
+
+2. **`plays`** - Métricas permanentes
+   - Almacena todas las reproducciones de forma permanente
+   - NUNCA se elimina, ni siquiera cuando el usuario limpia su historial
+   - Usado para calcular popularidad, métricas de artistas y analytics
+
+### Flujo de Reproducción
+
+Cuando un usuario reproduce una canción (POST /history):
+```
+1. Se registra en `history` (historial personal)
+2. Se registra en `plays` (métrica permanente)
+```
+
+Cuando un usuario limpia su historial (DELETE /history):
+```
+1. Se elimina de `history` ✓
+2. Se mantiene en `plays` ✓
+```
+
+### Índices Recomendados
+
+Para optimizar el rendimiento, ejecuta el script de índices:
+
+```bash
+docker exec -it mongodb mongosh userdb /docker-entrypoint-initdb.d/mongo-indexes.js
+```
+
+O manualmente:
+```bash
+docker exec -it mongodb mongosh -u admin -p admin_password --authenticationDatabase admin userdb
+```
+
+```javascript
+db.plays.createIndex({ "song_id": 1 });
+db.plays.createIndex({ "user_id": 1, "played_at": -1 });
+db.plays.createIndex({ "song_id": 1, "played_at": -1 });
+```
+
+### Migración de Datos Existentes
+
+Si tienes datos existentes en `history` que quieres preservar en `plays`:
+
+```javascript
+db.history.find().forEach(function(doc) {
+    db.plays.insert({
+        user_id: doc.userId,
+        song_id: doc.songId,
+        played_at: doc.playedAt
+    });
+});
+```
+
+Para más detalles, consulta [MIGRATION_NOTES.md](./MIGRATION_NOTES.md)
+
+## Sistema de Lanzamientos Programados
+
+### Descripción
+
+Las colecciones (álbumes, singles, EPs) ahora soportan lanzamientos programados. Esto permite a los artistas crear colecciones con una fecha de lanzamiento futura, manteniéndolas ocultas hasta que llegue esa fecha.
+
+### Características
+
+1. **Fecha de lanzamiento opcional**
+   - Al crear una colección, puedes especificar un campo `releaseDate`
+   - Si no se especifica, la colección se publica inmediatamente (fecha = ahora)
+   - Las colecciones con fecha futura no son visibles por defecto
+
+2. **Control de visibilidad**
+   - Por defecto, solo las colecciones publicadas (releaseDate ≤ ahora) son visibles
+   - Parámetro `includeUnpublished=true` permite ver colecciones no publicadas
+   - Aplica a todos los endpoints de obtención de colecciones
+
+3. **Publicación anticipada**
+   - Endpoint especial para publicar una colección inmediatamente
+   - Solo el artista propietario puede publicar su colección
+   - No se puede "despublicar" una colección ya lanzada
+
+### Endpoints Actualizados
+
+#### Crear colección con fecha de lanzamiento
+```bash
+POST /collections/
+{
+  "name": "Mi Nuevo Álbum",
+  "type": "album",
+  "songIds": ["song_id_1", "song_id_2"],
+  "releaseDate": "2025-12-31T00:00:00Z"  # Opcional
+}
+```
+
+#### Obtener colecciones (solo publicadas por defecto)
+```bash
+GET /collections/
+GET /collections/?type=album
+GET /collections/?artistId=artist_123
+GET /collections/{collection_id}
+GET /collections/popular/{artistId}
+```
+
+#### Obtener colecciones incluyendo no publicadas
+```bash
+GET /collections/?includeUnpublished=true
+GET /collections/{collection_id}?includeUnpublished=true
+GET /collections/popular/{artistId}?includeUnpublished=true
+```
+
+#### Publicar colección inmediatamente
+```bash
+POST /collections/{collection_id}/publish
+```
+
+Responde con:
+- `200 OK` - Colección publicada exitosamente
+- `400 Bad Request` - Colección ya está publicada
+- `403 Forbidden` - No eres el propietario de la colección
+- `404 Not Found` - Colección no encontrada
+
+### Casos de Uso
+
+**Artista programa un lanzamiento:**
+```bash
+# 1. Crear colección con fecha futura
+POST /collections/
+{
+  "name": "Summer Hits 2025",
+  "type": "album",
+  "songIds": [...],
+  "releaseDate": "2025-06-21T00:00:00Z"
+}
+
+# 2. Verificar que no es visible públicamente
+GET /collections/  # No aparece
+
+# 3. Verificar como artista (con includeUnpublished)
+GET /collections/?includeUnpublished=true  # Sí aparece
+
+# 4. Publicar anticipadamente si es necesario
+POST /collections/{collection_id}/publish
+```
+
+### Tests
+
+Se agregaron 12 tests completos que cubren:
+- ✅ Creación de colecciones con fecha futura
+- ✅ Creación de colecciones sin fecha (publicación inmediata)
+- ✅ Visibilidad de colecciones no publicadas
+- ✅ Filtrado con parámetro includeUnpublished
+- ✅ Publicación inmediata de colecciones
+- ✅ Validación de permisos de publicación
+- ✅ Colecciones con fechas pasadas (ya publicadas)
+- ✅ Endpoints populares con/sin includeUnpublished
+
+Ejecutar tests:
+```bash
+# Todos los tests de colecciones
+pytest tests/test_collections_controller.py -v
+
+# Solo tests de lanzamientos programados
+pytest tests/test_collections_controller.py -k "release_date or unpublished or publish" -v
+```
+
+## Sistema de Popularidad Mejorado
+
+### Descripción
+
+El endpoint `/collections/popular/{artistId}` ahora calcula la popularidad usando múltiples métricas en lugar de solo reproducciones:
+
+### Métricas Consideradas
+
+1. **Plays** (reproducciones) - peso: 1.0
+2. **Likes** (me gusta) - peso: 2.0
+3. **Playlist Saves** (guardado en playlists) - peso: 3.0
+4. **Shares** (compartidos) - peso: 5.0
+
+### Fórmula de Popularidad
+
+```python
+popularityScore = (
+    totalPlays * 1.0 +
+    totalLikes * 2.0 +
+    totalPlaylistSaves * 3.0 +
+    totalShares * 5.0
+)
+```
+
+Los pesos reflejan el valor relativo de cada acción:
+- **Plays**: acción pasiva, menor peso
+- **Likes**: indica interés moderado
+- **Playlist Saves**: indica alto interés (quiere volver a escuchar)
+- **Shares**: máximo valor (potencial viral, recomienda a otros)
+
+### Respuesta del Endpoint
+
+```json
+GET /collections/popular/{artistId}
+
+{
+  "data": [
+    {
+      "id": "collection_id",
+      "name": "Álbum Popular",
+      "artistId": "artist_123",
+      "artistName": "Artista",
+      "type": "album",
+      "totalPlays": 1500,
+      "totalLikes": 234,
+      "totalPlaylistSaves": 89,
+      "totalShares": 45,
+      "popularityScore": 2443.0,
+      "songs": [...]
+    }
+  ]
+}
+```
+
+### Notas Importantes
+
+- Las métricas se calculan sumando los valores de **todas las canciones** de la colección
+- Los likes son a nivel de canción, no de colección
+- Las colecciones se ordenan por `popularityScore` descendente
+- Los pesos pueden ajustarse según las necesidades del negocio
+
+## 📦 Copiar Base de Datos Remota a Local
+
+### Descripción
+
+Script de utilidad para copiar todos los datos desde la base de datos remota (MongoDB Atlas) a la base de datos local. Útil para:
+- Desarrollo con datos reales
+- Testing con datos de producción
+- Depuración de problemas
+- Sincronización de entornos
+
+### Uso
+
+```bash
+# 1. Asegurarse que la base de datos local esté corriendo
+make up-local
+
+# 2. Copiar datos desde remoto
+make copy
+```
+
+### ¿Qué hace el comando?
+
+1. ✅ Se conecta a la base de datos remota (usando `DATABASE_URL` del `.env`)
+2. ✅ Se conecta a la base de datos local (Docker)
+3. ✅ Copia todas las colecciones:
+   - songs
+   - playlists
+   - playlist_songs
+   - collections
+   - collection_songs
+   - likes
+   - shares
+   - plays
+   - history
+   - artist_about
+
+4. ⚠️ **Importante**: Elimina el contenido local de cada colección antes de copiar
+
+### Ejemplo de Salida
+
+```
+📦 Copying database from remote to local...
+⚠️  Make sure your local MongoDB is running first!
+
+============================================================
+  📦 MongoDB Database Copy Tool
+  Remote → Local
+============================================================
+
+🔌 Connecting to databases...
+✅ Connected to REMOTE database: mongodb+srv://...
+✅ Connected to LOCAL database: mongodb://admin:admin_password@localhost:27017/...
+
+📋 Starting copy process...
+
+  ✅ songs: Copied 150 documents
+  ✅ playlists: Copied 45 documents
+  ✅ playlist_songs: Copied 320 documents
+  ✅ collections: Copied 25 documents
+  ✅ collection_songs: Copied 180 documents
+  ✅ likes: Copied 500 documents
+  ✅ shares: Copied 120 documents
+  ✅ plays: Copied 2500 documents
+  ⚠️  history: No documents found (skipping)
+  ✅ artist_about: Copied 10 documents
+
+============================================================
+  ✨ Copy completed successfully!
+  Total documents copied: 3850
+============================================================
+```
+
+### ⚠️ Advertencias
+
+- **Este script BORRA los datos existentes en la base de datos local** antes de copiar
+- No lo ejecutes si tienes cambios locales que quieras conservar
+- Solo copia datos, no copia índices ni configuraciones especiales de MongoDB
+
+Para más detalles, consulta [scripts/README.md](./scripts/README.md)
