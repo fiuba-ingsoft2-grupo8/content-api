@@ -379,58 +379,6 @@ class TestPlaylistController:
         assert playlist["songs"] == []
         assert playlist["isLikedSongs"] is False
 
-<<<<<<< HEAD
-    def test_reorder_songs_in_playlist(self, client):
-        """Reorder songs within a playlist and verify new order is persisted."""
-
-        playlist = client.post("/playlists", json={
-            "name": "My Playlist",
-            "description": "Test playlist",
-            "userId": "user123"
-        }).json()["data"]
-
-        songs = []
-        for title in ["Song A", "Song B", "Song C"]:
-            song = client.post("/songs", json={"title": title, "artist": "Artist", "duration": "180"}).json()["data"]
-            songs.append(song)
-            client.post(f"/playlists/{playlist['id']}/songs/{song['_id']}")
-
-        response = client.get(f"/playlists/{playlist['id']}")
-        assert response.status_code == 200
-        data = response.json()["data"]
-        assert [s["title"] for s in data["songs"]] == ["Song A", "Song B", "Song C"]
-
-        new_order = [
-            {"songId": songs[2]["_id"], "order": 1},
-            {"songId": songs[0]["_id"], "order": 2},
-            {"songId": songs[1]["_id"], "order": 3}
-        ]
-        response = client.put(f"/playlists/{playlist['id']}/reorder", json={"songs": new_order})
-        assert response.status_code == 200
-
-        response = client.get(f"/playlists/{playlist['id']}")
-        data = response.json()["data"]
-        assert [s["title"] for s in data["songs"]] == ["Song C", "Song A", "Song B"]
-
-    def test_reorder_with_invalid_song_id(self, client):
-        """Reordering fails if song id doesn't exist in playlist."""
-        playlist = client.post("/playlists", json={
-            "name": "Another Playlist",
-            "description": "Test",
-            "userId": "user123"
-        }).json()["data"]
-
-        song = client.post("/songs", json={"title": "Song X", "artist": "Artist", "duration": "180"}).json()["data"]
-        client.post(f"/playlists/{playlist['id']}/songs/{song['_id']}")
-
-        response = client.put(f"/playlists/{playlist['id']}/reorder", json={
-            "songs": [{"songId": "invalidid123", "order": 1}]
-        })
-
-        assert response.status_code == 400
-        data = response.json()
-=======
-
 class TestPlaylistEndpoints:
     """Test suite for playlist-related API endpoints (from test_main.py)."""
 
@@ -649,5 +597,54 @@ class TestPlaylistEndpoints:
 
         check_again = client.get(f"/playlists/{playlist['id']}")
         assert check_again.status_code == 404
->>>>>>> develop
+
+    def test_reorder_songs_in_playlist(self, client):
+        """Reorder songs within a playlist and verify new order is persisted."""
+
+        playlist = client.post("/playlists", json={
+            "name": "My Playlist",
+            "description": "Test playlist",
+            "userId": "user123"
+        }).json()["data"]
+
+        songs = []
+        for title in ["Song A", "Song B", "Song C"]:
+            song = client.post("/songs", json={"title": title, "artist": "Artist", "duration": "180"}).json()["data"]
+            songs.append(song)
+            client.post(f"/playlists/{playlist['id']}/songs/{song['_id']}")
+
+        response = client.get(f"/playlists/{playlist['id']}")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert [s["title"] for s in data["songs"]] == ["Song A", "Song B", "Song C"]
+
+        new_order = [
+            {"songId": songs[2]["_id"], "order": 1},
+            {"songId": songs[0]["_id"], "order": 2},
+            {"songId": songs[1]["_id"], "order": 3}
+        ]
+        response = client.put(f"/playlists/{playlist['id']}/reorder", json={"songs": new_order})
+        assert response.status_code == 200
+
+        response = client.get(f"/playlists/{playlist['id']}")
+        data = response.json()["data"]
+        assert [s["title"] for s in data["songs"]] == ["Song C", "Song A", "Song B"]
+
+    def test_reorder_with_invalid_song_id(self, client):
+        """Reordering fails if song id doesn't exist in playlist."""
+        playlist = client.post("/playlists", json={
+            "name": "Another Playlist",
+            "description": "Test",
+            "userId": "user123"
+        }).json()["data"]
+
+        song = client.post("/songs", json={"title": "Song X", "artist": "Artist", "duration": "180"}).json()["data"]
+        client.post(f"/playlists/{playlist['id']}/songs/{song['_id']}")
+
+        response = client.put(f"/playlists/{playlist['id']}/reorder", json={
+            "songs": [{"songId": "invalidid123", "order": 1}]
+        })
+
+        assert response.status_code == 400
+        data = response.json()
 

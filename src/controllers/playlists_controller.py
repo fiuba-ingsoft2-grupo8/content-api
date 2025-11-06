@@ -467,19 +467,6 @@ async def reorder_playlist(playlist_id: str, request: schemas.ReorderRequest, us
     Reorder songs in a playlist.
     """
 
-    belongs_to_user = await playlists_db.playlist_belongs_to_user(playlist_id, user["user_id"])
-    if not belongs_to_user:
-        logger.warning(f"Playlist does not belong to user, cannot reorder songs")
-        return JSONResponse(
-            status_code=401,
-            content=create_error_response(
-                401,
-                "Authentication Error",
-                "Playlist does not belong to user",
-                f"/playlists/{playlist_id}/reorder",
-            ),
-        )
-
     try:
         logger.info(f"Reordering playlist {playlist_id}")
         success = await playlists_db.reorder_songs_in_playlist(playlist_id, request.songs)
