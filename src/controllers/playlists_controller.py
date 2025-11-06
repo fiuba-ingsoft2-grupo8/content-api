@@ -459,3 +459,35 @@ async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), 
                 f"/playlists/{playlist_id}/upload-cover"
             ),
         )
+
+
+@router.put("/{playlist_id}/reorder")
+async def reorder_playlist(playlist_id: str, request: schemas.ReorderRequest, user: dict = Depends(verify_token)):
+    """
+    Reorder songs in a playlist.
+    """
+
+    try:
+        logger.info(f"Reordering playlist {playlist_id}")
+        success = await playlists_db.reorder_songs_in_playlist(playlist_id, request.songs)
+        if not success:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    "Failed to reorder playlist",
+                    f"/playlists/{playlist_id}/reorder"
+                )
+            )
+        logger.info(f"Successfully reordered playlist {playlist_id}")
+        return {"message": "Playlist order updated successfully"}
+
+    except Exception as e:
+        logger.error(f"Error reordering playlist {playlist_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500, "Internal Server Error", str(e), f"/playlists/{playlist_id}/reorder"
+            ),
+        )
+
