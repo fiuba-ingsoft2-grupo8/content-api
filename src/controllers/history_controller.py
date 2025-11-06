@@ -1,22 +1,48 @@
+from typing import Optional
+from databases.collections_database import USER_API_BASE
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import databases.history_database as history_db
 import databases.metrics_database as metrics_db
 import schemas
-from fastapi import Body, Depends
+from fastapi import Body, Depends, Header
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
 from common.utils import create_error_response, serialize_playlist
 from auth import verify_token
+import httpx
 
 router = APIRouter()
 
-@router.post("/")
-async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = Depends(verify_token)):
-    logger.info(f"Adding song with id {request.songId} to user {user['user_id']}'s listening history")
+async def fetch_user_history_preference(token: Optional[str] = None) -> bool:
+    """
+    Llama al endpoint público GET /users/history_preference y devuelve { "isPaused": bool }
+    Ajustá el path si en tu API quedó distinto.
+    """
+    url = f"{USER_API_BASE}/users/history_preference"
+    headers = {}
+    if token:
+        headers["Authorization"] = token
 
-    # to do: agregar validacion del estado del historial (pausado o no)
+    timeout = httpx.Timeout(20.0, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        logger.info(f"Calling: {USER_API_BASE.rstrip('/')}/users/history_preference")
+        resp = await client.get(url, headers=headers) # user_id se puede obtener del header Authorization
+        resp.raise_for_status()
+        data = resp.json()
+        # Asumiendo que la respuesta es {"isPaused": bool}
+        isPaused = data.get("isPaused")
+        return isPaused or False
+
+@router.post("/")
+async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = Depends(verify_token), authorization: str = Header(None)):
+    logger.info(f"Adding song with id {request.songId} to user {user['user_id']}'s listening history")
+    # Descomentar la linea de abajo cuando este el endpoint "history_preference en user api" y comentar la linea "paused = False"
+    # paused = await fetch_user_history_preference(authorization)
+    paused = False 
+    if paused:
+        return JSONResponse(status_code=201, content={"message": "History is paused"})
 
     song = await songs_db.get_song(request.songId)
     if not song:
