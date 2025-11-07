@@ -179,6 +179,10 @@ class SongOrder(BaseModel):
 
 class ReorderRequest(BaseModel):
     songs: list[SongOrder]
+
+class HistoryStateResponse(BaseModel):
+    """Response for history state check."""
+    isPaused: bool
 class CollectionSong(SongBase):
     id: str
     order: int
