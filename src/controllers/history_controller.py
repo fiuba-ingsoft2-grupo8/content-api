@@ -11,38 +11,18 @@ from resources.logger import logger
 from fastapi import APIRouter
 from common.utils import create_error_response, serialize_playlist
 from auth import verify_token
-import httpx
 
 router = APIRouter()
 
-async def fetch_user_history_preference(token: Optional[str] = None) -> bool:
-    """
-    Llama al endpoint público GET /users/history_preference y devuelve { "isPaused": bool }
-    Ajustá el path si en tu API quedó distinto.
-    """
-    url = f"{USER_API_BASE}/users/history_preference"
-    headers = {}
-    if token:
-        headers["Authorization"] = token
-
-    timeout = httpx.Timeout(20.0, connect=5.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        logger.info(f"Calling: {USER_API_BASE.rstrip('/')}/users/history_preference")
-        resp = await client.get(url, headers=headers) # user_id se puede obtener del header Authorization
-        resp.raise_for_status()
-        data = resp.json()
-        # Asumiendo que la respuesta es {"isPaused": bool}
-        isPaused = data.get("isPaused")
-        return isPaused or False
-
 @router.post("/")
-async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = Depends(verify_token), authorization: str = Header(None)):
+async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = Depends(verify_token)):
     logger.info(f"Adding song with id {request.songId} to user {user['user_id']}'s listening history")
-    # Descomentar la linea de abajo cuando este el endpoint "history_preference en user api" y comentar la linea "paused = False"
-    # paused = await fetch_user_history_preference(authorization)
-    paused = False 
-    if paused:
-        return JSONResponse(status_code=201, content={"message": "History is paused"})
+    
+    # Check if user's history is paused
+    state = await history_db.get_history_state(user["user_id"])
+    if state and state.get("isPaused", False):
+        logger.info(f"History is paused for user {user['user_id']}")
+        return JSONResponse(status_code=200, content={"message": "History is paused"})
 
     song = await songs_db.get_song(request.songId)
     if not song:
@@ -149,4 +129,58 @@ async def clear_history(user: dict = Depends(verify_token)):
         return JSONResponse(
             status_code=400,
             content=create_error_response(400, "Bad Request", str(e), f"/history?userId={user['user_id']}")
+        )
+
+@router.post("/state/toggle")
+async def toggle_history_state(user: dict = Depends(verify_token)):
+    """
+    Toggle the pause state of the user's listening history.
+    If history is currently paused, it will resume. If it's active, it will pause.
+    Creates a new state record if this is the first time pausing.
+    """
+    try:
+        result = await history_db.toggle_history_state(user["user_id"])
+        if result is None:
+            return JSONResponse(
+                status_code=500,
+                content=create_error_response(500, "Internal Server Error", "Failed to toggle history state", "/history/state/toggle")
+            )
+        
+        action = "paused" if result["isPaused"] else "resumed"
+        logger.info(f"History {action} for user {user['user_id']}")
+        return JSONResponse(
+            status_code=200,
+            content={"message": f"History {action}", "isPaused": result["isPaused"]}
+        )
+    except Exception as e:
+        logger.error(f"Failed to toggle history state for user {user['user_id']}: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(400, "Bad Request", str(e), "/history/state/toggle")
+        )
+
+@router.get("/state")
+async def get_history_state(user: dict = Depends(verify_token)):
+    """
+    Check if the user's listening history is currently paused.
+    Returns {"isPaused": bool}
+    """
+    try:
+        state = await history_db.get_history_state(user["user_id"])
+        if state is None:
+            return JSONResponse(
+                status_code=500,
+                content=create_error_response(500, "Internal Server Error", "Failed to get history state", "/history/state")
+            )
+        
+        logger.info(f"Retrieved history state for user {user['user_id']}: isPaused={state['isPaused']}")
+        return JSONResponse(
+            status_code=200,
+            content=state
+        )
+    except Exception as e:
+        logger.error(f"Failed to get history state for user {user['user_id']}: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(400, "Bad Request", str(e), "/history/state")
         )
