@@ -36,14 +36,14 @@ async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
     liked_songs_playlist = await playlists_db.get_liked_songs_playlist(user["user_id"])
     
     if not liked_songs_playlist:
-        return JSONResponse(
-            status_code=404,
-            content=create_error_response(
-                404, "Not Found",
-                f"Liked songs playlist for user {user['user_id']} not found",
-                f"/likedSongs/{user['user_id']}/songs"
-            ),
-        )
+        # Create liked songs playlist if it doesn't exist
+        liked_songs_playlist = await playlists_db.create_liked_songs_playlist(user["user_id"])
+        if not liked_songs_playlist:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(400, "Bad Request", "Failed to create liked songs playlist", "/likedSongs"),
+            )
+        
     playlist_id = str(liked_songs_playlist["_id"])    
 
     logger.info(f"Adding song {song_id} to liked songs and recording like metric")
