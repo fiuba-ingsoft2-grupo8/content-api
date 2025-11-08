@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
-from resources.logger import logger
+
+from bson import ObjectId
 from pymongo import DESCENDING
+
 from db.database import get_db
 from db.models import PlaylistSong
-from bson import ObjectId
+from resources.logger import logger
+from auth import is_authorized  # usado en get_playlist (acceso privado)
+
+# ----------------- CRUD y consultas ----------------- #
 
 async def create_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False):
     db = get_db()
@@ -74,7 +79,12 @@ async def get_playlists(published: bool, userId: str = None, state: str = "", pu
         return []
 
 
-async def get_playlist(id, user=None):
+async def get_playlist(id, user: dict = None):
+    """
+    Get a playlist by ID. Respeta las reglas de acceso:
+    - Publicadas: accesibles
+    - Privadas: sólo dueño o backoffice
+    """
     db = get_db()
     try:
         playlist = db.playlists.find_one({"_id": ObjectId(id)})
@@ -102,12 +112,21 @@ async def get_playlist(id, user=None):
         logger.error(f"Failed to get playlist with id={id}: {str(e)}")
         return None
 
+
 async def add_song_to_playlist(song_id: str, playlist_id: str) -> bool:
     db = get_db()
     song_oid = ObjectId(song_id)
     playlist_oid = ObjectId(playlist_id)
 
-    playlist_song = PlaylistSong(song_id=song_oid, playlist_id=playlist_oid)
+    last_song = db.playlist_songs.find_one(
+        {"playlist_id": playlist_oid},
+        sort=[("order", -1)],
+        projection={"order": 1}
+    )
+
+    next_pos = (last_song["order"] + 1) if last_song and "order" in last_song else 1
+
+    playlist_song = PlaylistSong(song_id=song_oid, playlist_id=playlist_oid, order=next_pos)
     db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
     logger.info(f"Added song {song_id} to playlist {playlist_id}")
     return True
@@ -135,8 +154,8 @@ async def get_songs_from_playlist(playlist_id: str):
     db = get_db()
     playlist_songs = list(db.playlist_songs.find(
         {"playlist_id": ObjectId(playlist_id)},
-        {"song_id": 1, "added_at": 1} 
-    ))
+        {"song_id": 1, "added_at": 1, "order": 1}
+    ).sort("order", 1))
 
     if not playlist_songs:
         return []
@@ -148,7 +167,7 @@ async def get_songs_from_playlist(playlist_id: str):
     songs = list(db.songs.find({"_id": {"$in": song_ids}}))
     song_map = {song["_id"]: song for song in songs}
     return [
-        {**song_map[ps["song_id"]], "added_at": ps["added_at"]}
+        {**song_map[ps["song_id"]], "added_at": ps["added_at"], "order": ps.get("order", 1)}
         for ps in playlist_songs
         if ps["song_id"] in song_map
     ]
@@ -200,7 +219,7 @@ async def get_liked_songs_playlist(userId):
         playlist = db.playlists.find_one({"userId": userId, "isLikedSongs": True})
         if playlist is None:
             logger.warning(f"Liked songs for user{userId} not found")
-            return None                
+            return None
         logger.info(f"Successfully retrieved liked songs for user{userId}")
         return playlist
     except Exception as e:
@@ -208,6 +227,34 @@ async def get_liked_songs_playlist(userId):
         return None
 
 
+# -------- develop: reordenar canciones --------
+async def reorder_songs_in_playlist(playlist_id: str, songs: list[dict]) -> bool:
+    """
+    Espera una lista con elementos que provean .songId y .order
+    (si viene como dict, soportamos ambas notaciones).
+    """
+    db = get_db()
+    playlist_oid = ObjectId(playlist_id)
+
+    try:
+        for item in songs:
+            # soporta pydantic item.songId o dict["songId"]
+            song_id = getattr(item, "songId", None) or item.get("songId")
+            order = getattr(item, "order", None) or item.get("order")
+            if not song_id:
+                continue
+            db.playlist_songs.update_one(
+                {"playlist_id": playlist_oid, "song_id": ObjectId(song_id)},
+                {"$set": {"order": int(order) if order is not None else 0}}
+            )
+        logger.info(f"Updated order for {len(songs)} songs in playlist {playlist_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to reorder songs in playlist {playlist_id}: {str(e)}")
+        return False
+
+
+# -------- feature: actualizar descripción --------
 async def update_playlist_description(playlist_id: str, description: str) -> bool:
     db = get_db()
     try:

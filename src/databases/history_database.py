@@ -69,3 +69,47 @@ async def clear_user_history(userId: str):
         return None
     except Exception as e:
         return e
+
+async def get_history_state(userId: str):
+    """
+    Get the history state for a user.
+    Returns {"isPaused": bool} or None if no state exists (defaults to not paused).
+    """
+    db = get_db()
+    try:
+        state = db.history_state.find_one({"userId": userId})
+        if state:
+            return {"isPaused": state.get("isPaused", False)}
+        return {"isPaused": False}  # Default: history is not paused
+    except Exception as e:
+        logger.error(f"Failed to get history state for user {userId}: {str(e)}")
+        return None
+
+async def toggle_history_state(userId: str):
+    """
+    Toggle the history pause state for a user.
+    If the user doesn't have a state record, create one with isPaused=True.
+    Returns the new state {"isPaused": bool} or error.
+    """
+    db = get_db()
+    try:
+        existing = db.history_state.find_one({"userId": userId})
+        
+        if existing:
+            # Toggle the current state
+            new_state = not existing.get("isPaused", False)
+            db.history_state.update_one(
+                {"userId": userId},
+                {"$set": {"isPaused": new_state}}
+            )
+            return {"isPaused": new_state}
+        else:
+            # First time pausing: create record with isPaused=True
+            db.history_state.insert_one({
+                "userId": userId,
+                "isPaused": True
+            })
+            return {"isPaused": True}
+    except Exception as e:
+        logger.error(f"Failed to toggle history state for user {userId}: {str(e)}")
+        return None

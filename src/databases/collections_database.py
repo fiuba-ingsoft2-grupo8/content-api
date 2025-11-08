@@ -1,9 +1,14 @@
 from datetime import datetime, timezone
+import os
+import httpx
+from typing import List, Dict, Any, Optional
 from resources.logger import logger
 from pymongo import DESCENDING
 from db.database import get_db
 from db.models import CollectionSong
 from bson import ObjectId
+
+USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
 
 async def create_collection(name, artistId, artistName, type, genre, coverUrl, releaseDate=None, credits=None, songs_with_early_release=None):
     """
@@ -404,17 +409,72 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         return []
 
 
-async def get_ids_by_name(name: str):
+def normalize_base(base: Optional[str], default: str) -> str:
+    base = (base or "").strip()
+    if not base:
+        base = default
+    if not base.startswith(("http://", "https://")):
+        base = "http://" + base
+    return base.rstrip("/")
+
+async def _fetch_users_by_name(name: str, base_url: str = USER_API_BASE, token: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Llama al endpoint público GET /users/search?q=<name> y devuelve [{"id": "<uuid>"}, ...]
+    Ajustá el path si en tu API quedó distinto.
+    """
+    url = f"{USER_API_BASE}/users/search"
+    headers = {}
+    if token:
+        headers["Authorization"] = token
+    # timeouts: 5s connect, 20s total lectura
+    timeout = httpx.Timeout(20.0, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        logger.info(f"User API base: {USER_API_BASE}")
+        logger.info(f"Calling: {USER_API_BASE.rstrip('/')}/users/search?q={name} (token: {bool(token)})")
+        resp = await client.get(url, params={"q": name}, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        # La respuesta esperada es {"users": [...], "count": N}
+        items = data.get("users") or data.get("result") or []
+        return [{"id": u.get("id")} for u in items if u.get("id")]
+
+async def get_ids_by_name(name: str, token: Optional[str] = None):
     db = get_db()
     try:
-        playlists = list(db.playlists.find({"name": {"$regex": name, "$options": "i"}}, {"_id": 1}))
-        songs = list(db.songs.find({"title": {"$regex": name, "$options": "i"}}, {"_id": 1}))
-        collections = {}
-        collections['playlists'] = playlists
-        collections['songs'] = songs
-        logger.info(f"Found {len(collections)} collections with name '{name}'")
-        logger.info(f"Collections: {collections}")
-        return collections
+        logger.info(f"Fetching user IDs by name: {name}")
+        users = await _fetch_users_by_name(name, token)
+    except httpx.HTTPStatusError as e:
+        logger.error(f"User API devolvió {e.response.status_code}: {e.response.text}")
+        users = []
     except Exception as e:
-        logger.error(f"Failed to update collection {collection_id}: {str(e)}")
+        logger.exception(f"Error llamando User API: {e}")
+        users = []
+
+    try:
+        playlists = list(
+            db.playlists.find(
+                {"name": {"$regex": name, "$options": "i"}},
+                {"_id": 1}
+            )
+        )
+        songs = list(
+            db.songs.find(
+                {"title": {"$regex": name, "$options": "i"}},
+                {"_id": 1}
+            )
+        )
+
+
+        collections = {
+            "playlists": playlists,   # ej: [{"_id": ObjectId(...)}]
+            "songs": songs,           # ej: [{"_id": ObjectId(...)}]
+            "users": users,           # ej: [{"id": "uuid"}, ...]
+        }
+
+        logger.info(f"Found {sum(len(v) for v in collections.values())} items with name '{name}'")
+        logger.debug(f"Collections: {collections}")
+        return collections
+
+    except Exception as e:
+        logger.exception(f"Failed to search collections by name='{name}': {e}")
         return False

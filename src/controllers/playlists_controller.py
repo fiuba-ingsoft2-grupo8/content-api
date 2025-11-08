@@ -1,16 +1,16 @@
+import random
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Body, Depends, UploadFile, File
+from fastapi.responses import JSONResponse
+
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import databases.storage_database as storage_db
 import schemas
-from fastapi import Body, Depends
-from fastapi.responses import JSONResponse
-from resources.logger import logger
-from fastapi import APIRouter
 from auth import verify_token, is_authorized
-from fastapi import UploadFile, File
 from common.utils import create_error_response, serialize_playlist, DEFAULT_COVERS
-from datetime import datetime, timezone
-import random
+from resources.logger import logger
 
 router = APIRouter()
 
@@ -30,9 +30,7 @@ def _parse_iso(dt: str | None):
 
 @router.post("/", status_code=201)
 async def create_playlist(playlist: schemas.CreatePlaylistRequest, user: dict = Depends(verify_token)):
-    logger.info(
-        f"Creating playlist: name='{playlist.name}', description='{playlist.description}'"
-    )
+    logger.info(f"Creating playlist: name='{playlist.name}', description='{playlist.description}'")
     cover_url = playlist.coverUrl if playlist.coverUrl else random.choice(DEFAULT_COVERS)
 
     try:
@@ -101,6 +99,12 @@ async def get_playlists(
 
 @router.get("/{id}")
 async def get_playlist(id: str, user: dict = Depends(verify_token)):
+    """
+    Retrieve a specific playlist by its ID with all songs.
+    Access rules:
+    - Published playlists: accessible by anyone
+    - Unpublished playlists: only accessible by owner or backoffice users
+    """
     logger.info(f"Fetching playlist with id={id}, user={user.get('user_id')}, user_type={user.get('user_type')}")
     try:
         playlist = await playlists_db.get_playlist(id, user)
@@ -118,7 +122,7 @@ async def get_playlist(id: str, user: dict = Depends(verify_token)):
 
         songs = await playlists_db.get_songs_from_playlist(id)
         serialized_playlist = serialize_playlist(playlist, songs)
-        logger.info(f"Successfully retrieved playlist {id} with {len(playlist['songs'])} songs")
+        logger.info(f"Successfully retrieved playlist {id} with {len(songs)} songs")
         return {"data": serialized_playlist}
     except Exception as e:
         logger.error(f"Failed to fetch playlist with id={id}: {str(e)}")
@@ -364,12 +368,16 @@ async def private_playlist(playlist_id: str, user: dict = Depends(verify_token))
         logger.error(f"Failed to make playlist with id {playlist_id} private")
         return JSONResponse(
             status_code=400,
-            content=create_error_response(400, "Bad Request", {str(e)}, f"/playlists/{playlist_id}/songs"),
+            content=create_error_response(400, "Bad Request", str(e), f"/playlists/{playlist_id}/songs"),
         )
 
 
 @router.post("/{playlist_id}/upload-cover")
 async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), user: dict = Depends(verify_token)):
+    """
+    Uploads a playlist cover image to Supabase Storage and updates the playlist document.
+    Only the owner or backoffice users can upload covers.
+    """
     playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
         return JSONResponse(
@@ -426,7 +434,38 @@ async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), 
         )
 
 
-# -------- NUEVO: Editar metadatos (sólo description) --------
+# -------- NUEVO (develop): Reordenar canciones --------
+@router.put("/{playlist_id}/reorder")
+async def reorder_playlist(playlist_id: str, request: schemas.ReorderRequest, user: dict = Depends(verify_token)):
+    """
+    Reorder songs in a playlist.
+    """
+    try:
+        logger.info(f"Reordering playlist {playlist_id}")
+        success = await playlists_db.reorder_songs_in_playlist(playlist_id, request.songs)
+        if not success:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    "Failed to reorder playlist",
+                    f"/playlists/{playlist_id}/reorder"
+                )
+            )
+        logger.info(f"Successfully reordered playlist {playlist_id}")
+        return {"message": "Playlist order updated successfully"}
+
+    except Exception as e:
+        logger.error(f"Error reordering playlist {playlist_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500, "Internal Server Error", str(e), f"/playlists/{playlist_id}/reorder"
+            ),
+        )
+
+
+# -------- NUEVO (feature): Editar metadata de descripción --------
 @router.patch("/{playlist_id}/description", status_code=200)
 async def patch_playlist_description(
     playlist_id: str,
@@ -470,9 +509,12 @@ async def patch_playlist_description(
     return {"data": serialize_playlist(updated, songs)}
 
 
+# Variante PUT para metadata (por ahora solo description)
+from pydantic import BaseModel as _BaseModel  # evitar colisión con schemas.BaseModel
 
-class UpdatePlaylistMetadataRequest(schemas.BaseModel):
+class UpdatePlaylistMetadataRequest(_BaseModel):
     description: str  # solo esto por ahora
+
 
 @router.put("/{playlist_id}/metadata", status_code=200)
 async def update_playlist_metadata(
@@ -480,7 +522,6 @@ async def update_playlist_metadata(
     payload: UpdatePlaylistMetadataRequest,
     user: dict = Depends(verify_token),
 ):
-    # Trae la playlist con las mismas reglas de acceso que el GET
     playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
         return JSONResponse(

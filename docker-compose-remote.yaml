@@ -13,6 +13,7 @@ services:
       SUPABASE_BUCKET: ${SUPABASE_BUCKET}
       SUPABASE_URL: ${SUPABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
+      USER_API_BASE: ${USER_API_BASE}
     ports:
       - "8080:8080"
     networks:

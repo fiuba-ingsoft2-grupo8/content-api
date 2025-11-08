@@ -1,9 +1,11 @@
+from typing import Optional
+from databases.collections_database import USER_API_BASE
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
 import databases.history_database as history_db
 import databases.metrics_database as metrics_db
 import schemas
-from fastapi import Body, Depends
+from fastapi import Body, Depends, Header
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from fastapi import APIRouter
@@ -15,8 +17,12 @@ router = APIRouter()
 @router.post("/")
 async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = Depends(verify_token)):
     logger.info(f"Adding song with id {request.songId} to user {user['user_id']}'s listening history")
-
-    # to do: agregar validacion del estado del historial (pausado o no)
+    
+    # Check if user's history is paused
+    state = await history_db.get_history_state(user["user_id"])
+    if state and state.get("isPaused", False):
+        logger.info(f"History is paused for user {user['user_id']}")
+        return JSONResponse(status_code=200, content={"message": "History is paused"})
 
     song = await songs_db.get_song(request.songId)
     if not song:
@@ -123,4 +129,58 @@ async def clear_history(user: dict = Depends(verify_token)):
         return JSONResponse(
             status_code=400,
             content=create_error_response(400, "Bad Request", str(e), f"/history?userId={user['user_id']}")
+        )
+
+@router.post("/state/toggle")
+async def toggle_history_state(user: dict = Depends(verify_token)):
+    """
+    Toggle the pause state of the user's listening history.
+    If history is currently paused, it will resume. If it's active, it will pause.
+    Creates a new state record if this is the first time pausing.
+    """
+    try:
+        result = await history_db.toggle_history_state(user["user_id"])
+        if result is None:
+            return JSONResponse(
+                status_code=500,
+                content=create_error_response(500, "Internal Server Error", "Failed to toggle history state", "/history/state/toggle")
+            )
+        
+        action = "paused" if result["isPaused"] else "resumed"
+        logger.info(f"History {action} for user {user['user_id']}")
+        return JSONResponse(
+            status_code=200,
+            content={"message": f"History {action}", "isPaused": result["isPaused"]}
+        )
+    except Exception as e:
+        logger.error(f"Failed to toggle history state for user {user['user_id']}: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(400, "Bad Request", str(e), "/history/state/toggle")
+        )
+
+@router.get("/state")
+async def get_history_state(user: dict = Depends(verify_token)):
+    """
+    Check if the user's listening history is currently paused.
+    Returns {"isPaused": bool}
+    """
+    try:
+        state = await history_db.get_history_state(user["user_id"])
+        if state is None:
+            return JSONResponse(
+                status_code=500,
+                content=create_error_response(500, "Internal Server Error", "Failed to get history state", "/history/state")
+            )
+        
+        logger.info(f"Retrieved history state for user {user['user_id']}: isPaused={state['isPaused']}")
+        return JSONResponse(
+            status_code=200,
+            content=state
+        )
+    except Exception as e:
+        logger.error(f"Failed to get history state for user {user['user_id']}: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(400, "Bad Request", str(e), "/history/state")
         )
