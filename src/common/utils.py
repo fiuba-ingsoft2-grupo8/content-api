@@ -1,19 +1,16 @@
 from resources.logger import logger
 import schemas
 
+# Portadas por defecto (se usan si no se pasa cover explícito)
 DEFAULT_COVERS = [
     "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-green.png",
     "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-orange.png",
-    "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-purple.png"
+    "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-purple.png",
 ]
 
+
 def create_error_response(status_code: int, title: str, detail: str, instance: str = ""):
-    """
-    Create a standardized error response following RFC 7807 Problem Details format.
-    """
-    logger.debug(
-        f"Creating error response: {status_code} - {title} - {detail} - {instance}"
-    )
+    logger.debug(f"Creating error response: {status_code} - {title} - {detail} - {instance}")
     return {
         "type": "about:blank",
         "title": title,
@@ -22,61 +19,85 @@ def create_error_response(status_code: int, title: str, detail: str, instance: s
         "instance": instance,
     }
 
-def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
-    if "coverUrl" in playlist :
-        coverUrl = playlist["coverUrl"] 
-    else:
-        coverUrl = None
 
-    if "isLikedSongs" in playlist :
-        isLikedSongs = playlist["isLikedSongs"] 
-    else:
-        isLikedSongs = False 
-    print("hasta aca todo bien")
-    print("Songs passed to serializer:", songs)
+def _str_or_fallback(v, fb: str = "") -> str:
+    return v if isinstance(v, str) else fb
+
+
+def _int_or_fallback(v, fb: int = 0) -> int:
+    try:
+        return int(v)  # acepta int/str numérica
+    except Exception:
+        return fb
+
+
+def _str_num(v, fb: str = "0") -> str:
+    """Devuelve un string numérico: '123'. Si no se puede parsear, usa fb."""
+    try:
+        return str(int(v))
+    except Exception:
+        return fb
+
+
+def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
+    """
+    Serializa una playlist de Mongo a schemas.Playlist.
+    - Forzamos tipos para que Pydantic no falle (description siempre str).
+    - Campos opcionales con fallback.
+    """
+    cover_url = playlist.get("coverUrl")
+    is_liked_songs = bool(playlist.get("isLikedSongs", False))
+
+    # Fallbacks seguros para Pydantic
+    _id = str(playlist.get("_id", ""))
+    name = _str_or_fallback(playlist.get("name"), "(sin nombre)")
+    description = _str_or_fallback(playlist.get("description"), "")
+    is_published = bool(playlist.get("is_published", False))
+    published_at = playlist.get("published_at")  # str ISO o datetime
+    user_id = _str_or_fallback(playlist.get("userId"), "unknown")
 
     return schemas.Playlist(
-        id=str(playlist["_id"]),
-        name=playlist["name"],
-        description=playlist["description"],
-        isPublished=playlist["is_published"],
-        publishedAt=playlist["published_at"],
-        userId=playlist["userId"],
+        id=_id,
+        name=name,
+        description=description,
+        isPublished=is_published,
+        publishedAt=published_at,
+        userId=user_id,
         songs=[
             schemas.PlaylistSong(
-                id=str(song["_id"]),
-                title=song["title"],
-                artist=song["artist"],
-                duration=song.get("duration", "0"),
-                addedAt=song["added_at"],
-                order=song["order"]
+                id=str(song.get("_id", "")),
+                title=_str_or_fallback(song.get("title"), "(sin título)"),
+                artist=_str_or_fallback(song.get("artist"), ""),
+                duration=_str_num(song.get("duration"), "0"),  # string (no int)
+                addedAt=song.get("added_at"),
+                order=_int_or_fallback(song.get("order"), 0),
             )
-            for song in songs
+            for song in (songs or [])
         ],
-        coverUrl=coverUrl,
-        isLikedSongs=isLikedSongs
+        coverUrl=cover_url,
+        isLikedSongs=is_liked_songs,
     )
 
-def serialize_song(song, is_liked=None):
+
+def serialize_song(song: dict, is_liked: bool | None = None):
     song["_id"] = str(song["_id"])
     if is_liked is not None:
         song["isLiked"] = is_liked
     return song
 
-def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
 
+def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
     return schemas.Collection(
-        id=str(collection["_id"]),
-        name=collection["name"],
-        artistId=collection["artistId"],
-        artistName=collection["artistName"],
-        type=collection["type"],
-        genre=collection.get("genre", "Unknown"),
-        coverUrl=collection["coverUrl"],
-        createdAt=collection["createdAt"],
+        id=str(collection.get("_id", "")),
+        name=_str_or_fallback(collection.get("name"), "(sin nombre)"),
+        artistId=_str_or_fallback(collection.get("artistId"), ""),
+        artistName=_str_or_fallback(collection.get("artistName"), ""),
+        type=_str_or_fallback(collection.get("type"), ""),
+        genre=_str_or_fallback(collection.get("genre"), "Unknown"),
+        coverUrl=collection.get("coverUrl"),
+        createdAt=collection.get("createdAt"),
         releaseDate=collection.get("releaseDate"),
         credits=collection.get("credits", []),
-        # Popularity metrics (optional, only in popular collections)
         totalPlays=collection.get("totalPlays"),
         totalLikes=collection.get("totalLikes"),
         totalPlaylistSaves=collection.get("totalPlaylistSaves"),
@@ -84,13 +105,13 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
         popularityScore=collection.get("popularityScore"),
         songs=[
             schemas.CollectionSong(
-                id=str(song["_id"]),
-                title=song["title"],
-                artist=song["artist"],
-                duration=song.get("duration", "0"),
-                order=song['order'],
-                earlyReleaseDate=song.get('early_release_date'),
+                id=str(song.get("_id", "")),
+                title=_str_or_fallback(song.get("title"), "(sin título)"),
+                artist=_str_or_fallback(song.get("artist"), ""),
+                duration=_str_num(song.get("duration"), "0"),  # string
+                order=_int_or_fallback(song.get("order"), 0),
+                earlyReleaseDate=song.get("early_release_date"),
             )
-            for song in songs
-        ]
+            for song in (songs or [])
+        ],
     )
