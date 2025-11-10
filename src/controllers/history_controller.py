@@ -52,12 +52,61 @@ async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = 
     logger.info(f"Succesfully logged song with id {request.songId} to user {user['user_id']}'s listening history")
     return JSONResponse(status_code=201, content={"message": "Added to history"})
 
-@router.get("/")
-async def get_history(user: dict = Depends(verify_token), search: str = None):
+@router.get(
+    "/",
+    responses={
+        200: {
+            "description": "Successfully retrieved listening history",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": [
+                            {
+                                "song": {
+                                    "_id": "507f1f77bcf86cd799439011",
+                                    "title": "Bohemian Rhapsody",
+                                    "artist": "Queen",
+                                    "coverUrl": "https://example.com/cover.jpg"
+                                },
+                                "playedAt": "2025-11-10T14:30:00Z",
+                                "progress": 180
+                            },
+                            {
+                                "song": {
+                                    "_id": "507f1f77bcf86cd799439012",
+                                    "title": "Imagine",
+                                    "artist": "John Lennon",
+                                    "coverUrl": "https://example.com/imagine.jpg"
+                                },
+                                "playedAt": "2025-11-10T13:15:00Z",
+                                "progress": 90
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_history(
+    user: dict = Depends(verify_token), 
+    search: str = None
+):
     """
-    Retrieve the listening history for a specific user.
-    Returns a list of songs (most recent first).
-    Optionally filter by a search term in song title or artist.
+    Retrieve the listening history for the authenticated user.
+    
+    Returns a list of songs ordered by most recently played first.
+    
+    **Optional Query Parameters:**
+    - `search`: Filter history by song title or artist name (case-insensitive)
+    
+    **Response:**
+    - List of history entries, each containing:
+        - `song`: Song details (_id, title, artist, coverUrl)
+        - `playedAt`: ISO 8601 timestamp of when the song was last played
+        - `progress`: Playback progress in seconds
+    
+    **Note:** If the user has no listening history, returns an empty list in the data field.
     """
     try:
         logger.info(f"Fetching listening history for user {user['user_id']} with search={search}")
@@ -131,12 +180,44 @@ async def clear_history(user: dict = Depends(verify_token)):
             content=create_error_response(400, "Bad Request", str(e), f"/history?userId={user['user_id']}")
         )
 
-@router.post("/state/toggle")
+@router.post(
+    "/state/toggle",
+    responses={
+        200: {
+            "description": "Successfully toggled history state",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "paused": {
+                            "summary": "History was paused",
+                            "value": {"message": "History paused", "isPaused": True}
+                        },
+                        "resumed": {
+                            "summary": "History was resumed",
+                            "value": {"message": "History resumed", "isPaused": False}
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def toggle_history_state(user: dict = Depends(verify_token)):
     """
-    Toggle the pause state of the user's listening history.
-    If history is currently paused, it will resume. If it's active, it will pause.
-    Creates a new state record if this is the first time pausing.
+    Toggle the pause/resume state of the user's listening history.
+    
+    **Behavior:**
+    - If history is currently **active**, it will be **paused**
+    - If history is currently **paused**, it will be **resumed**
+    - First time users: Creates a new state record and pauses history
+    
+    **When history is paused:**
+    - Songs will NOT be added to listening history
+    - Existing history remains accessible
+    
+    **Response:**
+    - `message`: "History paused" or "History resumed"
+    - `isPaused`: Current state after toggle (true/false)
     """
     try:
         result = await history_db.toggle_history_state(user["user_id"])
@@ -159,11 +240,41 @@ async def toggle_history_state(user: dict = Depends(verify_token)):
             content=create_error_response(400, "Bad Request", str(e), "/history/state/toggle")
         )
 
-@router.get("/state")
+@router.get(
+    "/state",
+    responses={
+        200: {
+            "description": "Current history pause state",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "paused": {
+                            "summary": "History is paused",
+                            "value": {"isPaused": True}
+                        },
+                        "active": {
+                            "summary": "History is active (default)",
+                            "value": {"isPaused": False}
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_history_state(user: dict = Depends(verify_token)):
     """
-    Check if the user's listening history is currently paused.
-    Returns {"isPaused": bool}
+    Check the current pause state of the user's listening history.
+    
+    **Returns:**
+    - `isPaused`: `true` if history is paused, `false` if active (default)
+    
+    **Default behavior:**
+    - Users who have never paused their history will get `isPaused: false`
+    
+    **Use case:**
+    - Check state before attempting to add songs to history
+    - Display pause/resume button state in UI
     """
     try:
         state = await history_db.get_history_state(user["user_id"])
