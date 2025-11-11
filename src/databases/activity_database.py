@@ -4,62 +4,70 @@ from db.database import get_db
 from bson import ObjectId
 
 
-async def get_user_activity(user_id: str, limit: int = 50):
+async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = None):
     """
     Get recent activity for a specific user.
     Returns combined list of likes, plays, and published playlists.
+    
+    Args:
+        user_id: User ID to fetch activities for
+        limit: Maximum number of activities to return
+        activity_type: Optional filter by activity type ('like', 'play', 'playlist_published', 'share')
     """
     db = get_db()
     activities = []
     
     try:
-        # Get recent likes
-        likes = list(db.likes.find(
-            {"user_id": user_id}
-        ).sort("created_at", -1).limit(limit))
-        
-        for like in likes:
-            activity = {
-                "type": "like",
-                "userId": user_id,
-                "targetId": str(like["target_id"]),
-                "targetType": like["target_type"],
-                "timestamp": like["created_at"],
-                "createdAt": like["created_at"]
-            }
-            activities.append(activity)
+        # Get recent likes (if not filtered or filter matches)
+        if activity_type is None or activity_type == "like":
+            likes = list(db.likes.find(
+                {"user_id": user_id}
+            ).sort("created_at", -1).limit(limit))
+            
+            for like in likes:
+                activity = {
+                    "type": "like",
+                    "userId": user_id,
+                    "targetId": str(like["target_id"]),
+                    "targetType": like["target_type"],
+                    "timestamp": like["created_at"],
+                    "createdAt": like["created_at"]
+                }
+                activities.append(activity)
         
         # Get recent plays (from permanent plays table)
-        plays = list(db.plays.find(
-            {"user_id": user_id}
-        ).sort("played_at", -1).limit(limit))
-        
-        for play in plays:
-            activity = {
-                "type": "play",
-                "userId": user_id,
-                "songId": str(play["song_id"]),
-                "targetType": "song",
-                "timestamp": play["played_at"],
-                "playedAt": play["played_at"]
-            }
-            activities.append(activity)
+        if activity_type is None or activity_type == "play":
+            plays = list(db.plays.find(
+                {"user_id": user_id}
+            ).sort("played_at", -1).limit(limit))
+            
+            for play in plays:
+                activity = {
+                    "type": "play",
+                    "userId": user_id,
+                    "songId": str(play["song_id"]),
+                    "targetType": "song",
+                    "timestamp": play["played_at"],
+                    "playedAt": play["played_at"]
+                }
+                activities.append(activity)
         
         # Get recently published playlists
-        playlists = list(db.playlists.find(
-            {"userId": user_id, "is_published": True}
-        ).sort("published_at", -1).limit(limit))
-        
-        for playlist in playlists:
-            activity = {
-                "type": "playlist_published",
-                "userId": user_id,
-                "playlistId": str(playlist["_id"]),
-                "playlistName": playlist.get("name", ""),
-                "timestamp": playlist["published_at"],
-                "publishedAt": playlist["published_at"]
-            }
-            activities.append(activity)
+        if activity_type is None or activity_type == "playlist_published":
+            playlists = list(db.playlists.find(
+                {"userId": user_id, "is_published": True}
+            ).sort("published_at", -1).limit(limit))
+            
+            for playlist in playlists:
+                activity = {
+                    "type": "playlist_published",
+                    "userId": user_id,
+                    "playlistId": str(playlist["_id"]),
+                    "playlistName": playlist.get("name", ""),
+                    "timestamp": playlist["published_at"],
+                    "publishedAt": playlist["published_at"]
+                }
+                activities.append(activity)
         
         # TODO: Add shares when implemented
         # shares = list(db.shares.find(
@@ -88,10 +96,15 @@ async def get_user_activity(user_id: str, limit: int = 50):
         return []
 
 
-async def get_following_activity(user_id: str, limit: int = 50):
+async def get_following_activity(user_id: str, limit: int = 50, activity_type: str = None):
     """
     Get recent activity from users that the current user follows.
     Returns combined list of activities ordered chronologically.
+    
+    Args:
+        user_id: User ID to fetch activity feed for
+        limit: Maximum number of activities to return
+        activity_type: Optional filter by activity type ('like', 'play', 'playlist_published', 'share')
     """
     db = get_db()
     activities = []
@@ -112,53 +125,56 @@ async def get_following_activity(user_id: str, limit: int = 50):
             logger.info(f"User {user_id} is not following anyone (or follows not implemented)")
             return []
         
-        # Get recent likes from followed users
-        likes = list(db.likes.find(
-            {"user_id": {"$in": following_ids}}
-        ).sort("created_at", -1).limit(limit * 2))  # Get more to have enough after filtering
-        
-        for like in likes:
-            activity = {
-                "type": "like",
-                "userId": like["user_id"],
-                "targetId": str(like["target_id"]),
-                "targetType": like["target_type"],
-                "timestamp": like["created_at"],
-                "createdAt": like["created_at"]
-            }
-            activities.append(activity)
+        # Get recent likes from followed users (if not filtered or filter matches)
+        if activity_type is None or activity_type == "like":
+            likes = list(db.likes.find(
+                {"user_id": {"$in": following_ids}}
+            ).sort("created_at", -1).limit(limit * 2))  # Get more to have enough after filtering
+            
+            for like in likes:
+                activity = {
+                    "type": "like",
+                    "userId": like["user_id"],
+                    "targetId": str(like["target_id"]),
+                    "targetType": like["target_type"],
+                    "timestamp": like["created_at"],
+                    "createdAt": like["created_at"]
+                }
+                activities.append(activity)
         
         # Get recent plays from followed users
-        plays = list(db.plays.find(
-            {"user_id": {"$in": following_ids}}
-        ).sort("played_at", -1).limit(limit * 2))
-        
-        for play in plays:
-            activity = {
-                "type": "play",
-                "userId": play["user_id"],
-                "songId": str(play["song_id"]),
-                "targetType": "song",
-                "timestamp": play["played_at"],
-                "playedAt": play["played_at"]
-            }
-            activities.append(activity)
+        if activity_type is None or activity_type == "play":
+            plays = list(db.plays.find(
+                {"user_id": {"$in": following_ids}}
+            ).sort("played_at", -1).limit(limit * 2))
+            
+            for play in plays:
+                activity = {
+                    "type": "play",
+                    "userId": play["user_id"],
+                    "songId": str(play["song_id"]),
+                    "targetType": "song",
+                    "timestamp": play["played_at"],
+                    "playedAt": play["played_at"]
+                }
+                activities.append(activity)
         
         # Get recently published playlists from followed users
-        playlists = list(db.playlists.find(
-            {"userId": {"$in": following_ids}, "is_published": True}
-        ).sort("published_at", -1).limit(limit * 2))
-        
-        for playlist in playlists:
-            activity = {
-                "type": "playlist_published",
-                "userId": playlist["userId"],
-                "playlistId": str(playlist["_id"]),
-                "playlistName": playlist.get("name", ""),
-                "timestamp": playlist["published_at"],
-                "publishedAt": playlist["published_at"]
-            }
-            activities.append(activity)
+        if activity_type is None or activity_type == "playlist_published":
+            playlists = list(db.playlists.find(
+                {"userId": {"$in": following_ids}, "is_published": True}
+            ).sort("published_at", -1).limit(limit * 2))
+            
+            for playlist in playlists:
+                activity = {
+                    "type": "playlist_published",
+                    "userId": playlist["userId"],
+                    "playlistId": str(playlist["_id"]),
+                    "playlistName": playlist.get("name", ""),
+                    "timestamp": playlist["published_at"],
+                    "publishedAt": playlist["published_at"]
+                }
+                activities.append(activity)
         
         # TODO: Add shares when implemented
         # shares = list(db.shares.find(

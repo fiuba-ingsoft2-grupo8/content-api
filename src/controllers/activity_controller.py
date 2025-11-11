@@ -15,13 +15,14 @@ router = APIRouter()
 async def get_user_activity(
     user_id: str,
     limit: int = Query(default=50, ge=1, le=100, description="Maximum number of activities to return"),
+    activity_type: Optional[str] = Query(default=None, description="Filter by activity type: 'like', 'play', 'playlist_published', 'share'"),
     user: dict = Depends(verify_token)
 ):
     try:
-        logger.info(f"Fetching activity for user {user_id} (limit={limit})")
+        logger.info(f"Fetching activity for user {user_id} (limit={limit}, type={activity_type})")
         
         # Get activities
-        activities = await activity_db.get_user_activity(user_id, limit)
+        activities = await activity_db.get_user_activity(user_id, limit, activity_type)
         
         # Enrich with full details
         enriched_activities = await activity_db.enrich_activity_with_details(activities)
@@ -42,14 +43,15 @@ async def get_user_activity(
 @router.get("/")
 async def get_following_activity(
     limit: int = Query(default=50, ge=1, le=100, description="Maximum number of activities to return"),
+    activity_type: Optional[str] = Query(default=None, description="Filter by activity type: 'like', 'play', 'playlist_published', 'share'"),
     user: dict = Depends(verify_token)
 ):
     try:
         user_id = user["user_id"]
-        logger.info(f"Fetching following activity feed for user {user_id} (limit={limit})")
+        logger.info(f"Fetching following activity feed for user {user_id} (limit={limit}, type={activity_type})")
         
         # Get activities from followed users
-        activities = await activity_db.get_following_activity(user_id, limit)
+        activities = await activity_db.get_following_activity(user_id, limit, activity_type)
         
         # Enrich with full details
         enriched_activities = await activity_db.enrich_activity_with_details(activities)
