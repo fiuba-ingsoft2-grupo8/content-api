@@ -80,7 +80,32 @@ async def upload_collection_cover(collection_id: str, file: UploadFile = File(..
             ),
         )
 
-@router.post("/", status_code=201)
+@router.post(
+    "/",
+    status_code=201,
+    responses={
+        201: {
+            "description": "Collection created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "id": "507f1f77bcf86cd799439011",
+                            "name": "Clics Modernos",
+                            "artistId": "artist_123",
+                            "artistName": "Charly García",
+                            "type": "album",
+                            "genre": "Rock",
+                            "coverUrl": "https://example.com/cover.jpg",
+                            "releaseDate": "2025-12-01T00:00:00Z",
+                            "songs": []
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def create_collection(collection: schemas.CreateCollectionRequest, user: dict = Depends(verify_token)):
     logger.info(
         f"Creating collection {collection.name}"
@@ -282,7 +307,34 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         logger.error(f"Failed to fetch popular collections: {str(e)}")
         raise
 
-@router.get("/", status_code=200)
+@router.get(
+    "/",
+    status_code=200,
+    responses={
+        200: {
+            "description": "List of collections",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": [
+                            {
+                                "id": "507f1f77bcf86cd799439011",
+                                "name": "Clics Modernos",
+                                "artistId": "artist_123",
+                                "artistName": "Charly García",
+                                "type": "album",
+                                "genre": "Rock",
+                                "coverUrl": "https://example.com/cover.jpg",
+                                "releaseDate": "1983-11-11T00:00:00Z",
+                                "songs": []
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_collections(
     type: str = None,
     artistId: str = None,

@@ -28,7 +28,31 @@ def _parse_iso(dt: str | None):
         return None
 
 
-@router.post("/", status_code=201)
+@router.post(
+    "/",
+    status_code=201,
+    responses={
+        201: {
+            "description": "Playlist created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "_id": "507f1f77bcf86cd799439011",
+                            "name": "My Favorites",
+                            "description": "My favorite songs collection",
+                            "userId": "user_123",
+                            "is_published": False,
+                            "published_at": "2025-11-10T00:00:00Z",
+                            "coverUrl": "https://example.com/cover.jpg",
+                            "songs": []
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def create_playlist(playlist: schemas.CreatePlaylistRequest, user: dict = Depends(verify_token)):
     logger.info(f"Creating playlist: name='{playlist.name}', description='{playlist.description}'")
     cover_url = playlist.coverUrl if playlist.coverUrl else random.choice(DEFAULT_COVERS)
@@ -51,7 +75,32 @@ async def create_playlist(playlist: schemas.CreatePlaylistRequest, user: dict = 
         )
 
 
-@router.get("/")
+@router.get(
+    "/",
+    responses={
+        200: {
+            "description": "List of playlists",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": [
+                            {
+                                "_id": "507f1f77bcf86cd799439011",
+                                "name": "My Favorites",
+                                "description": "My favorite songs",
+                                "userId": "user_123",
+                                "is_published": True,
+                                "published_at": "2025-11-10T00:00:00Z",
+                                "coverUrl": "https://example.com/cover.jpg",
+                                "songs": []
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_playlists(
     isPublished: bool = False,
     # nuevos filtros catálogo:

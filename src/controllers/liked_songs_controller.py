@@ -153,7 +153,36 @@ async def remove_from_liked_songs(song_id: str, user: dict = Depends(verify_toke
         )
 
 
-@router.get("/")
+@router.get(
+    "/",
+    responses={
+        200: {
+            "description": "Liked songs playlist",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "_id": "507f1f77bcf86cd799439011",
+                            "name": "Liked Songs",
+                            "userId": "user_123",
+                            "is_published": True,
+                            "isLikedSongs": True,
+                            "coverUrl": "https://example.com/liked-songs.png",
+                            "songs": [
+                                {
+                                    "_id": "507f1f77bcf86cd799439012",
+                                    "title": "Bohemian Rhapsody",
+                                    "artist": "Queen",
+                                    "duration": "354"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_liked_songs(user: dict = Depends(verify_token)):
     try:
         liked_songs = await playlists_db.get_liked_songs_playlist(user["user_id"])

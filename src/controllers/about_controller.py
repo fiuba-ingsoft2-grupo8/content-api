@@ -144,7 +144,40 @@ async def update_artist_about(
         )
 
 
-@router.get("/{artist_id}", status_code=200)
+@router.get(
+    "/{artist_id}",
+    status_code=200,
+    responses={
+        200: {
+            "description": "Artist about page information",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "artistId": "artist_123",
+                            "artist": "Charly García",
+                            "bio": "Músico argentino, pionero del rock nacional.",
+                            "socialMedia": {
+                                "x": "@charlygarcia",
+                                "instagram": "@charlygarcia_oficial"
+                            },
+                            "carouselImages": [
+                                {
+                                    "url": "https://example.com/image1.jpg",
+                                    "isPrimary": True
+                                }
+                            ],
+                            "artistPick": {
+                                "type": "collection",
+                                "id": "507f1f77bcf86cd799439011"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_artist_about(artist_id: str):
     """
     Get an artist's about page by their artist ID.
