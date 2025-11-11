@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from auth import verify_token, is_authorized
 from resources.logger import logger
 from common.utils import create_error_response
+import schemas
 from schemas import ArtistAbout, UpdateArtistAboutRequest
 import uuid
 

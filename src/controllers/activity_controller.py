@@ -11,7 +11,7 @@ from resources.logger import logger
 router = APIRouter()
 
 
-@router.get("/{user_id}", response_model=schemas.ActivityResponse)
+@router.get("/{user_id}")
 async def get_user_activity(
     user_id: str,
     limit: int = Query(default=50, ge=1, le=100, description="Maximum number of activities to return"),
@@ -39,7 +39,7 @@ async def get_user_activity(
         )
 
 
-@router.get("/", response_model=schemas.ActivityResponse)
+@router.get("/")
 async def get_following_activity(
     limit: int = Query(default=50, ge=1, le=100, description="Maximum number of activities to return"),
     user: dict = Depends(verify_token)

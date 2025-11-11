@@ -50,4 +50,4 @@ async def search(str_name: str, user: dict = Depends(verify_token), authorizatio
         if uid:
             result["users"].append({"id": uid})
 
-    return JSONResponse(content={"collections": result})
+    return {"collections": result}
