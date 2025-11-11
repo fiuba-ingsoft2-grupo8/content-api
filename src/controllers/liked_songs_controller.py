@@ -37,11 +37,12 @@ async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
     
     if not liked_songs_playlist:
         # Create liked songs playlist if it doesn't exist
-        liked_songs_playlist = await playlists_db.create_liked_songs_playlist(user["user_id"])
+        liked_songs_cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/liked-songs.png"
+        liked_songs_playlist, error = await playlists_db.create_playlist("Liked Songs", "", True, user["user_id"], liked_songs_cover_url, True)
         if not liked_songs_playlist:
             return JSONResponse(
                 status_code=400,
-                content=create_error_response(400, "Bad Request", "Failed to create liked songs playlist", "/likedSongs"),
+                content=create_error_response(400, "Bad Request", f"Failed to create liked songs playlist: {error}", "/likedSongs"),
             )
         
     playlist_id = str(liked_songs_playlist["_id"])    

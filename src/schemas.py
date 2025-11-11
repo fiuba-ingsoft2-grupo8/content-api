@@ -180,6 +180,106 @@ class SongOrder(BaseModel):
 class ReorderRequest(BaseModel):
     songs: list[SongOrder]
 
+# Activity schemas
+class ActivitySongData(BaseModel):
+    """Song data within activity entry."""
+    _id: str
+    title: str
+    artist: str
+    coverUrl: Optional[str] = None
+
+class ActivityCollectionData(BaseModel):
+    """Collection data within activity entry."""
+    _id: str
+    name: str
+    artistName: str
+    coverUrl: Optional[str] = None
+    type: str
+
+class LikeActivity(BaseModel):
+    """Activity entry for a like action."""
+    type: str = "like"
+    userId: str
+    targetId: str
+    targetType: str
+    timestamp: datetime
+    createdAt: datetime
+    song: Optional[ActivitySongData] = None
+    collection: Optional[ActivityCollectionData] = None
+
+class PlayActivity(BaseModel):
+    """Activity entry for a play action."""
+    type: str = "play"
+    userId: str
+    songId: str
+    targetType: str = "song"
+    timestamp: datetime
+    playedAt: datetime
+    song: Optional[ActivitySongData] = None
+
+class PlaylistPublishedActivity(BaseModel):
+    """Activity entry for a published playlist."""
+    type: str = "playlist_published"
+    userId: str
+    playlistId: str
+    playlistName: str
+    timestamp: datetime
+    publishedAt: datetime
+
+class ShareActivity(BaseModel):
+    """Activity entry for a share action."""
+    type: str = "share"
+    userId: str
+    targetId: str
+    targetType: str
+    timestamp: datetime
+    createdAt: datetime
+    song: Optional[ActivitySongData] = None
+    collection: Optional[ActivityCollectionData] = None
+
+class ActivityResponse(BaseModel):
+    """Response containing a list of activities."""
+    data: List[dict]  # Union of different activity types
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "data": [
+                    {
+                        "type": "like",
+                        "userId": "user_123",
+                        "targetType": "song",
+                        "song": {
+                            "_id": "507f1f77bcf86cd799439011",
+                            "title": "Bohemian Rhapsody",
+                            "artist": "Queen",
+                            "coverUrl": "https://example.com/cover.jpg"
+                        },
+                        "timestamp": "2025-11-10T14:30:00Z"
+                    },
+                    {
+                        "type": "play",
+                        "userId": "user_123",
+                        "songId": "507f1f77bcf86cd799439012",
+                        "song": {
+                            "_id": "507f1f77bcf86cd799439012",
+                            "title": "Imagine",
+                            "artist": "John Lennon",
+                            "coverUrl": "https://example.com/imagine.jpg"
+                        },
+                        "timestamp": "2025-11-10T13:15:00Z"
+                    },
+                    {
+                        "type": "playlist_published",
+                        "userId": "user_123",
+                        "playlistId": "507f1f77bcf86cd799439013",
+                        "playlistName": "My Favorites",
+                        "timestamp": "2025-11-09T10:00:00Z"
+                    }
+                ]
+            }
+        }
+
 class CollectionSong(SongBase):
     id: str
     order: int
