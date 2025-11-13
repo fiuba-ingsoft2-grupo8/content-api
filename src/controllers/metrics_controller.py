@@ -11,7 +11,22 @@ from common.utils import create_error_response
 
 router = APIRouter()
 
-@router.get("/likes/{target_type}/{target_id}", status_code=200)
+@router.get(
+    "/likes/{target_type}/{target_id}",
+    status_code=200,
+    responses={
+        200: {
+            "description": "Like status",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "liked": True
+                    }
+                }
+            }
+        }
+    }
+)
 async def check_like_status(target_type: str, target_id: str, user: dict = Depends(verify_token)):
     """
     Check if the current user has liked a specific song.
@@ -90,7 +105,28 @@ async def record_share(request: schemas.ShareRequest, user: dict = Depends(verif
     
     return {"message": "Share recorded successfully"}
 
-@router.get("/songs/{song_id}", status_code=200)
+@router.get(
+    "/songs/{song_id}",
+    status_code=200,
+    responses={
+        200: {
+            "description": "Song metrics",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "totalPlays": 1523,
+                            "totalLikes": 245,
+                            "totalShares": 67,
+                            "totalPlaylistSaves": 89,
+                            "popularityScore": 8.5
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_song_metrics(song_id: str, user: dict = Depends(verify_token)):
     """
     Get complete metrics for a specific song.

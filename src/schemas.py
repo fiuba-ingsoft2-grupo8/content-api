@@ -180,6 +180,106 @@ class SongOrder(BaseModel):
 class ReorderRequest(BaseModel):
     songs: list[SongOrder]
 
+# Activity schemas
+class ActivitySongData(BaseModel):
+    """Song data within activity entry."""
+    _id: str
+    title: str
+    artist: str
+    coverUrl: Optional[str] = None
+
+class ActivityCollectionData(BaseModel):
+    """Collection data within activity entry."""
+    _id: str
+    name: str
+    artistName: str
+    coverUrl: Optional[str] = None
+    type: str
+
+class LikeActivity(BaseModel):
+    """Activity entry for a like action."""
+    type: str = "like"
+    userId: str
+    targetId: str
+    targetType: str
+    timestamp: datetime
+    createdAt: datetime
+    song: Optional[ActivitySongData] = None
+    collection: Optional[ActivityCollectionData] = None
+
+class PlayActivity(BaseModel):
+    """Activity entry for a play action."""
+    type: str = "play"
+    userId: str
+    songId: str
+    targetType: str = "song"
+    timestamp: datetime
+    playedAt: datetime
+    song: Optional[ActivitySongData] = None
+
+class PlaylistPublishedActivity(BaseModel):
+    """Activity entry for a published playlist."""
+    type: str = "playlist_published"
+    userId: str
+    playlistId: str
+    playlistName: str
+    timestamp: datetime
+    publishedAt: datetime
+
+class ShareActivity(BaseModel):
+    """Activity entry for a share action."""
+    type: str = "share"
+    userId: str
+    targetId: str
+    targetType: str
+    timestamp: datetime
+    createdAt: datetime
+    song: Optional[ActivitySongData] = None
+    collection: Optional[ActivityCollectionData] = None
+
+class ActivityResponse(BaseModel):
+    """Response containing a list of activities."""
+    data: List[dict]  # Union of different activity types
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "data": [
+                    {
+                        "type": "like",
+                        "userId": "user_123",
+                        "targetType": "song",
+                        "song": {
+                            "_id": "507f1f77bcf86cd799439011",
+                            "title": "Bohemian Rhapsody",
+                            "artist": "Queen",
+                            "coverUrl": "https://example.com/cover.jpg"
+                        },
+                        "timestamp": "2025-11-10T14:30:00Z"
+                    },
+                    {
+                        "type": "play",
+                        "userId": "user_123",
+                        "songId": "507f1f77bcf86cd799439012",
+                        "song": {
+                            "_id": "507f1f77bcf86cd799439012",
+                            "title": "Imagine",
+                            "artist": "John Lennon",
+                            "coverUrl": "https://example.com/imagine.jpg"
+                        },
+                        "timestamp": "2025-11-10T13:15:00Z"
+                    },
+                    {
+                        "type": "playlist_published",
+                        "userId": "user_123",
+                        "playlistId": "507f1f77bcf86cd799439013",
+                        "playlistName": "My Favorites",
+                        "timestamp": "2025-11-09T10:00:00Z"
+                    }
+                ]
+            }
+        }
+
 class CollectionSong(SongBase):
     id: str
     order: int
@@ -397,4 +497,123 @@ class UpdateArtistAboutRequest(BaseModel):
                 }
             }
         }
+
+
+# Response schemas for consistent API documentation
+
+class CollectionResponse(BaseModel):
+    """Standard API response wrapper for single collection data."""
+    data: Collection
+
+
+class CollectionsResponse(BaseModel):
+    """Standard API response wrapper for multiple collections data."""
+    data: List[Collection]
+
+
+class MessageResponse(BaseModel):
+    """Standard API response for simple message responses."""
+    message: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "message": "Operation completed successfully"
+            }
+        }
+
+
+class SearchResult(BaseModel):
+    """Search results containing playlists, songs, and users."""
+    playlists: List[Playlist] = []
+    songs: List[Song] = []
+    users: List[dict] = []  # User schema from external API
+
+
+class SearchResponse(BaseModel):
+    """Standard API response for search endpoint."""
+    collections: SearchResult
+
+
+class LikeStatus(BaseModel):
+    """Like status information."""
+    isLiked: bool
+
+
+class LikeStatusResponse(BaseModel):
+    """Standard API response for like status check."""
+    data: LikeStatus
+
+
+class Metrics(BaseModel):
+    """Metrics data for songs, collections, or artists."""
+    totalPlays: Optional[int] = 0
+    totalLikes: Optional[int] = 0
+    totalShares: Optional[int] = 0
+    totalPlaylistSaves: Optional[int] = 0
+    popularityScore: Optional[float] = 0.0
+
+
+class MetricsResponse(BaseModel):
+    """Standard API response for metrics data."""
+    data: Metrics
+
+
+class ArtistAboutResponse(BaseModel):
+    """Standard API response for artist about page."""
+    data: ArtistAbout
+
+
+class EarlyReleaseSong(BaseModel):
+    """Song information with early release date."""
+    songId: str
+    title: str
+    artist: str
+    earlyReleaseDate: Optional[datetime] = None
+    coverUrl: Optional[str] = None
+
+
+class EarlyReleaseSongsResponse(BaseModel):
+    """Standard API response for early release songs."""
+    data: List[EarlyReleaseSong]
+
+
+class CoverUrlResponse(BaseModel):
+    """Standard API response for cover URL upload."""
+    coverUrl: str
+
+
+class EarlyReleaseSongItem(BaseModel):
+    """Early release song item for collection early releases endpoint."""
+    id: str
+    title: str
+    artist: str
+    duration: str
+    order: int
+    earlyReleaseDate: Optional[datetime] = None
+
+
+class EarlyReleaseData(BaseModel):
+    """Data for early release songs of a collection."""
+    collectionId: str
+    collectionName: str
+    releaseDate: Optional[datetime] = None
+    earlyReleasedSongs: List[EarlyReleaseSongItem]
+
+
+class EarlyReleaseResponse(BaseModel):
+    """Standard API response for collection early releases."""
+    data: EarlyReleaseData
+
+
+class LikedResponse(BaseModel):
+    """Response for check like status endpoint."""
+    liked: bool
+
+
+class CarouselImageResponse(BaseModel):
+    """Response for carousel image upload."""
+    id: str
+    url: str
+    isPrimary: bool
 
