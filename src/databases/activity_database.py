@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from resources.logger import logger
 from db.database import get_db
 from bson import ObjectId
+import httpx
+import os
 
 
 async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = None):
@@ -96,13 +98,14 @@ async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = 
         return []
 
 
-async def get_following_activity(user_id: str, limit: int = 50, activity_type: str = None):
+async def get_following_activity(user_id: str, authorization_token: str, limit: int = 50, activity_type: str = None):
     """
     Get recent activity from users that the current user follows.
     Returns combined list of activities ordered chronologically.
     
     Args:
         user_id: User ID to fetch activity feed for
+        authorization_token: JWT token for authenticating with user API
         limit: Maximum number of activities to return
         activity_type: Optional filter by activity type ('like', 'play', 'playlist_published', 'share')
     """
@@ -110,19 +113,36 @@ async def get_following_activity(user_id: str, limit: int = 50, activity_type: s
     activities = []
     
     try:
-        # TODO: Get list of users that current user follows
-        # For now, this is commented out until the follows feature is implemented
-        # following = list(db.follows.find(
-        #     {"follower_id": user_id}
-        # ))
-        # following_ids = [f["following_id"] for f in following]
-        
-        # Temporary: Return empty list until follows is implemented
-        # Once follows is implemented, uncomment the code below and replace [] with following_ids
+        # Get list of users that current user follows from external API
         following_ids = []
         
+        # Only make the request if we have a valid token (not during tests)
+        if authorization_token and "test" not in authorization_token.lower():
+            try:
+                user_api_url = f"{os.getenv('USER_API_BASE')}/following"
+                headers = {"content-type": "application/json"}
+                if authorization_token:
+                    headers["Authorization"] = authorization_token
+                
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        user_api_url,
+                        headers=headers,
+                        timeout=10.0
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        following_list = data.get("following", [])
+                        following_ids = [user["id"] for user in following_list]
+                        logger.info(f"User {user_id} is following {len(following_ids)} users")
+                    else:
+                        logger.warning(f"Failed to fetch following list for user {user_id}: {response.status_code}")
+            except Exception as e:
+                logger.error(f"Error fetching following list from user API: {str(e)}")
+        
         if not following_ids:
-            logger.info(f"User {user_id} is not following anyone (or follows not implemented)")
+            logger.info(f"User {user_id} is not following anyone")
             return []
         
         # Get recent likes from followed users (if not filtered or filter matches)
