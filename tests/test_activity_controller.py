@@ -195,3 +195,81 @@ class TestActivityEndpoints:
             assert like["song"]["title"] == "Enriched Song"
             assert like["song"]["artist"] == "Test Artist"
 
+    def test_filter_activity_by_type_like(self, client):
+        """Test filtering user activity by type: 'like'."""
+        # Create a song and like it
+        song = client.post("/songs", json={"title": "Liked Song", "duration": "180"}).json()["data"]
+        client.post(f"/likedSongs/{song['_id']}")
+        
+        # Play a song
+        client.post("/history", json={"songId": song["_id"]})
+        
+        # Create and publish a playlist
+        playlist = client.post("/playlists", json={
+            "name": "Test Playlist",
+            "description": "Test"
+        }).json()["data"]
+        client.post(f"/playlists/{playlist['id']}/publish")
+        
+        # Get activity filtered by 'like'
+        response = client.get("/activity/test_user_123?activity_type=like")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        
+        # Should only contain like activities
+        for activity in data:
+            assert activity["type"] == "like"
+
+    def test_filter_activity_by_type_play(self, client):
+        """Test filtering user activity by type: 'play'."""
+        # Create a song
+        song = client.post("/songs", json={"title": "Play Song", "duration": "200"}).json()["data"]
+        
+        # Like the song
+        client.post(f"/likedSongs/{song['_id']}")
+        
+        # Play the song
+        client.post("/history", json={"songId": song["_id"]})
+        
+        # Get activity filtered by 'play'
+        response = client.get("/activity/test_user_123?activity_type=play")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        
+        # Should only contain play activities
+        for activity in data:
+            assert activity["type"] == "play"
+
+    def test_filter_activity_by_type_playlist_published(self, client):
+        """Test filtering user activity by type: 'playlist_published'."""
+        # Create a song and like it
+        song = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        client.post(f"/likedSongs/{song['_id']}")
+        
+        # Create and publish a playlist
+        playlist = client.post("/playlists", json={
+            "name": "Published Playlist",
+            "description": "Test"
+        }).json()["data"]
+        client.post(f"/playlists/{playlist['id']}/publish")
+        
+        # Get activity filtered by 'playlist_published'
+        response = client.get("/activity/test_user_123?activity_type=playlist_published")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        
+        # Should only contain playlist_published activities
+        for activity in data:
+            assert activity["type"] == "playlist_published"
+
+    def test_filter_following_activity_by_type(self, client):
+        """Test filtering following activity by type."""
+        # Test with each activity type
+        for activity_type in ["like", "play", "playlist_published"]:
+            response = client.get(f"/activity?activity_type={activity_type}")
+            assert response.status_code == 200
+            data = response.json()["data"]
+            # Since follows is not implemented, should return empty list
+            assert isinstance(data, list)
+            assert len(data) == 0
+
