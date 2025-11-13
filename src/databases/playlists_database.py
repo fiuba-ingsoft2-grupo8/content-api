@@ -12,9 +12,8 @@ from auth import is_authorized  # usado en get_playlist (acceso privado)
 
 async def create_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False):
     db = get_db()
-    logger.info(f"user id={userId}")
     try:
-        publish_time = datetime.now(timezone.utc)
+        publish_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         playlist_doc = {
             "name": name,
             "description": description,
@@ -187,10 +186,20 @@ async def delete_playlist(existing_playlist):
 
 
 async def change_playlist_state(existing_playlist, state):
+    """
+    Change the published state of a playlist.
+    When publishing (state=True), updates published_at to current server time.
+    """
     db = get_db()
+    update_fields = {"is_published": state}
+    
+    # When publishing, update the published_at timestamp to current server time
+    if state:
+        update_fields["published_at"] = datetime.now(timezone.utc)
+    
     result = db.playlists.update_one(
         {"_id": existing_playlist["_id"]},
-        {"$set": {"is_published": state}}
+        {"$set": update_fields}
     )
     return result.modified_count > 0
 

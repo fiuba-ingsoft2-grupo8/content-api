@@ -10,7 +10,42 @@ from fastapi import Header
 
 router = APIRouter()
 
-@router.get("/")
+@router.get(
+    "/",
+    responses={
+        200: {
+            "description": "Search results",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "collections": {
+                            "playlists": [
+                                {
+                                    "_id": "507f1f77bcf86cd799439011",
+                                    "name": "Rock Classics",
+                                    "userId": "user_123",
+                                    "is_published": True,
+                                    "songs": []
+                                }
+                            ],
+                            "songs": [
+                                {
+                                    "_id": "507f1f77bcf86cd799439012",
+                                    "title": "Bohemian Rhapsody",
+                                    "artist": "Queen",
+                                    "duration": "354"
+                                }
+                            ],
+                            "users": [
+                                {"id": "user_456"}
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def search(str_name: str, user: dict = Depends(verify_token), authorization: str = Header(None)):
     logger.info(f"Buscando collections con nombre parecido a: {str_name}")
 
@@ -50,4 +85,4 @@ async def search(str_name: str, user: dict = Depends(verify_token), authorizatio
         if uid:
             result["users"].append({"id": uid})
 
-    return JSONResponse(content={"collections": result})
+    return {"collections": result}

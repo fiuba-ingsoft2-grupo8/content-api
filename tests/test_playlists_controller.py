@@ -162,6 +162,38 @@ class TestPlaylistController:
         assert response.status_code == 200
         assert response.json()["data"] is True
 
+    def test_publish_playlist_updates_timestamp(self, client):
+        """Test that publishing a playlist updates the publishedAt timestamp to current server time."""
+        import time
+        
+        # Create a private playlist
+        playlist_create = client.post("/playlists", json={
+            "name": "Timestamp Test Playlist",
+            "description": "Testing timestamp update",
+            "isPublished": False,
+            "userId": "test_user"
+        }).json()["data"]
+        
+        original_published_at = playlist_create["publishedAt"]
+        
+        # Wait a bit to ensure time difference
+        time.sleep(0.1)
+        
+        # Publish the playlist
+        client.post(f"/playlists/{playlist_create['id']}/publish")
+        
+        # Get the updated playlist
+        updated_playlist = client.get(f"/playlists/{playlist_create['id']}").json()["data"]
+        
+        # Verify the timestamp was updated
+        assert updated_playlist["isPublished"] is True
+        assert updated_playlist["publishedAt"] != original_published_at
+        
+        # Parse timestamps and verify the published one is more recent
+        original_time = datetime.fromisoformat(original_published_at.replace("Z", "+00:00"))
+        updated_time = datetime.fromisoformat(updated_playlist["publishedAt"].replace("Z", "+00:00"))
+        assert updated_time > original_time, "Published timestamp should be more recent than creation timestamp"
+
     def test_publish_nonexistent_playlist(self, client):
         """Test publishing a playlist that doesn't exist."""
         response = client.post("/playlists/507f1f77bcf86cd799439011/publish")

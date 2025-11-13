@@ -9,7 +9,29 @@ from auth import verify_token, is_authorized
 
 router = APIRouter()
 
-@router.post("/", status_code=201)
+@router.post(
+    "/",
+    status_code=201,
+    responses={
+        201: {
+            "description": "Song created successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "_id": "507f1f77bcf86cd799439011",
+                            "title": "Bohemian Rhapsody",
+                            "artist": "Queen",
+                            "duration": "354",
+                            "artistId": "artist_123",
+                            "isLiked": False
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def create_song(song: schemas.CreateSongRequest, user: dict = Depends(verify_token)):
     """
     Create a new song in the database.
@@ -29,7 +51,38 @@ async def create_song(song: schemas.CreateSongRequest, user: dict = Depends(veri
     return { "data": serialize_song(db_song) }
 
 
-@router.get("/")
+@router.get(
+    "/",
+    responses={
+        200: {
+            "description": "List of songs",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": [
+                            {
+                                "_id": "507f1f77bcf86cd799439011",
+                                "title": "Bohemian Rhapsody",
+                                "artist": "Queen",
+                                "duration": "354",
+                                "artistId": "artist_123",
+                                "isLiked": False
+                            },
+                            {
+                                "_id": "507f1f77bcf86cd799439012",
+                                "title": "Imagine",
+                                "artist": "John Lennon",
+                                "duration": "183",
+                                "artistId": "artist_456",
+                                "isLiked": True
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_all_songs(includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
     Retrieve all songs from the database.
@@ -49,7 +102,28 @@ async def get_all_songs(includeUnpublished: bool = False, user: dict = Depends(v
         raise
 
 
-@router.get("/{id}")
+@router.get(
+    "/{id}",
+    responses={
+        200: {
+            "description": "Song details",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "_id": "507f1f77bcf86cd799439011",
+                            "title": "Bohemian Rhapsody",
+                            "artist": "Queen",
+                            "duration": "354",
+                            "artistId": "artist_123",
+                            "isLiked": False
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def get_song(id: str, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
     Retrieve a specific song by its ID.
@@ -82,7 +156,29 @@ async def get_song(id: str, includeUnpublished: bool = False, user: dict = Depen
         raise
 
 
-@router.put("/{id}", status_code=200)
+@router.put(
+    "/{id}",
+    status_code=200,
+    responses={
+        200: {
+            "description": "Song updated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "_id": "507f1f77bcf86cd799439011",
+                            "title": "Bohemian Rhapsody (Remastered)",
+                            "artist": "Queen",
+                            "duration": "354",
+                            "artistId": "artist_123",
+                            "isLiked": False
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def update_song(id: str, song: schemas.UpdateSongRequest, user: dict = Depends(verify_token)):
     """
     Update an existing song's information.
