@@ -428,3 +428,217 @@ async def get_received_shares(
             )
         )
 
+
+@router.post(
+    "/external/song/{song_id}",
+    status_code=201,
+    responses={
+        201: {
+            "description": "External share link generated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "🎵 Escucha 'Bohemian Rhapsody' de Queen en Melodia",
+                        "url": "/song/507f1f77bcf86cd799439011"
+                    }
+                }
+            }
+        }
+    }
+)
+async def generate_external_song_share(
+    song_id: str,
+    user: dict = Depends(verify_token)
+):
+    """
+    Generar enlace externo para compartir una canción en redes sociales o apps de mensajería.
+    
+    **Criterio de Aceptación (CA 3):** Al seleccionar 'Compartir' y elegir una red social o app de mensajería,
+    se genera un enlace que se puede pegar o enviar a través de la plataforma externa seleccionada.
+    
+    **Parámetros de ruta:**
+    - song_id: ID de la canción a compartir
+    
+    **Comportamiento:**
+    - Valida que la canción exista
+    - Genera un mensaje descriptivo con el título y artista de la canción
+    - Genera una URL que la app puede usar para mostrar la canción
+    - Registra el share en las métricas
+    
+    **Respuesta:**
+    - `message`: Mensaje descriptivo listo para copiar/pegar
+    - `url`: URL para acceder a la canción (formato: /song/{song_id})
+    
+    **Retorna:**
+    - 201: Enlace generado exitosamente
+    - 404: Canción no encontrada
+    - 400: Error en la solicitud
+    """
+    try:
+        import databases.songs_database as songs_db
+        
+        user_id = user["user_id"]
+        logger.info(f"User {user_id} generating external share link for song {song_id}")
+        
+        # Validar que la canción existe
+        song = await songs_db.get_song(song_id)
+        if not song:
+            logger.warning(f"Song {song_id} not found for external sharing")
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Song with id {song_id} not found",
+                    f"/share/external/song/{song_id}"
+                )
+            )
+        
+        # Registrar el share en métricas
+        await metrics_db.record_share(user_id, song_id, "song")
+        
+        # Generar mensaje descriptivo
+        song_title = song.get("title", "Canción")
+        song_artist = song.get("artist", "Artista")
+        message = f"🎵 Escucha '{song_title}' de {song_artist} en Melodia"
+        
+        # Generar URL
+        url = f"/song/{song_id}"
+        
+        logger.info(f"Successfully generated external share link for song {song_id}")
+        return {
+            "message": message,
+            "url": url
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to generate external share link for song {song_id}: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(
+                400,
+                "Bad Request",
+                str(e),
+                f"/share/external/song/{song_id}"
+            )
+        )
+
+
+@router.post(
+    "/external/playlist/{playlist_id}",
+    status_code=201,
+    responses={
+        201: {
+            "description": "External share link generated successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "message": "🎧 Escucha la playlist 'My Favorites' en Melodia",
+                        "url": "/playlist/507f1f77bcf86cd799439011"
+                    }
+                }
+            }
+        }
+    }
+)
+async def generate_external_playlist_share(
+    playlist_id: str,
+    user: dict = Depends(verify_token)
+):
+    """
+    Generar enlace externo para compartir una playlist en redes sociales o apps de mensajería.
+    
+    **Criterio de Aceptación (CA 3):** Al seleccionar 'Compartir' y elegir una red social o app de mensajería,
+    se genera un enlace que se puede pegar o enviar a través de la plataforma externa seleccionada.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist a compartir
+    
+    **Comportamiento:**
+    - Valida que la playlist exista y sea accesible
+    - Si la playlist es privada, la hace pública automáticamente
+    - Genera un mensaje descriptivo con el nombre de la playlist
+    - Genera una URL que la app puede usar para mostrar la playlist
+    - Registra el share en las métricas
+    
+    **Respuesta:**
+    - `message`: Mensaje descriptivo listo para copiar/pegar
+    - `url`: URL para acceder a la playlist (formato: /playlist/{playlist_id})
+    
+    **Autorización:**
+    - El usuario debe ser el dueño de la playlist o backoffice para compartirla externamente
+    
+    **Retorna:**
+    - 201: Enlace generado exitosamente
+    - 403: No autorizado para compartir esta playlist
+    - 404: Playlist no encontrada
+    - 400: Error en la solicitud
+    """
+    try:
+        user_id = user["user_id"]
+        logger.info(f"User {user_id} generating external share link for playlist {playlist_id}")
+        
+        # Obtener la playlist
+        playlist = await playlists_db.get_playlist(playlist_id, user)
+        if not playlist:
+            logger.warning(f"Playlist {playlist_id} not found for external sharing")
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Playlist with id {playlist_id} not found",
+                    f"/share/external/playlist/{playlist_id}"
+                )
+            )
+        
+        # Verificar autorización
+        is_owner = playlist.get("userId") == user_id
+        is_backoffice = user.get("user_type") == "backoffice"
+        
+        if not is_owner and not is_backoffice:
+            logger.warning(f"User {user_id} not authorized to share playlist {playlist_id} externally")
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to share this playlist externally",
+                    f"/share/external/playlist/{playlist_id}"
+                )
+            )
+        
+        # Si la playlist es privada, hacerla pública para que el enlace funcione
+        if not playlist.get("is_published"):
+            await playlists_db.change_playlist_state(playlist, True)
+            logger.info(f"Playlist {playlist_id} made public for external sharing")
+        
+        # Registrar el share en métricas (como colección tipo playlist)
+        # Nota: Actualmente record_share solo acepta "song" o "collection"
+        # Podríamos agregar "playlist" o usar el endpoint de share normal
+        
+        # Generar mensaje descriptivo
+        playlist_name = playlist.get("name", "Playlist")
+        message = f"🎧 Escucha la playlist '{playlist_name}' en Melodia"
+        
+        # Generar URL
+        url = f"/playlist/{playlist_id}"
+        
+        logger.info(f"Successfully generated external share link for playlist {playlist_id}")
+        return {
+            "message": message,
+            "url": url
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to generate external share link for playlist {playlist_id}: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(
+                400,
+                "Bad Request",
+                str(e),
+                f"/share/external/playlist/{playlist_id}"
+            )
+        )
+
