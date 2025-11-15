@@ -71,21 +71,25 @@ async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = 
                 }
                 activities.append(activity)
         
-        # TODO: Add shares when implemented
-        # shares = list(db.shares.find(
-        #     {"user_id": user_id}
-        # ).sort("created_at", -1).limit(limit))
-        # 
-        # for share in shares:
-        #     activity = {
-        #         "type": "share",
-        #         "userId": user_id,
-        #         "targetId": str(share["target_id"]),
-        #         "targetType": share["target_type"],
-        #         "timestamp": share["created_at"],
-        #         "createdAt": share["created_at"]
-        #     }
-        #     activities.append(activity)
+        # Get shares
+        if activity_type is None or activity_type == "share":
+            shares = list(db.shares.find(
+                {"user_id": user_id}
+            ).sort("created_at", -1).limit(limit))
+            
+            for share in shares:
+                activity = {
+                    "type": "share",
+                    "userId": user_id,
+                    "targetId": str(share["target_id"]),
+                    "targetType": share["target_type"],
+                    "timestamp": share["created_at"],
+                    "createdAt": share["created_at"]
+                }
+                # Add recipient if it's a direct share
+                if "recipient_id" in share:
+                    activity["recipientId"] = share["recipient_id"]
+                activities.append(activity)
         
         # Sort all activities by timestamp (most recent first)
         activities.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -196,21 +200,25 @@ async def get_following_activity(user_id: str, authorization_token: str, limit: 
                 }
                 activities.append(activity)
         
-        # TODO: Add shares when implemented
-        # shares = list(db.shares.find(
-        #     {"user_id": {"$in": following_ids}}
-        # ).sort("created_at", -1).limit(limit * 2))
-        # 
-        # for share in shares:
-        #     activity = {
-        #         "type": "share",
-        #         "userId": share["user_id"],
-        #         "targetId": str(share["target_id"]),
-        #         "targetType": share["target_type"],
-        #         "timestamp": share["created_at"],
-        #         "createdAt": share["created_at"]
-        #     }
-        #     activities.append(activity)
+        # Get shares from followed users
+        if activity_type is None or activity_type == "share":
+            shares = list(db.shares.find(
+                {"user_id": {"$in": following_ids}}
+            ).sort("created_at", -1).limit(limit * 2))
+            
+            for share in shares:
+                activity = {
+                    "type": "share",
+                    "userId": share["user_id"],
+                    "targetId": str(share["target_id"]),
+                    "targetType": share["target_type"],
+                    "timestamp": share["created_at"],
+                    "createdAt": share["created_at"]
+                }
+                # Add recipient if it's a direct share
+                if "recipient_id" in share:
+                    activity["recipientId"] = share["recipient_id"]
+                activities.append(activity)
         
         # Sort all activities by timestamp (most recent first)
         activities.sort(key=lambda x: x["timestamp"], reverse=True)
@@ -270,6 +278,40 @@ async def enrich_activity_with_details(activities: list):
                         "artist": song.get("artist", ""),
                         "coverUrl": song.get("coverUrl")
                     }
+            
+            # Enrich shares
+            elif activity["type"] == "share":
+                target_type = activity["targetType"]
+                target_id = activity["targetId"]
+                
+                if target_type == "song":
+                    song = db.songs.find_one({"_id": ObjectId(target_id)})
+                    if song:
+                        enriched_activity["song"] = {
+                            "_id": str(song["_id"]),
+                            "title": song.get("title", ""),
+                            "artist": song.get("artist", ""),
+                            "coverUrl": song.get("coverUrl")
+                        }
+                elif target_type == "collection":
+                    collection = db.collections.find_one({"_id": ObjectId(target_id)})
+                    if collection:
+                        enriched_activity["collection"] = {
+                            "_id": str(collection["_id"]),
+                            "name": collection.get("name", ""),
+                            "artistName": collection.get("artistName", ""),
+                            "coverUrl": collection.get("coverUrl"),
+                            "type": collection.get("type", "")
+                        }
+                elif target_type == "playlist":
+                    playlist = db.playlists.find_one({"_id": ObjectId(target_id)})
+                    if playlist:
+                        enriched_activity["playlist"] = {
+                            "_id": str(playlist["_id"]),
+                            "name": playlist.get("name", ""),
+                            "description": playlist.get("description", ""),
+                            "coverUrl": playlist.get("coverUrl")
+                        }
             
             # Playlist published already has basic info, could add more if needed
             # elif activity["type"] == "playlist_published":

@@ -16,6 +16,28 @@ router = APIRouter()
 
 @router.post("/")
 async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = Depends(verify_token)):
+    """
+    Agregar una canción al historial de reproducción del usuario.
+    
+    Este endpoint registra que el usuario ha reproducido una canción, agregándola a su historial
+    de escucha. También registra la reproducción en las métricas permanentes para estadísticas del artista.
+    
+    **Comportamiento:**
+    - Si el historial del usuario está pausado, no se registra la reproducción
+    - Valida que la canción exista antes de registrar
+    - Registra la reproducción en dos lugares: historial del usuario y métricas permanentes
+    - Si ya existe la canción en el historial, actualiza la fecha de última reproducción
+    
+    **Cuerpo de la solicitud:**
+    - songId: ID de la canción reproducida
+    - progress: Progreso de reproducción en segundos (opcional)
+    
+    **Retorna:**
+    - 201: Canción agregada al historial exitosamente
+    - 200: Historial pausado, reproducción no registrada
+    - 404: Canción no encontrada
+    - 400: Error en la solicitud
+    """
     logger.info(f"Adding song with id {request.songId} to user {user['user_id']}'s listening history")
     
     # Check if user's history is paused
@@ -93,20 +115,26 @@ async def get_history(
     search: str = None
 ):
     """
-    Retrieve the listening history for the authenticated user.
+    Obtener el historial de reproducción del usuario autenticado.
     
-    Returns a list of songs ordered by most recently played first.
+    Este endpoint retorna la lista completa de canciones que el usuario ha reproducido,
+    ordenadas desde la más reciente hasta la más antigua. Incluye información detallada
+    de cada canción y el progreso de reproducción guardado.
     
-    **Optional Query Parameters:**
-    - `search`: Filter history by song title or artist name (case-insensitive)
+    **Parámetros de consulta opcionales:**
+    - `search`: Filtrar el historial por título de canción o nombre de artista (no distingue mayúsculas/minúsculas)
     
-    **Response:**
-    - List of history entries, each containing:
-        - `song`: Song details (_id, title, artist, coverUrl)
-        - `playedAt`: ISO 8601 timestamp of when the song was last played
-        - `progress`: Playback progress in seconds
+    **Respuesta:**
+    - Lista de entradas del historial, cada una conteniendo:
+        - `song`: Detalles de la canción (_id, title, artist, coverUrl)
+        - `playedAt`: Timestamp ISO 8601 de cuándo se reprodujo la canción por última vez
+        - `progress`: Progreso de reproducción en segundos
     
-    **Note:** If the user has no listening history, returns an empty list in the data field.
+    **Nota:** Si el usuario no tiene historial de reproducción, retorna una lista vacía en el campo data.
+    
+    **Retorna:**
+    - 200: Lista del historial de reproducción
+    - 400: Error en la solicitud
     """
     try:
         logger.info(f"Fetching listening history for user {user['user_id']} with search={search}")
@@ -146,7 +174,22 @@ async def get_history(
 @router.put("/")
 async def update_song_progress(request: schemas.ListeningHistoryRequest, user: dict = Depends(verify_token)):
     """
-    Update the progress of a song in the user's listening history.
+    Actualizar el progreso de reproducción de una canción en el historial.
+    
+    Este endpoint permite actualizar el punto de reproducción guardado de una canción en el historial
+    del usuario. Es útil para permitir que el usuario continúe reproduciendo desde donde dejó
+    una canción previamente escuchada.
+    
+    **Cuerpo de la solicitud:**
+    - songId: ID de la canción
+    - progress: Progreso de reproducción en segundos (posición actual en la canción)
+    
+    **Validaciones:**
+    - La canción debe existir en el historial del usuario
+    
+    **Retorna:**
+    - 200: Progreso actualizado exitosamente
+    - 400: Error en la actualización (ej: canción no está en el historial)
     """
     logger.info(f"Updating progress for song {request.songId} for user {user['user_id']}")
     
@@ -164,7 +207,17 @@ async def update_song_progress(request: schemas.ListeningHistoryRequest, user: d
 @router.delete("/")
 async def clear_history(user: dict = Depends(verify_token)):
     """
-    Clear all listening history for a specific user.
+    Eliminar todo el historial de reproducción del usuario.
+    
+    Este endpoint borra permanentemente todas las entradas del historial de escucha del usuario autenticado.
+    Es una operación irreversible que elimina todo el registro de canciones reproducidas.
+    
+    **Importante:** Esta operación NO afecta las métricas permanentes de los artistas (contadores de reproducciones),
+    solo elimina el historial personal del usuario.
+    
+    **Retorna:**
+    - 200: Historial eliminado exitosamente
+    - 400: Error al intentar eliminar el historial
     """
     try:
         await history_db.clear_user_history(user["user_id"])
@@ -204,20 +257,28 @@ async def clear_history(user: dict = Depends(verify_token)):
 )
 async def toggle_history_state(user: dict = Depends(verify_token)):
     """
-    Toggle the pause/resume state of the user's listening history.
+    Alternar el estado de pausa/activación del historial de reproducción.
     
-    **Behavior:**
-    - If history is currently **active**, it will be **paused**
-    - If history is currently **paused**, it will be **resumed**
-    - First time users: Creates a new state record and pauses history
+    Este endpoint permite al usuario pausar o reanudar el registro de su historial de escucha.
+    Es útil para sesiones privadas o cuando el usuario no quiere que se registren ciertas reproducciones.
     
-    **When history is paused:**
-    - Songs will NOT be added to listening history
-    - Existing history remains accessible
+    **Comportamiento:**
+    - Si el historial está actualmente **activo**, se **pausará**
+    - Si el historial está actualmente **pausado**, se **reanudará**
+    - Para usuarios nuevos: Crea un nuevo registro de estado y pausa el historial
     
-    **Response:**
-    - `message`: "History paused" or "History resumed"
-    - `isPaused`: Current state after toggle (true/false)
+    **Cuando el historial está pausado:**
+    - Las canciones NO se agregarán al historial de reproducción
+    - El historial existente permanece accesible y no se modifica
+    - Las métricas de artistas se siguen registrando normalmente
+    
+    **Respuesta:**
+    - `message`: "History paused" o "History resumed"
+    - `isPaused`: Estado actual después del toggle (true/false)
+    
+    **Retorna:**
+    - 200: Estado alternado exitosamente
+    - 500: Error al alternar el estado
     """
     try:
         result = await history_db.toggle_history_state(user["user_id"])
@@ -264,17 +325,27 @@ async def toggle_history_state(user: dict = Depends(verify_token)):
 )
 async def get_history_state(user: dict = Depends(verify_token)):
     """
-    Check the current pause state of the user's listening history.
+    Consultar el estado actual de pausa del historial de reproducción.
     
-    **Returns:**
-    - `isPaused`: `true` if history is paused, `false` if active (default)
+    Este endpoint permite verificar si el historial del usuario está actualmente pausado o activo.
+    Es útil para mostrar el estado correcto en la interfaz de usuario y determinar si se deben
+    registrar las reproducciones.
     
-    **Default behavior:**
-    - Users who have never paused their history will get `isPaused: false`
+    **Retorna:**
+    - `isPaused`: `true` si el historial está pausado, `false` si está activo (por defecto)
     
-    **Use case:**
-    - Check state before attempting to add songs to history
-    - Display pause/resume button state in UI
+    **Comportamiento por defecto:**
+    - Los usuarios que nunca han pausado su historial recibirán `isPaused: false`
+    - El estado se crea automáticamente la primera vez que se consulta
+    
+    **Casos de uso:**
+    - Verificar el estado antes de intentar agregar canciones al historial
+    - Mostrar el estado correcto del botón pausar/reanudar en la UI
+    - Sincronizar el estado entre diferentes dispositivos o sesiones
+    
+    **Retorna:**
+    - 200: Estado del historial
+    - 500: Error al obtener el estado
     """
     try:
         state = await history_db.get_history_state(user["user_id"])

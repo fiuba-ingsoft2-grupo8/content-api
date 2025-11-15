@@ -34,11 +34,27 @@ router = APIRouter()
 )
 async def create_song(song: schemas.CreateSongRequest, user: dict = Depends(verify_token)):
     """
-    Create a new song in the database.
+    Crear una nueva canción en la base de datos.
     
-    This endpoint accepts song data (title and artist) and creates a new song
-    record in the database. It handles database operations with proper error
-    handling and transaction management.
+    Este endpoint permite a un artista registrar una nueva canción en el sistema. La canción
+    se crea con información básica (título, duración) y se asocia automáticamente al artista
+    autenticado. Las canciones creadas pueden posteriormente ser agregadas a colecciones o playlists.
+    
+    **Cuerpo de la solicitud:**
+    - title: Título de la canción (requerido)
+    - duration: Duración de la canción en segundos (requerido)
+    
+    **Comportamiento:**
+    - El artista (stage_name) se obtiene automáticamente del usuario autenticado
+    - La canción se crea asociada al artistId del usuario
+    - Se inicializa sin portada ni colección asignada
+    
+    **Validaciones:**
+    - El usuario debe tener un stage_name (ser artista)
+    
+    **Retorna:**
+    - 201: Canción creada exitosamente
+    - 400: Error en los datos proporcionados o usuario no es artista
     """
     logger.info(f"Creating song: title='{song.title}', artist='{user['stage_name']}', duration='{song.duration}'")
 
@@ -85,13 +101,22 @@ async def create_song(song: schemas.CreateSongRequest, user: dict = Depends(veri
 )
 async def get_all_songs(includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
-    Retrieve all songs from the database.
+    Obtener todas las canciones disponibles en el catálogo.
     
-    By default, only returns published songs (songs in published collections or standalone songs).
-    If includeUnpublished=true, returns all songs owned by the requesting user.
+    Este endpoint retorna el listado completo de canciones del sistema. Por defecto solo muestra
+    canciones publicadas (en colecciones ya lanzadas o canciones standalone), pero puede incluir
+    canciones no publicadas del usuario si se especifica.
     
-    Args:
-        includeUnpublished: If true, includes unpublished songs owned by the user
+    **Parámetros de consulta:**
+    - includeUnpublished: Si es true, incluye canciones no publicadas del usuario autenticado (por defecto: false)
+    
+    **Comportamiento:**
+    - Por defecto: solo canciones en colecciones publicadas o canciones standalone
+    - Con includeUnpublished=true: incluye también canciones del usuario en colecciones no publicadas
+    - Útil para que artistas vean su catálogo completo incluyendo lanzamientos futuros
+    
+    **Retorna:**
+    - 200: Lista completa de canciones que cumplan los criterios
     """
     logger.info(f"Fetching all songs (includeUnpublished={includeUnpublished})")
     try:
@@ -126,14 +151,26 @@ async def get_all_songs(includeUnpublished: bool = False, user: dict = Depends(v
 )
 async def get_song(id: str, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
-    Retrieve a specific song by its ID.
+    Obtener una canción específica por su ID.
     
-    By default, only returns the song if it's published (in a published collection or standalone).
-    If includeUnpublished=true and the user is the owner, allows viewing unpublished songs.
+    Este endpoint retorna los detalles completos de una canción incluyendo título, artista,
+    duración, portada y estado de "like" para el usuario autenticado. Por defecto solo retorna
+    canciones publicadas, pero puede mostrar canciones no publicadas del usuario si se especifica.
     
-    Args:
-        id: Song ID
-        includeUnpublished: If true, allows viewing unpublished songs owned by the user
+    **Parámetros de ruta:**
+    - id: ID de la canción
+    
+    **Parámetros de consulta:**
+    - includeUnpublished: Si es true, permite ver canciones no publicadas del usuario (por defecto: false)
+    
+    **Comportamiento:**
+    - Por defecto: solo canciones en colecciones publicadas o standalone
+    - Con includeUnpublished=true y siendo el dueño: permite ver canciones en colecciones no publicadas
+    - Incluye el estado de "like" (isLiked) para el usuario autenticado
+    
+    **Retorna:**
+    - 200: Detalles completos de la canción con estado de like
+    - 404: Canción no encontrada o no publicada aún
     """
     logger.info(f"Fetching song with id={id} (includeUnpublished={includeUnpublished})")
     try:
@@ -181,12 +218,33 @@ async def get_song(id: str, includeUnpublished: bool = False, user: dict = Depen
 )
 async def update_song(id: str, song: schemas.UpdateSongRequest, user: dict = Depends(verify_token)):
     """
-    Update an existing song's information.
+    Actualizar la información de una canción existente.
     
-    This endpoint updates the title and artist of an existing song identified by ID.
-    If the song doesn't exist, returns a 404 Not Found error. The update operation
-    is performed within a database transaction for data consistency.
-    Only the owner or backoffice users can update songs (including unpublished ones).
+    Este endpoint permite modificar los metadatos de una canción (título, artista, duración).
+    La actualización se realiza dentro de una transacción de base de datos para garantizar
+    la consistencia de los datos. Solo el artista dueño o usuarios backoffice pueden actualizar canciones.
+    
+    **Parámetros de ruta:**
+    - id: ID de la canción a actualizar
+    
+    **Cuerpo de la solicitud:**
+    - title: Nuevo título de la canción (opcional)
+    - artist: Nuevo nombre de artista (opcional)
+    - duration: Nueva duración en segundos (opcional)
+    
+    **Autorización:**
+    - Solo el artista dueño de la canción o usuarios backoffice pueden actualizarla
+    - Se pueden actualizar canciones no publicadas
+    
+    **Validaciones:**
+    - La canción debe existir
+    - El usuario debe ser el dueño o backoffice
+    
+    **Retorna:**
+    - 200: Canción actualizada exitosamente
+    - 400: Error en los datos proporcionados
+    - 403: No autorizado para actualizar esta canción
+    - 404: Canción no encontrada
     """
     logger.info(
         f"Updating song with id={id}: title='{song.title}', artist='{song.artist}, duration='{song.duration}'"
@@ -233,12 +291,33 @@ async def update_song(id: str, song: schemas.UpdateSongRequest, user: dict = Dep
 @router.delete("/{id}", status_code=204)
 async def delete_song(id: str, user: dict = Depends(verify_token)):
     """
-    Delete a song from the database.
+    Eliminar una canción de la base de datos permanentemente.
     
-    This endpoint permanently removes a song record from the database.
-    If the song doesn't exist, returns a 404 Not Found error.
-    The operation also removes the song from all playlists due to foreign key constraints.
-    Only the owner or backoffice users can delete songs (including unpublished ones).
+    Este endpoint borra completamente una canción del sistema. La eliminación es permanente
+    e irreversible. La operación también remueve la canción de todas las playlists y colecciones
+    donde esté incluida debido a las restricciones de clave foránea en la base de datos.
+    
+    **Parámetros de ruta:**
+    - id: ID de la canción a eliminar
+    
+    **Autorización:**
+    - Solo el artista dueño de la canción o usuarios backoffice pueden eliminarla
+    - Se pueden eliminar canciones no publicadas
+    
+    **Validaciones:**
+    - La canción debe existir
+    - El usuario debe ser el dueño o backoffice
+    
+    **Efectos de la eliminación:**
+    - La canción se elimina permanentemente
+    - Se remueve de todas las playlists donde estaba incluida
+    - Se remueve de todas las colecciones donde estaba incluida
+    - Las métricas asociadas se mantienen para histórico
+    
+    **Retorna:**
+    - 204: Canción eliminada exitosamente (sin contenido)
+    - 403: No autorizado para eliminar esta canción
+    - 404: Canción no encontrada
     """
     logger.info(f"Deleting song with id={id}")
     

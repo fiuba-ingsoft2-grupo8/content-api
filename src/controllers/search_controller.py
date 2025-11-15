@@ -47,6 +47,30 @@ router = APIRouter()
     }
 )
 async def search(str_name: str, user: dict = Depends(verify_token), authorization: str = Header(None)):
+    """
+    Buscar contenido por nombre o término de búsqueda.
+    
+    Este endpoint permite realizar búsquedas globales a través de diferentes tipos de contenido
+    (playlists, canciones, usuarios) utilizando un término de búsqueda. Los resultados se agrupan
+    por tipo y se enriquecen con información completa de cada elemento.
+    
+    **Parámetros de consulta:**
+    - str_name: Término de búsqueda para buscar en nombres de playlists, canciones y usuarios
+    
+    **Tipos de resultados:**
+    - **playlists**: Playlists que coinciden con el término de búsqueda
+    - **songs**: Canciones que coinciden con el término de búsqueda
+    - **users**: Usuarios que coinciden con el término de búsqueda
+    
+    **Comportamiento:**
+    - La búsqueda es case-insensitive y busca coincidencias parciales
+    - Los resultados incluyen detalles completos de cada elemento
+    - Se utiliza el servicio de usuarios para expandir información de usuarios
+    
+    **Retorna:**
+    - 200: Resultados de búsqueda agrupados por tipo (collections: {playlists, songs, users})
+    - 404: No se encontraron resultados
+    """
     logger.info(f"Buscando collections con nombre parecido a: {str_name}")
 
     collection_ids = await collections_db.get_ids_by_name(str_name, token=authorization)

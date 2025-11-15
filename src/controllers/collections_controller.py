@@ -25,6 +25,26 @@ def _parse_iso(dt: str | None):
 
 @router.post("/{collection_id}/upload-cover", status_code=201)
 async def upload_collection_cover(collection_id: str, file: UploadFile = File(...), user: dict = Depends(verify_token)):
+    """
+    Subir una imagen de portada para una colección.
+    
+    Este endpoint permite subir y actualizar la imagen de portada (cover) de una colección
+    (álbum, EP o single). La imagen se sube al almacenamiento de Supabase y se actualiza
+    la URL de la portada en la base de datos.
+    
+    **Parámetros:**
+    - collection_id: ID de la colección a la que se le subirá la portada
+    - file: Archivo de imagen a subir
+    
+    **Autorización:**
+    - Solo el artista dueño de la colección o usuarios backoffice pueden subir portadas
+    
+    **Retorna:**
+    - 201: Portada subida y actualizada exitosamente
+    - 401: No autorizado para modificar esta colección
+    - 404: Colección no encontrada
+    - 500: Error interno del servidor
+    """
     try:
         collection = await collections_db.get_collection(collection_id)
         if collection is None:
@@ -107,6 +127,29 @@ async def upload_collection_cover(collection_id: str, file: UploadFile = File(..
     }
 )
 async def create_collection(collection: schemas.CreateCollectionRequest, user: dict = Depends(verify_token)):
+    """
+    Crear una nueva colección (álbum, EP o single).
+    
+    Este endpoint permite a un artista crear una nueva colección musical. Una colección agrupa
+    canciones bajo un lanzamiento común y puede ser de tipo álbum, EP o single. Se puede especificar
+    una fecha de lanzamiento futura para programar publicaciones, así como releases anticipados de canciones individuales.
+    
+    **Información requerida:**
+    - name: Nombre de la colección
+    - type: Tipo de colección (album, single, ep)
+    - genre: Género musical
+    - releaseDate: Fecha de lanzamiento (puede ser futura para programar)
+    - songs: Lista de canciones con sus respectivas fechas de early release (opcional)
+    - credits: Créditos de producción, colaboradores, etc. (opcional)
+    
+    **Validaciones:**
+    - El usuario debe ser un artista (tener stage_name)
+    - Las canciones especificadas deben existir
+    
+    **Retorna:**
+    - 201: Colección creada exitosamente con la lista de canciones
+    - 400: Datos inválidos o usuario no es artista
+    """
     logger.info(
         f"Creating collection {collection.name}"
     )
@@ -159,6 +202,24 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
 
 @router.delete("/{collection_id}", status_code=204)
 async def delete_collection(collection_id: str, user: dict = Depends(verify_token)):
+    """
+    Eliminar una colección permanentemente.
+    
+    Este endpoint permite eliminar una colección completa de la base de datos.
+    La eliminación es permanente y también elimina las relaciones de la colección
+    con sus canciones, aunque las canciones en sí mismas no se eliminan.
+    
+    **Parámetros:**
+    - collection_id: ID de la colección a eliminar
+    
+    **Autorización:**
+    - Solo el artista dueño de la colección o usuarios backoffice pueden eliminarla
+    
+    **Retorna:**
+    - 204: Colección eliminada exitosamente (sin contenido)
+    - 403: No autorizado para eliminar esta colección
+    - 404: Colección no encontrada
+    """
     logger.info(f"Deleting collection with id={collection_id}")
 
     collection = await collections_db.get_collection(collection_id)
@@ -192,6 +253,32 @@ async def delete_collection(collection_id: str, user: dict = Depends(verify_toke
 
 @router.put("/{collection_id}", status_code=200)
 async def update_collection(collection_id: str, update_request: schemas.UpdateCollectionRequest, user: dict = Depends(verify_token)):
+    """
+    Actualizar la información de una colección existente.
+    
+    Este endpoint permite modificar los metadatos de una colección (nombre, tipo, género, portada, créditos)
+    así como actualizar la lista de canciones y su orden. Solo se actualizan los campos proporcionados,
+    los campos omitidos permanecen sin cambios.
+    
+    **Campos actualizables:**
+    - name: Nombre de la colección
+    - type: Tipo (album, single, ep)
+    - genre: Género musical
+    - coverUrl: URL de la portada
+    - credits: Información de créditos
+    - songs: Lista completa de canciones con orden y fechas de early release
+    
+    **Autorización:**
+    - Solo el artista dueño o usuarios backoffice pueden actualizar colecciones
+    
+    **Nota:** Si se proporciona una nueva lista de canciones, reemplaza completamente la lista anterior.
+    
+    **Retorna:**
+    - 200: Colección actualizada exitosamente
+    - 403: No autorizado para actualizar esta colección
+    - 404: Colección no encontrada
+    - 500: Error interno del servidor
+    """
     logger.info(f"Updating collection {collection_id}")
     try:
         collection = await collections_db.get_collection(collection_id)
@@ -277,15 +364,24 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
 @router.get("/popular/{artistId}", status_code=200)
 async def get_popular_collections(artistId: str, limit: int = 50, type: str = None, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
-    Get collections ordered by popularity (most played first) for a specific artist.
+    Obtener las colecciones de un artista ordenadas por popularidad.
     
-    Path Parameters:
-    - artistId: Artist ID (required)
+    Este endpoint retorna las colecciones de un artista específico ordenadas por popularidad,
+    determinada por la cantidad de reproducciones totales de las canciones en cada colección.
+    Es útil para mostrar el contenido más popular de un artista.
     
-    Query Parameters:
-    - limit: Maximum number of collections to return (default: 50, max: 100)
-    - type: Optional filter by collection type (album, single, ep)
-    - includeUnpublished: Include collections not yet released (default: False)
+    **Parámetros de ruta:**
+    - artistId: ID del artista (requerido)
+    
+    **Parámetros de consulta:**
+    - limit: Número máximo de colecciones a retornar (por defecto: 50, máximo: 100)
+    - type: Filtro opcional por tipo de colección (album, single, ep)
+    - includeUnpublished: Incluir colecciones no publicadas aún (por defecto: False)
+    
+    **Nota:** Las colecciones incluyen todas sus canciones con detalles completos.
+    
+    **Retorna:**
+    - 200: Lista de colecciones ordenadas por popularidad
     """
     logger.info(f"Fetching popular collections for artist {artistId} (limit={limit}, type={type}, includeUnpublished={includeUnpublished})")
     
@@ -345,6 +441,30 @@ async def get_collections(
     publishedTo: str | None = None,    # ISO date/datetime
     user: dict = Depends(verify_token),
 ):
+    """
+    Obtener colecciones con filtros avanzados de catálogo.
+    
+    Este endpoint permite buscar y filtrar colecciones musicales (álbumes, EPs, singles)
+    con diversos criterios. Es especialmente útil para pantallas de catálogo y administración
+    de contenido, permitiendo filtrar por estado de publicación, fechas y tipo.
+    
+    **Parámetros de consulta:**
+    - type: Filtrar por tipo de colección (album, single, ep)
+    - artistId: Filtrar por artista específico
+    - includeUnpublished: Incluir colecciones no publicadas (por defecto: False)
+    - state: Estado de la colección - "Publicado" (ya lanzado) o "Programado" (lanzamiento futuro)
+    - publishedFrom: Fecha inicial del rango de publicación (formato ISO date/datetime)
+    - publishedTo: Fecha final del rango de publicación (formato ISO date/datetime)
+    
+    **Comportamiento:**
+    - Sin filtros: retorna todas las colecciones publicadas
+    - Con state="Publicado": colecciones con releaseDate <= ahora
+    - Con state="Programado": colecciones con releaseDate > ahora
+    - Los filtros de fecha aplican sobre releaseDate
+    
+    **Retorna:**
+    - 200: Lista de colecciones que cumplen los criterios, cada una con sus canciones
+    """
     st = (state or "").strip().lower()
     if st not in ("", "publicado", "programado"):
         st = ""
@@ -376,11 +496,25 @@ async def get_collections(
 @router.post("/{collection_id}/publish", status_code=200)
 async def publish_collection(collection_id: str, user: dict = Depends(verify_token)):
     """
-    Publishes an unpublished collection immediately by setting its release date to now.
-    Only works if the collection belongs to the requesting artist and is not yet published.
+    Publicar inmediatamente una colección no publicada.
     
-    Path Parameters:
-    - collection_id: ID of the collection to publish
+    Este endpoint permite publicar una colección que estaba programada para lanzamiento futuro
+    o que aún no tenía fecha de publicación. Al publicarla, se establece la fecha de lanzamiento
+    (releaseDate) al momento actual, haciendo la colección visible públicamente.
+    
+    **Parámetros de ruta:**
+    - collection_id: ID de la colección a publicar
+    
+    **Validaciones:**
+    - La colección debe pertenecer al artista que hace la solicitud
+    - La colección no debe estar ya publicada (releaseDate debe ser futura o null)
+    
+    **Retorna:**
+    - 200: Colección publicada exitosamente con la información actualizada
+    - 400: La colección ya está publicada
+    - 403: No autorizado para publicar esta colección
+    - 404: Colección no encontrada
+    - 500: Error interno del servidor
     """
     logger.info(f"Publishing collection {collection_id} by user {user['user_id']}")
     
@@ -441,8 +575,23 @@ async def publish_collection(collection_id: str, user: dict = Depends(verify_tok
 @router.get("/{collection_id}/early-releases", status_code=200)
 async def get_collection_early_releases(collection_id: str, user: dict = Depends(verify_token)):
     """
-    Get early released songs (singles) from an upcoming collection.
-    Only returns songs that have been released early before the full collection release.
+    Obtener las canciones lanzadas anticipadamente de una colección.
+    
+    Este endpoint retorna las canciones de una colección que han sido lanzadas como singles
+    o previews antes del lanzamiento completo del álbum o EP. Es útil para mostrar qué canciones
+    de un próximo lanzamiento ya están disponibles para escuchar.
+    
+    **Parámetros de ruta:**
+    - collection_id: ID de la colección
+    
+    **Comportamiento:**
+    - Solo retorna canciones con earlyReleaseDate <= ahora
+    - La colección principal puede estar aún no publicada
+    - Útil para mostrar "singles del álbum" o "adelantos"
+    
+    **Retorna:**
+    - 200: Lista de canciones lanzadas anticipadamente con sus detalles
+    - 404: Colección no encontrada
     """
     logger.info(f"Fetching early releases for collection {collection_id}")
     try:
@@ -486,6 +635,27 @@ async def get_collection_early_releases(collection_id: str, user: dict = Depends
 
 @router.get("/{collection_id}", status_code=200)
 async def get_collection(collection_id: str, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
+    """
+    Obtener una colección específica por su ID.
+    
+    Este endpoint retorna toda la información de una colección incluyendo sus metadatos
+    (nombre, artista, tipo, género, portada, fecha de lanzamiento) y la lista completa
+    de canciones en su orden original.
+    
+    **Parámetros de ruta:**
+    - collection_id: ID de la colección
+    
+    **Parámetros de consulta:**
+    - includeUnpublished: Si es true, permite ver colecciones no publicadas aún (por defecto: False)
+    
+    **Comportamiento:**
+    - Por defecto solo retorna colecciones ya publicadas (releaseDate <= ahora)
+    - Con includeUnpublished=true muestra también colecciones programadas para futuro
+    
+    **Retorna:**
+    - 200: Información completa de la colección con todas sus canciones
+    - 404: Colección no encontrada o no publicada aún
+    """
     logger.info(f"Fetching collection collection_id={collection_id}, includeUnpublished={includeUnpublished}")
     try:
         collection = await collections_db.get_collection(collection_id, includeUnpublished=includeUnpublished)
