@@ -70,19 +70,27 @@ async def get_user_activity(
     user: dict = Depends(verify_token)
 ):
     """
-    Get recent activity for a specific user.
+    Obtener la actividad reciente de un usuario específico.
     
-    Returns a chronologically ordered list of user activities including:
-    - **Likes**: Songs or collections the user has liked
-    - **Plays**: Songs the user has listened to
-    - **Published Playlists**: Playlists the user has made public
-    - **Shares**: Content the user has shared (coming soon)
+    Este endpoint retorna una lista cronológicamente ordenada de las actividades de un usuario,
+    incluyendo información detallada sobre las canciones, colecciones y playlists involucradas.
+    Es útil para mostrar el perfil de actividad de un usuario o su historial de interacciones.
     
-    **Query Parameters:**
-    - `limit`: Maximum number of activities to return (1-100, default: 50)
-    - `activity_type`: Optional filter by type. Valid values: 'like', 'play', 'playlist_published', 'share'
+    **Tipos de actividades incluidas:**
+    - **Likes**: Canciones o colecciones que el usuario ha marcado como favoritas
+    - **Plays**: Canciones que el usuario ha reproducido
+    - **Published Playlists**: Playlists que el usuario ha hecho públicas
+    - **Shares**: Contenido que el usuario ha compartido
     
-    **Note:** Activities are ordered from most recent to oldest.
+    **Parámetros de consulta:**
+    - `limit`: Número máximo de actividades a retornar (1-100, por defecto: 50)
+    - `activity_type`: Filtro opcional por tipo. Valores válidos: 'like', 'play', 'playlist_published', 'share'
+    
+    **Nota:** Las actividades se ordenan de más reciente a más antigua.
+    
+    **Retorna:**
+    - 200: Lista de actividades del usuario con detalles enriquecidos
+    - 400: Error en los parámetros de la solicitud
     """
     try:
         logger.info(f"Fetching activity for user {user_id} (limit={limit}, type={activity_type})")
@@ -165,22 +173,31 @@ async def get_following_activity(
     user: dict = Depends(verify_token)
 ):
     """
-    Get recent activity from users that the authenticated user follows.
+    Obtener la actividad reciente de los usuarios que sigue el usuario autenticado.
     
-    Returns a chronologically ordered feed of activities from followed users, including:
-    - **Likes**: Songs or collections they have liked
-    - **Plays**: Songs they have listened to
-    - **Published Playlists**: Playlists they have made public
-    - **Shares**: Content they have shared (coming soon)
+    Este endpoint retorna un feed cronológicamente ordenado de las actividades de los usuarios
+    que el usuario autenticado sigue. Es ideal para crear un feed de noticias o timeline social
+    donde se pueda ver qué están escuchando, compartiendo o publicando los amigos.
     
-    **Query Parameters:**
-    - `limit`: Maximum number of activities to return (1-100, default: 50)
-    - `activity_type`: Optional filter by type. Valid values: 'like', 'play', 'playlist_published', 'share'
+    **Tipos de actividades incluidas:**
+    - **Likes**: Canciones o colecciones que han marcado como favoritas
+    - **Plays**: Canciones que han reproducido
+    - **Published Playlists**: Playlists que han hecho públicas
+    - **Shares**: Contenido que han compartido
     
-    **Note:** 
-    - Activities are ordered from most recent to oldest across all followed users
-    - Requires user authentication
-    - Returns empty list if user doesn't follow anyone or follows feature is not yet implemented
+    **Parámetros de consulta:**
+    - `limit`: Número máximo de actividades a retornar (1-100, por defecto: 50)
+    - `activity_type`: Filtro opcional por tipo. Valores válidos: 'like', 'play', 'playlist_published', 'share'
+    
+    **Notas importantes:**
+    - Las actividades se ordenan de más reciente a más antigua entre todos los usuarios seguidos
+    - Requiere autenticación del usuario
+    - Retorna una lista vacía si el usuario no sigue a nadie
+    - Las actividades incluyen detalles enriquecidos sobre el contenido compartido
+    
+    **Retorna:**
+    - 200: Feed de actividades de usuarios seguidos
+    - 400: Error en los parámetros de la solicitud
     """
     try:
         user_id = user["user_id"]

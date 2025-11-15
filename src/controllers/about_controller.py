@@ -30,9 +30,20 @@ def serialize_artist_about(about_doc):
 @router.post("/", status_code=201)
 async def create_artist_about(user: dict = Depends(verify_token)):
     """
-    Create a new artist about page for the authenticated user.
-    Uses the user_id and stage_name from the token.
-    All other fields are initialized as empty/null.
+    Crear una nueva página "About" para el artista autenticado.
+    
+    Este endpoint inicializa una página de información del artista utilizando el user_id y stage_name
+    del token de autenticación. Todos los demás campos (biografía, redes sociales, carousel, artist pick)
+    se inicializan como vacíos o nulos y pueden ser completados posteriormente mediante el endpoint de actualización.
+    
+    **Validaciones:**
+    - El usuario debe estar autenticado
+    - No puede existir ya una página "About" para este artista (retorna 409 si ya existe)
+    
+    **Retorna:**
+    - 201: Página "About" creada exitosamente
+    - 409: Ya existe una página "About" para este artista
+    - 500: Error interno del servidor
     """
     try:
         artist_id = user["user_id"]
@@ -81,14 +92,27 @@ async def update_artist_about(
     artist_id: str = Query(None, description="Artist ID to update (backoffice only)")
 ):
     """
-    Update an artist about page.
-    Regular users can only update their own page.
-    Backoffice users can update any page by specifying artist_id query parameter.
-    Cannot update artistId or artist fields.
+    Actualizar la información de la página "About" de un artista.
     
-    Validates:
-    - Maximum 5 carousel images
-    - Only one primary image in carousel
+    Este endpoint permite modificar la biografía, redes sociales, imágenes del carousel y artist pick
+    de una página "About" existente. Los usuarios regulares solo pueden actualizar su propia página,
+    mientras que los usuarios de backoffice pueden actualizar cualquier página especificando el artist_id.
+    
+    **Restricciones:**
+    - No se pueden modificar los campos artistId ni artist (nombre del artista)
+    - Máximo 5 imágenes en el carousel
+    - Solo una imagen puede ser marcada como primaria en el carousel
+    - La página "About" debe existir previamente (usar POST /about para crearla)
+    
+    **Autorización:**
+    - Usuarios regulares: solo pueden actualizar su propia página
+    - Usuarios backoffice: pueden actualizar cualquier página usando el parámetro artist_id
+    
+    **Retorna:**
+    - 200: Página actualizada exitosamente
+    - 403: No autorizado para actualizar esta página
+    - 404: Página "About" no encontrada
+    - 500: Error interno del servidor
     """
     try:
         # Determine target artist_id
@@ -180,8 +204,19 @@ async def update_artist_about(
 )
 async def get_artist_about(artist_id: str):
     """
-    Get an artist's about page by their artist ID.
-    This endpoint is public and doesn't require authentication.
+    Obtener la página "About" de un artista por su ID.
+    
+    Este endpoint es público y no requiere autenticación. Retorna toda la información
+    del perfil del artista incluyendo biografía, redes sociales, galería de imágenes del carousel
+    y el contenido destacado por el artista (artist pick).
+    
+    **Parámetros:**
+    - artist_id: ID único del artista
+    
+    **Retorna:**
+    - 200: Información de la página "About" del artista
+    - 404: Página "About" no encontrada para este artista
+    - 500: Error interno del servidor
     """
     try:
         about_doc = await about_db.get_artist_about_by_id(artist_id)
@@ -225,12 +260,27 @@ async def upload_carousel_image(
     artist_id: str = Query(None, description="Artist ID to upload for (backoffice only)")
 ):
     """
-    Upload an image to an artist's carousel.
-    Regular users can only upload to their own carousel.
-    Backoffice users can upload to any artist by specifying artist_id query parameter.
-    - Maximum 5 images allowed
-    - First image uploaded will be marked as primary
-    - Images are stored with format: {artist_id}-carousel-{number}
+    Subir una imagen al carousel de la página "About" de un artista.
+    
+    Este endpoint permite agregar imágenes al carousel (galería de imágenes) de un artista.
+    Las imágenes se suben al almacenamiento de Supabase y se agregan a la colección de imágenes del carousel.
+    
+    **Restricciones:**
+    - Máximo 5 imágenes permitidas en el carousel
+    - La primera imagen subida se marca automáticamente como primaria
+    - La página "About" debe existir previamente
+    - Las imágenes se almacenan con el formato: {artist_id}-carousel-{número}
+    
+    **Autorización:**
+    - Usuarios regulares: solo pueden subir a su propio carousel
+    - Usuarios backoffice: pueden subir a cualquier carousel especificando el artist_id
+    
+    **Retorna:**
+    - 201: Imagen subida y agregada exitosamente
+    - 400: Se alcanzó el límite de 5 imágenes
+    - 403: No autorizado para subir imágenes a este carousel
+    - 404: Página "About" no encontrada
+    - 500: Error interno del servidor
     """
     try:
         # Determine target artist_id
@@ -351,11 +401,28 @@ async def set_primary_carousel_image(
     artist_id: str = Query(None, description="Artist ID to update (backoffice only)")
 ):
     """
-    Set a carousel image as the primary image.
-    Regular users can only update their own carousel.
-    Backoffice users can update any artist by specifying artist_id query parameter.
-    Only one image can be primary at a time.
-    All other images will be set to isPrimary: false.
+    Establecer una imagen del carousel como imagen primaria.
+    
+    Este endpoint permite cambiar cuál imagen del carousel se muestra como principal o destacada.
+    Solo puede haber una imagen primaria a la vez, por lo que al establecer una nueva imagen primaria,
+    todas las demás imágenes se marcarán automáticamente como no primarias (isPrimary: false).
+    
+    **Parámetros:**
+    - image_id: ID único de la imagen que se quiere establecer como primaria
+    
+    **Restricciones:**
+    - Solo una imagen puede ser primaria a la vez
+    - La imagen debe existir en el carousel del artista
+    
+    **Autorización:**
+    - Usuarios regulares: solo pueden modificar su propio carousel
+    - Usuarios backoffice: pueden modificar cualquier carousel especificando el artist_id
+    
+    **Retorna:**
+    - 200: Imagen primaria actualizada exitosamente
+    - 403: No autorizado para modificar este carousel
+    - 404: Página "About" o imagen no encontrada
+    - 500: Error interno del servidor
     """
     try:
         # Determine target artist_id
@@ -478,11 +545,28 @@ async def delete_carousel_image(
     artist_id: str = Query(None, description="Artist ID to delete from (backoffice only)")
 ):
     """
-    Delete a carousel image by its ID.
-    Regular users can only delete from their own carousel.
-    Backoffice users can delete from any artist by specifying artist_id query parameter.
-    If the deleted image was primary and other images exist,
-    the first remaining image will be set as primary.
+    Eliminar una imagen del carousel por su ID.
+    
+    Este endpoint permite remover una imagen específica del carousel de un artista.
+    Si la imagen eliminada era la imagen primaria y quedan otras imágenes en el carousel,
+    la primera imagen restante se establecerá automáticamente como primaria.
+    
+    **Parámetros:**
+    - image_id: ID único de la imagen a eliminar
+    
+    **Comportamiento:**
+    - Si la imagen eliminada era primaria y hay otras imágenes, la primera se marca como primaria
+    - Si era la única imagen, el carousel queda vacío
+    
+    **Autorización:**
+    - Usuarios regulares: solo pueden eliminar de su propio carousel
+    - Usuarios backoffice: pueden eliminar de cualquier carousel especificando el artist_id
+    
+    **Retorna:**
+    - 200: Imagen eliminada exitosamente
+    - 403: No autorizado para modificar este carousel
+    - 404: Página "About" o imagen no encontrada
+    - 500: Error interno del servidor
     """
     try:
         # Determine target artist_id

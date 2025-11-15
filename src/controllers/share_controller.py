@@ -43,31 +43,31 @@ async def share_song(
     user: dict = Depends(verify_token)
 ):
     """
-    Share a song with a friend or publicly.
+    Compartir una canción con un amigo o públicamente.
     
-    **Acceptance Criteria (CA 1):** When listening to a song, select 'Share' and choose a friend.
-    The song will be shared in their activity feed and they can access it.
+    **Criterio de Aceptación (CA 1):** Al escuchar una canción, seleccionar 'Compartir' y elegir un amigo.
+    La canción se compartirá en su feed de actividad y podrán acceder a ella.
     
-    **Request Body:**
-    - `recipientId` (optional): User ID of the friend to share with. If not provided, share is public.
+    **Cuerpo de la Solicitud:**
+    - `recipientId` (opcional): ID del usuario amigo con quien compartir. Si no se proporciona, el share es público.
     
-    **Behavior:**
-    - Creates a share record in the database
-    - Increments share metrics for the song
-    - Appears in the recipient's activity feed (if recipientId provided)
-    - Appears in user's own activity feed
+    **Comportamiento:**
+    - Crea un registro de compartido en la base de datos
+    - Incrementa las métricas de shares para la canción
+    - Aparece en el feed de actividad del destinatario (si se proporciona recipientId)
+    - Aparece en el feed de actividad del usuario que comparte
     
-    **Notes:**
-    - Song must exist
-    - If recipientId is provided, the share is direct to that user
-    - If recipientId is not provided, the share is considered public
+    **Notas:**
+    - La canción debe existir
+    - Si se proporciona recipientId, el share es directo a ese usuario
+    - Si no se proporciona recipientId, el share se considera público
     """
     try:
         user_id = user["user_id"]
         recipient_id = body.get("recipientId") if body else None
         logger.info(f"User {user_id} sharing song {song_id}" + (f" with {recipient_id}" if recipient_id else " publicly"))
         
-        # Create the share record
+        # Crear el registro de compartido
         share, error = await share_db.create_share(
             user_id=user_id,
             target_id=song_id,
@@ -87,7 +87,7 @@ async def share_song(
                 )
             )
         
-        # Enrich share with song details
+        # Enriquecer el share con detalles de la canción
         enriched_share = await share_db.enrich_share_with_details(share)
         
         logger.info(f"Successfully shared song {song_id}")
@@ -145,31 +145,31 @@ async def share_playlist(
     user: dict = Depends(verify_token)
 ):
     """
-    Share a playlist publicly.
+    Compartir una playlist públicamente.
     
-    **Acceptance Criteria (CA 2):** When I've created a playlist, select 'Share' and choose to make it public.
-    The playlist will be available on my profile for other users to see and listen to.
+    **Criterio de Aceptación (CA 2):** Al crear una playlist, seleccionar 'Compartir' y elegir hacerla pública.
+    La playlist estará disponible en mi perfil para que otros usuarios la vean y escuchen.
     
-    **Request Body:**
-    - `make_public` (optional, default: true): Whether to make the playlist public when sharing
+    **Cuerpo de la Solicitud:**
+    - `make_public` (opcional, por defecto: true): Si se debe hacer pública la playlist al compartir
     
-    **Behavior:**
-    - Makes the playlist public (sets is_published = true) if make_public is true
-    - Creates a share record in the database
-    - Increments share metrics for the playlist
-    - Appears in user's activity feed as a published playlist
+    **Comportamiento:**
+    - Hace pública la playlist (establece is_published = true) si make_public es true
+    - Crea un registro de compartido en la base de datos
+    - Incrementa las métricas de shares para la playlist
+    - Aparece en el feed de actividad del usuario como una playlist publicada
     
-    **Notes:**
-    - User must be the playlist owner or backoffice
-    - Playlist must exist
-    - If playlist is already public, still records the share
+    **Notas:**
+    - El usuario debe ser el dueño de la playlist o backoffice
+    - La playlist debe existir
+    - Si la playlist ya es pública, aún así se registra el share
     """
     try:
         user_id = user["user_id"]
         make_public = body.get("make_public", True) if body else True
         logger.info(f"User {user_id} sharing playlist {playlist_id} (make_public={make_public})")
         
-        # Get the playlist
+        # Obtener la playlist
         playlist = await playlists_db.get_playlist(playlist_id, user)
         if not playlist:
             logger.warning(f"Playlist {playlist_id} not found")
@@ -183,7 +183,7 @@ async def share_playlist(
                 )
             )
         
-        # Check authorization
+        # Verificar autorización
         is_owner = playlist.get("userId") == user_id
         is_backoffice = user.get("user_type") == "backoffice"
         
@@ -199,17 +199,17 @@ async def share_playlist(
                 )
             )
         
-        # Make playlist public if requested
+        # Hacer pública la playlist si se solicita
         if make_public and not playlist.get("is_published"):
             await playlists_db.change_playlist_state(playlist, True)
             logger.info(f"Playlist {playlist_id} made public")
         
-        # Create the share record (public share, no specific recipient)
+        # Crear el registro de compartido (share público, sin destinatario específico)
         share, error = await share_db.create_share(
             user_id=user_id,
             target_id=playlist_id,
             target_type="playlist",
-            recipient_id=None  # Public share
+            recipient_id=None  # Share público
         )
         
         if error:
@@ -224,7 +224,7 @@ async def share_playlist(
                 )
             )
         
-        # Get updated playlist
+        # Obtener la playlist actualizada
         updated_playlist = await playlists_db.get_playlist(playlist_id, user)
         
         logger.info(f"Successfully shared playlist {playlist_id}")
@@ -282,28 +282,28 @@ async def share_collection(
     user: dict = Depends(verify_token)
 ):
     """
-    Share a collection (album/EP/single) with a friend or publicly.
+    Compartir una colección (álbum/EP/single) con un amigo o públicamente.
     
-    **Request Body:**
-    - `recipientId` (optional): User ID of the friend to share with. If not provided, share is public.
+    **Cuerpo de la Solicitud:**
+    - `recipientId` (opcional): ID del usuario amigo con quien compartir. Si no se proporciona, el share es público.
     
-    **Behavior:**
-    - Creates a share record in the database
-    - Increments share metrics for the collection
-    - Appears in the recipient's activity feed (if recipientId provided)
-    - Appears in user's own activity feed
+    **Comportamiento:**
+    - Crea un registro de compartido en la base de datos
+    - Incrementa las métricas de shares para la colección
+    - Aparece en el feed de actividad del destinatario (si se proporciona recipientId)
+    - Aparece en el feed de actividad del usuario que comparte
     
-    **Notes:**
-    - Collection must exist
-    - If recipientId is provided, the share is direct to that user
-    - If recipientId is not provided, the share is considered public
+    **Notas:**
+    - La colección debe existir
+    - Si se proporciona recipientId, el share es directo a ese usuario
+    - Si no se proporciona recipientId, el share se considera público
     """
     try:
         user_id = user["user_id"]
         recipient_id = body.get("recipientId") if body else None
         logger.info(f"User {user_id} sharing collection {collection_id}" + (f" with {recipient_id}" if recipient_id else " publicly"))
         
-        # Create the share record
+        # Crear el registro de compartido
         share, error = await share_db.create_share(
             user_id=user_id,
             target_id=collection_id,
@@ -323,7 +323,7 @@ async def share_collection(
                 )
             )
         
-        # Enrich share with collection details
+        # Enriquecer el share con detalles de la colección
         enriched_share = await share_db.enrich_share_with_details(share)
         
         logger.info(f"Successfully shared collection {collection_id}")
@@ -384,30 +384,30 @@ async def share_collection(
     }
 )
 async def get_received_shares(
-    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of shares to return"),
+    limit: int = Query(default=50, ge=1, le=100, description="Número máximo de shares a retornar"),
     user: dict = Depends(verify_token)
 ):
     """
-    Get shares that were sent directly to the authenticated user.
+    Obtener los shares que fueron enviados directamente al usuario autenticado.
     
-    Returns a list of items that friends have shared with you, ordered by most recent first.
+    Retorna una lista de elementos que amigos han compartido contigo, ordenados del más reciente al más antiguo.
     
-    **Query Parameters:**
-    - `limit`: Maximum number of shares to return (1-100, default: 50)
+    **Parámetros de Consulta:**
+    - `limit`: Número máximo de shares a retornar (1-100, por defecto: 50)
     
-    **Notes:**
-    - Only returns shares that were sent directly to you (with your user ID as recipientId)
-    - Does not include public shares
-    - Shares are enriched with details about the shared content
+    **Notas:**
+    - Solo retorna shares que fueron enviados directamente a ti (con tu user ID como recipientId)
+    - No incluye shares públicos
+    - Los shares se enriquecen con detalles sobre el contenido compartido
     """
     try:
         user_id = user["user_id"]
         logger.info(f"Fetching received shares for user {user_id} (limit={limit})")
         
-        # Get shares for this user
+        # Obtener los shares para este usuario
         shares = await share_db.get_shares_for_user(user_id, limit)
         
-        # Enrich with details
+        # Enriquecer con detalles
         enriched_shares = []
         for share in shares:
             enriched = await share_db.enrich_share_with_details(share)

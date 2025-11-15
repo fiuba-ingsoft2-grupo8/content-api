@@ -29,10 +29,21 @@ router = APIRouter()
 )
 async def check_like_status(target_type: str, target_id: str, user: dict = Depends(verify_token)):
     """
-    Check if the current user has liked a specific song.
+    Verificar si el usuario actual ha marcado como favorita una canción específica.
     
-    Note: This only works for songs (target_type: "song").
-    Collections don't have direct likes.
+    Este endpoint permite consultar el estado de "like" de una canción para el usuario autenticado.
+    Es útil para mostrar correctamente el estado del botón de "me gusta" en la interfaz de usuario.
+    
+    **Parámetros de ruta:**
+    - target_type: Tipo de contenido (solo "song" es válido)
+    - target_id: ID de la canción a consultar
+    
+    **Nota importante:** Solo funciona para canciones (target_type: "song").
+    Las colecciones no tienen "likes" directos, su conteo de likes es la suma de los likes de sus canciones.
+    
+    **Retorna:**
+    - 200: Estado del like con campo `liked` (true/false)
+    - 400: Tipo de contenido no válido (no es "song")
     """
     logger.info(f"Checking like status for {target_type} {target_id} by user {user['user_id']}")
     
@@ -55,7 +66,25 @@ async def check_like_status(target_type: str, target_id: str, user: dict = Depen
 @router.post("/shares", status_code=201)
 async def record_share(request: schemas.ShareRequest, user: dict = Depends(verify_token)):
     """
-    Record a share event for a song or collection.
+    Registrar un evento de compartir contenido (canción o colección).
+    
+    Este endpoint registra cuando un usuario comparte una canción o colección, incrementando
+    el contador de shares en las métricas. Es usado por otros endpoints de sharing pero también
+    puede ser llamado directamente para registrar shares a través de otros medios (redes sociales, etc).
+    
+    **Cuerpo de la solicitud:**
+    - targetType: Tipo de contenido compartido ("song" o "collection")
+    - targetId: ID del contenido compartido
+    
+    **Validaciones:**
+    - El contenido (canción o colección) debe existir
+    - El targetType debe ser "song" o "collection"
+    
+    **Retorna:**
+    - 201: Share registrado exitosamente
+    - 400: targetType inválido
+    - 404: Contenido no encontrado
+    - 500: Error al registrar el share
     """
     logger.info(f"User {user['user_id']} sharing {request.targetType} {request.targetId}")
     
@@ -129,8 +158,29 @@ async def record_share(request: schemas.ShareRequest, user: dict = Depends(verif
 )
 async def get_song_metrics(song_id: str, user: dict = Depends(verify_token)):
     """
-    Get complete metrics for a specific song.
-    Returns plays, likes, and shares count.
+    Obtener las métricas completas de una canción específica.
+    
+    Este endpoint retorna todas las estadísticas de engagement de una canción, incluyendo
+    reproducciones, likes y shares. Es útil para mostrar estadísticas públicas de popularidad
+    o para que los artistas vean el rendimiento de sus canciones.
+    
+    **Parámetros de ruta:**
+    - song_id: ID de la canción
+    
+    **Métricas retornadas:**
+    - totalPlays: Total de reproducciones registradas
+    - totalLikes: Total de usuarios que marcaron como favorita
+    - totalShares: Total de veces que fue compartida
+    - totalPlaylistSaves: Total de veces agregada a playlists (si disponible)
+    - popularityScore: Puntaje de popularidad calculado (si disponible)
+    
+    **Validaciones:**
+    - La canción debe existir
+    
+    **Retorna:**
+    - 200: Métricas completas de la canción
+    - 404: Canción no encontrada
+    - 500: Error al obtener las métricas
     """
     logger.info(f"Fetching metrics for song {song_id}")
     
@@ -162,12 +212,30 @@ async def get_song_metrics(song_id: str, user: dict = Depends(verify_token)):
 @router.get("/collections/{collection_id}", status_code=200)
 async def get_collection_metrics(collection_id: str, user: dict = Depends(verify_token)):
     """
-    Get complete metrics for a specific collection.
+    Obtener las métricas completas de una colección específica.
     
-    Returns:
-    - totalPlays: Sum of plays from all songs in the collection
-    - likes: Sum of likes from all songs in the collection
-    - shares: Number of times the collection itself was shared
+    Este endpoint retorna las estadísticas agregadas de una colección (álbum, EP o single),
+    calculando métricas tanto a nivel de colección como agregando las métricas de todas
+    sus canciones individuales.
+    
+    **Parámetros de ruta:**
+    - collection_id: ID de la colección
+    
+    **Métricas retornadas:**
+    - totalPlays: Suma de reproducciones de todas las canciones de la colección
+    - likes: Suma de likes de todas las canciones de la colección
+    - shares: Número de veces que la colección en sí fue compartida
+    
+    **Nota:** A diferencia de las canciones, las colecciones no tienen "likes" directos.
+    El conteo de likes es la suma de los likes de todas sus canciones.
+    
+    **Validaciones:**
+    - La colección debe existir
+    
+    **Retorna:**
+    - 200: Métricas completas de la colección
+    - 404: Colección no encontrada
+    - 500: Error al obtener las métricas
     """
     logger.info(f"Fetching metrics for collection {collection_id}")
     
@@ -199,10 +267,28 @@ async def get_collection_metrics(collection_id: str, user: dict = Depends(verify
 @router.get("/artists/{artist_id}", status_code=200)
 async def get_artist_metrics(artist_id: str, user: dict = Depends(verify_token)):
     """
-    Get overall metrics for an artist.
-    Returns monthly listeners, plays, saves, and shares with comparison to previous period.
+    Obtener las métricas generales de un artista específico.
     
-    Metrics are calculated for the current month vs previous month.
+    Este endpoint retorna un resumen completo de las estadísticas de un artista, incluyendo
+    métricas del período actual y comparaciones con el período anterior para análisis de tendencias.
+    
+    **Parámetros de ruta:**
+    - artist_id: ID del artista
+    
+    **Métricas retornadas:**
+    - monthlyListeners: Oyentes únicos del mes actual
+    - totalPlays: Total de reproducciones del mes actual
+    - totalSaves: Total de saves/likes del mes actual
+    - totalShares: Total de shares del mes actual
+    - Comparaciones con el mes anterior (cambios porcentuales)
+    
+    **Período de cálculo:**
+    - Mes actual vs mes anterior
+    - Permite ver el crecimiento o decrecimiento de la audiencia
+    
+    **Retorna:**
+    - 200: Métricas completas del artista con comparaciones
+    - 500: Error al obtener las métricas
     """
     logger.info(f"Fetching metrics for artist {artist_id}")
     
@@ -225,8 +311,30 @@ async def get_artist_metrics(artist_id: str, user: dict = Depends(verify_token))
 @router.get("/artists/me/overview", status_code=200)
 async def get_my_artist_metrics(user: dict = Depends(verify_token)):
     """
-    Get overall metrics for the authenticated artist.
-    Returns monthly listeners, plays, saves, and shares with comparison to previous period.
+    Obtener las métricas generales del artista autenticado.
+    
+    Este endpoint retorna las estadísticas propias del artista que hace la solicitud,
+    proporcionando un dashboard de métricas personales con comparaciones temporales.
+    Es el endpoint principal para que los artistas vean su propio rendimiento.
+    
+    **Métricas retornadas:**
+    - monthlyListeners: Oyentes únicos del mes actual
+    - totalPlays: Total de reproducciones del mes actual
+    - totalSaves: Total de saves/likes del mes actual  
+    - totalShares: Total de shares del mes actual
+    - Comparaciones con el mes anterior (cambios porcentuales y absolutos)
+    
+    **Validaciones:**
+    - El usuario debe ser un artista (tener stage_name)
+    
+    **Período de cálculo:**
+    - Mes actual vs mes anterior
+    - Útil para dashboards de artista y análisis de rendimiento personal
+    
+    **Retorna:**
+    - 200: Métricas completas del artista con comparaciones
+    - 403: Usuario no es un artista
+    - 500: Error al obtener las métricas
     """
     artist_id = user["user_id"]
     logger.info(f"Fetching metrics for authenticated artist {artist_id}")

@@ -7,20 +7,20 @@ from db.models import Share
 
 async def create_share(user_id: str, target_id: str, target_type: str, recipient_id: str = None):
     """
-    Create a share record for a song, collection, or playlist.
+    Crear un registro de compartido para una canción, colección o playlist.
     
     Args:
-        user_id: The user who is sharing
-        target_id: The ID of the item being shared (song, collection, or playlist)
-        target_type: Type of content being shared ('song', 'collection', 'playlist')
-        recipient_id: Optional - specific user receiving the share (for direct shares)
+        user_id: El usuario que está compartiendo
+        target_id: El ID del elemento que se está compartiendo (canción, colección o playlist)
+        target_type: Tipo de contenido compartido ('song', 'collection', 'playlist')
+        recipient_id: Opcional - usuario específico que recibe el share (para shares directos)
         
     Returns:
-        (share_dict, error) tuple
+        (share_dict, error) tupla
     """
     db = get_db()
     try:
-        # Validate that the target exists
+        # Validar que el objetivo existe
         if target_type == "song":
             target = db.songs.find_one({"_id": ObjectId(target_id)})
         elif target_type == "collection":
@@ -33,7 +33,7 @@ async def create_share(user_id: str, target_id: str, target_type: str, recipient
         if not target:
             return None, ValueError(f"{target_type.capitalize()} with id {target_id} not found")
         
-        # Create the share record
+        # Crear el registro de compartido
         share = Share(
             user_id=user_id,
             target_id=ObjectId(target_id),
@@ -41,7 +41,7 @@ async def create_share(user_id: str, target_id: str, target_type: str, recipient
         )
         share_dict = share.model_dump(by_alias=True)
         
-        # Add recipient_id if provided (for direct shares to friends)
+        # Agregar recipient_id si se proporciona (para shares directos a amigos)
         if recipient_id:
             share_dict["recipient_id"] = recipient_id
         
@@ -62,15 +62,15 @@ async def create_share(user_id: str, target_id: str, target_type: str, recipient
 
 async def get_shares_for_user(user_id: str, limit: int = 50):
     """
-    Get shares that were sent to a specific user.
-    Returns shares ordered by creation date (most recent first).
+    Obtener shares que fueron enviados a un usuario específico.
+    Retorna shares ordenados por fecha de creación (más reciente primero).
     
     Args:
-        user_id: The user ID to get shares for
-        limit: Maximum number of shares to return
+        user_id: El ID del usuario para obtener shares
+        limit: Número máximo de shares a retornar
         
     Returns:
-        List of share dictionaries
+        Lista de diccionarios de shares
     """
     db = get_db()
     try:
@@ -78,7 +78,7 @@ async def get_shares_for_user(user_id: str, limit: int = 50):
             {"recipient_id": user_id}
         ).sort("created_at", -1).limit(limit))
         
-        # Convert ObjectIds to strings
+        # Convertir ObjectIds a strings
         for share in shares:
             share["_id"] = str(share["_id"])
             share["target_id"] = str(share["target_id"])
@@ -92,13 +92,13 @@ async def get_shares_for_user(user_id: str, limit: int = 50):
 
 async def enrich_share_with_details(share: dict):
     """
-    Enrich a share with details about the shared content.
+    Enriquecer un share con detalles sobre el contenido compartido.
     
     Args:
-        share: Share dictionary with user_id, target_id, target_type
+        share: Diccionario de share con user_id, target_id, target_type
         
     Returns:
-        Enriched share dictionary with content details
+        Diccionario de share enriquecido con detalles del contenido
     """
     db = get_db()
     try:
@@ -106,7 +106,7 @@ async def enrich_share_with_details(share: dict):
         target_type = share.get("target_type")
         target_id = share.get("target_id")
         
-        # Map snake_case to camelCase for consistency
+        # Mapear snake_case a camelCase para consistencia
         if "recipient_id" in share:
             enriched["recipientId"] = share["recipient_id"]
         if "user_id" in share:
@@ -157,7 +157,7 @@ async def enrich_share_with_details(share: dict):
 
 
 async def get_user_shares_count(user_id: str):
-    """Get the total number of shares a user has made."""
+    """Obtener el número total de shares que un usuario ha hecho."""
     db = get_db()
     try:
         count = db.shares.count_documents({"user_id": user_id})
