@@ -13,6 +13,23 @@ router = APIRouter()
 
 @router.post("/", status_code=201)
 async def create_liked_songs_playlist(user: dict = Depends(verify_token)):
+    """
+    Crear la playlist "Liked Songs" para el usuario autenticado.
+    
+    Este endpoint crea la playlist especial "Liked Songs" (Canciones que me gustan) para el usuario.
+    Esta es una playlist del sistema que agrupa todas las canciones que el usuario marca como favoritas.
+    Se crea automáticamente con una portada predefinida y se marca como playlist especial (isLikedSongs).
+    
+    **Comportamiento:**
+    - Crea una playlist pública con nombre "Liked Songs"
+    - Se marca con la bandera isLikedSongs=true para identificarla como playlist especial
+    - Usa una portada predefinida del sistema
+    - Se inicializa vacía, las canciones se agregan mediante POST /likedSongs/{song_id}
+    
+    **Retorna:**
+    - 201: Playlist "Liked Songs" creada exitosamente
+    - 400: Error al crear la playlist (ej: ya existe)
+    """
     logger.info("Creating Liked Songs playlist")
     liked_songs_cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/liked-songs.png"
     try:
@@ -33,6 +50,30 @@ async def create_liked_songs_playlist(user: dict = Depends(verify_token)):
 
 @router.post("/{song_id}")
 async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
+    """
+    Agregar una canción a las canciones favoritas del usuario.
+    
+    Este endpoint marca una canción como favorita del usuario, agregándola a su playlist especial
+    "Liked Songs" y registrando un "like" en las métricas de la canción para el artista.
+    
+    **Parámetros de ruta:**
+    - song_id: ID de la canción a marcar como favorita
+    
+    **Comportamiento:**
+    - Si la playlist "Liked Songs" no existe, se crea automáticamente
+    - Agrega la canción a la playlist "Liked Songs"
+    - Registra el "like" en las métricas permanentes (si no estaba ya marcada)
+    - La canción se agrega al final de la playlist
+    
+    **Validaciones:**
+    - La canción debe existir
+    - No se puede agregar la misma canción dos veces
+    
+    **Retorna:**
+    - 200: Canción agregada a favoritos exitosamente con la playlist actualizada
+    - 400: Error al agregar (ej: canción ya está en favoritos)
+    - 404: Canción no encontrada
+    """
     liked_songs_playlist = await playlists_db.get_liked_songs_playlist(user["user_id"])
     
     if not liked_songs_playlist:
@@ -93,6 +134,30 @@ async def add_to_liked_songs(song_id: str, user: dict = Depends(verify_token)):
 
 @router.delete("/{song_id}")
 async def remove_from_liked_songs(song_id: str, user: dict = Depends(verify_token)):
+    """
+    Quitar una canción de las canciones favoritas del usuario.
+    
+    Este endpoint desmarca una canción como favorita, eliminándola de la playlist "Liked Songs"
+    y quitando el "like" de las métricas de la canción.
+    
+    **Parámetros de ruta:**
+    - song_id: ID de la canción a quitar de favoritos
+    
+    **Comportamiento:**
+    - Remueve la canción de la playlist "Liked Songs"
+    - Quita el "like" de las métricas permanentes (si estaba marcada)
+    - La playlist debe existir previamente
+    
+    **Validaciones:**
+    - La canción debe existir
+    - La canción debe estar actualmente en la playlist "Liked Songs"
+    - La playlist "Liked Songs" debe existir
+    
+    **Retorna:**
+    - 200: Canción quitada de favoritos exitosamente con la playlist actualizada
+    - 404: Playlist "Liked Songs" no encontrada, canción no encontrada, o canción no está en favoritos
+    - 400: Error al quitar la canción
+    """
     liked_songs_playlist = await playlists_db.get_liked_songs_playlist(user["user_id"])
     
     if not liked_songs_playlist:
@@ -184,6 +249,25 @@ async def remove_from_liked_songs(song_id: str, user: dict = Depends(verify_toke
     }
 )
 async def get_liked_songs(user: dict = Depends(verify_token)):
+    """
+    Obtener la playlist "Liked Songs" del usuario autenticado.
+    
+    Este endpoint retorna la playlist especial "Liked Songs" (Canciones que me gustan) del usuario,
+    incluyendo todas las canciones que ha marcado como favoritas con sus detalles completos.
+    
+    **Respuesta:**
+    - Información de la playlist "Liked Songs" con metadatos
+    - Lista completa de canciones favoritas con detalles (título, artista, duración, portada)
+    - Las canciones se ordenan en el orden en que fueron agregadas a favoritos
+    
+    **Comportamiento:**
+    - La playlist debe existir previamente (creada automáticamente al agregar la primera canción favorita)
+    - Retorna la lista completa de canciones sin paginación
+    
+    **Retorna:**
+    - 200: Playlist "Liked Songs" con todas las canciones favoritas
+    - 404: Playlist "Liked Songs" no encontrada (usuario no ha marcado canciones como favoritas aún)
+    """
     try:
         liked_songs = await playlists_db.get_liked_songs_playlist(user["user_id"])
         

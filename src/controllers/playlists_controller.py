@@ -54,6 +54,28 @@ def _parse_iso(dt: str | None):
     }
 )
 async def create_playlist(playlist: schemas.CreatePlaylistRequest, user: dict = Depends(verify_token)):
+    """
+    Crear una nueva playlist personal.
+    
+    Este endpoint permite crear una playlist personalizada que el usuario puede usar para organizar
+    sus canciones favoritas. Las playlists se crean como privadas por defecto y pueden ser publicadas
+    posteriormente.
+    
+    **Cuerpo de la solicitud:**
+    - name: Nombre de la playlist (requerido)
+    - description: Descripción opcional de la playlist
+    - coverUrl: URL de portada personalizada (opcional, se asigna una aleatoria si no se proporciona)
+    
+    **Comportamiento:**
+    - La playlist se crea vacía, las canciones se agregan posteriormente
+    - Se crea como privada (is_published = false)
+    - Se asigna una portada aleatoria del catálogo por defecto si no se especifica
+    - El usuario autenticado es automáticamente el dueño
+    
+    **Retorna:**
+    - 201: Playlist creada exitosamente
+    - 400: Error en los datos proporcionados
+    """
     logger.info(f"Creating playlist: name='{playlist.name}', description='{playlist.description}'")
     cover_url = playlist.coverUrl if playlist.coverUrl else random.choice(DEFAULT_COVERS)
 
@@ -110,9 +132,26 @@ async def get_playlists(
     user: dict = Depends(verify_token),
 ):
     """
-    Catálogo (playlists) con filtros:
-    - state: "Publicado"/"Programado" (Publicado => is_published=True; Programado => is_published=False)
-    - publishedFrom/publishedTo: rango sobre published_at (sólo aplica cuando is_published=True)
+    Obtener playlists con filtros avanzados de catálogo.
+    
+    Este endpoint permite listar y filtrar playlists con diversos criterios. Los usuarios regulares
+    solo ven sus propias playlists, mientras que los usuarios backoffice pueden ver todas.
+    
+    **Parámetros de consulta:**
+    - isPublished: Filtrar por estado publicado (true) o privado (false) - por defecto: false
+    - state: Estado de publicación - "Publicado" (publicadas) o "Programado" (privadas pendientes)
+    - publishedFrom: Fecha inicial del rango de publicación (formato ISO date/datetime)
+    - publishedTo: Fecha final del rango de publicación (formato ISO date/datetime)
+    
+    **Comportamiento:**
+    - state="Publicado": filtra playlists con is_published=true
+    - state="Programado": filtra playlists con is_published=false
+    - Los filtros de fecha aplican sobre el campo published_at (solo para playlists publicadas)
+    - Usuarios regulares: solo ven sus propias playlists
+    - Usuarios backoffice: ven todas las playlists del sistema
+    
+    **Retorna:**
+    - 200: Lista de playlists que cumplen los criterios, cada una con sus canciones
     """
     is_backoffice = user.get("user_type") == "backoffice"
     owner_id = None if is_backoffice else user["user_id"]
@@ -149,10 +188,26 @@ async def get_playlists(
 @router.get("/{id}")
 async def get_playlist(id: str, user: dict = Depends(verify_token)):
     """
-    Retrieve a specific playlist by its ID with all songs.
-    Access rules:
-    - Published playlists: accessible by anyone
-    - Unpublished playlists: only accessible by owner or backoffice users
+    Obtener una playlist específica por su ID con todas sus canciones.
+    
+    Este endpoint retorna los detalles completos de una playlist incluyendo su metadata
+    y la lista completa de canciones en su orden original.
+    
+    **Parámetros de ruta:**
+    - id: ID de la playlist
+    
+    **Reglas de acceso:**
+    - Playlists publicadas: accesibles por cualquier usuario autenticado
+    - Playlists privadas: solo accesibles por el dueño o usuarios backoffice
+    
+    **Información retornada:**
+    - Metadata de la playlist (nombre, descripción, portada, estado de publicación, fecha)
+    - Lista completa de canciones con detalles (título, artista, duración, portada)
+    - Orden de las canciones preservado
+    
+    **Retorna:**
+    - 200: Playlist encontrada con todas sus canciones
+    - 404: Playlist no encontrada o sin acceso (privada de otro usuario)
     """
     logger.info(f"Fetching playlist with id={id}, user={user.get('user_id')}, user_type={user.get('user_type')}")
     try:
@@ -180,6 +235,23 @@ async def get_playlist(id: str, user: dict = Depends(verify_token)):
 
 @router.delete("/{playlist_id}", status_code=204)
 async def delete_playlist(playlist_id: str, user: dict = Depends(verify_token)):
+    """
+    Eliminar una playlist permanentemente.
+    
+    Este endpoint borra completamente una playlist de la base de datos. La eliminación es permanente
+    e irreversible. Las canciones en sí no se eliminan, solo la playlist que las agrupaba.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist a eliminar
+    
+    **Autorización:**
+    - Solo el dueño de la playlist o usuarios backoffice pueden eliminarla
+    
+    **Retorna:**
+    - 204: Playlist eliminada exitosamente (sin contenido)
+    - 403: No autorizado para eliminar esta playlist
+    - 404: Playlist no encontrada
+    """
     logger.info(f"Deleting playlist with id={playlist_id}")
 
     playlist = await playlists_db.get_playlist(playlist_id, user)
@@ -213,6 +285,28 @@ async def delete_playlist(playlist_id: str, user: dict = Depends(verify_token)):
 
 @router.post("/{playlist_id}/songs/{song_id}")
 async def add_song_to_playlist(playlist_id: str, song_id: str, user: dict = Depends(verify_token)):
+    """
+    Agregar una canción a una playlist.
+    
+    Este endpoint permite agregar una canción específica al final de una playlist.
+    La canción se agrega en la última posición de la lista actual.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist
+    - song_id: ID de la canción a agregar
+    
+    **Validaciones:**
+    - La playlist debe existir
+    - La canción debe existir
+    - El usuario debe ser el dueño de la playlist o backoffice
+    - No se puede agregar la misma canción dos veces
+    
+    **Retorna:**
+    - 200: Canción agregada exitosamente con la playlist actualizada
+    - 400: Error al agregar (ej: canción ya está en la playlist)
+    - 403: No autorizado para modificar esta playlist
+    - 404: Playlist o canción no encontrada
+    """
     logger.info(f"Adding song {song_id} to playlist {playlist_id}")
     try:
         playlist = await playlists_db.get_playlist(playlist_id, user)
@@ -273,6 +367,27 @@ async def add_song_to_playlist(playlist_id: str, song_id: str, user: dict = Depe
 
 @router.delete("/{playlist_id}/songs/{song_id}")
 async def remove_song_from_playlist(playlist_id: str, song_id: str, user: dict = Depends(verify_token)):
+    """
+    Quitar una canción de una playlist.
+    
+    Este endpoint permite remover una canción específica de una playlist. El orden de las
+    canciones restantes se mantiene.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist
+    - song_id: ID de la canción a quitar
+    
+    **Validaciones:**
+    - La playlist debe existir
+    - La canción debe existir
+    - La canción debe estar actualmente en la playlist
+    - El usuario debe ser el dueño de la playlist o backoffice
+    
+    **Retorna:**
+    - 200: Canción quitada exitosamente con la playlist actualizada
+    - 403: No autorizado para modificar esta playlist
+    - 404: Playlist no encontrada, canción no encontrada, o canción no está en la playlist
+    """
     logger.info(f"Removing song {song_id} from playlist {playlist_id}")
     try:
         playlist = await playlists_db.get_playlist(playlist_id, user)
@@ -337,6 +452,30 @@ async def remove_song_from_playlist(playlist_id: str, song_id: str, user: dict =
 
 @router.post("/{playlist_id}/publish")
 async def publish_playlist(playlist_id: str, user: dict = Depends(verify_token)):
+    """
+    Publicar una playlist privada.
+    
+    Este endpoint hace pública una playlist que estaba en modo privado. Una vez publicada,
+    la playlist será visible para todos los usuarios y aparecerá en el perfil público del creador.
+    Se registra la fecha de publicación.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist a publicar
+    
+    **Comportamiento:**
+    - Cambia el estado de is_published a true
+    - Registra la fecha y hora de publicación (published_at)
+    - La playlist aparece en búsquedas públicas y en el perfil del usuario
+    
+    **Autorización:**
+    - Solo el dueño de la playlist o usuarios backoffice pueden publicarla
+    
+    **Retorna:**
+    - 200: Playlist publicada exitosamente
+    - 400: Error al publicar
+    - 403: No autorizado para publicar esta playlist
+    - 404: Playlist no encontrada
+    """
     logger.info(f"Publishing playlist with id {playlist_id}")
     playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
@@ -379,6 +518,29 @@ async def publish_playlist(playlist_id: str, user: dict = Depends(verify_token))
 
 @router.post("/{playlist_id}/private")
 async def private_playlist(playlist_id: str, user: dict = Depends(verify_token)):
+    """
+    Hacer privada una playlist pública.
+    
+    Este endpoint revierte el estado de publicación de una playlist, haciéndola privada nuevamente.
+    Una playlist privada solo es visible para su dueño y no aparece en búsquedas públicas.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist a hacer privada
+    
+    **Comportamiento:**
+    - Cambia el estado de is_published a false
+    - La playlist deja de aparecer en búsquedas públicas
+    - Solo el dueño y usuarios backoffice pueden verla
+    
+    **Autorización:**
+    - Solo el dueño de la playlist o usuarios backoffice pueden cambiar su privacidad
+    
+    **Retorna:**
+    - 200: Playlist hecha privada exitosamente
+    - 400: Error al cambiar el estado
+    - 403: No autorizado para modificar esta playlist
+    - 404: Playlist no encontrada
+    """
     logger.info(f"Making playlist with id {playlist_id} private")
     playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
@@ -424,8 +586,26 @@ async def private_playlist(playlist_id: str, user: dict = Depends(verify_token))
 @router.post("/{playlist_id}/upload-cover")
 async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), user: dict = Depends(verify_token)):
     """
-    Uploads a playlist cover image to Supabase Storage and updates the playlist document.
-    Only the owner or backoffice users can upload covers.
+    Subir una imagen de portada personalizada para una playlist.
+    
+    Este endpoint permite subir y establecer una imagen de portada personalizada para una playlist.
+    La imagen se sube al almacenamiento de Supabase y se actualiza la URL en la playlist.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist
+    
+    **Parámetros:**
+    - file: Archivo de imagen a subir (multipart/form-data)
+    
+    **Autorización:**
+    - Solo el dueño de la playlist o usuarios backoffice pueden subir portadas
+    
+    **Retorna:**
+    - 200: Portada subida y actualizada exitosamente con la nueva URL
+    - 400: Error al actualizar la portada
+    - 403: No autorizado para modificar esta playlist
+    - 404: Playlist no encontrada
+    - 500: Error interno del servidor
     """
     playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
@@ -487,7 +667,25 @@ async def upload_playlist_cover(playlist_id: str, file: UploadFile = File(...), 
 @router.put("/{playlist_id}/reorder")
 async def reorder_playlist(playlist_id: str, request: schemas.ReorderRequest, user: dict = Depends(verify_token)):
     """
-    Reorder songs in a playlist.
+    Reordenar las canciones de una playlist.
+    
+    Este endpoint permite cambiar el orden de las canciones en una playlist. Se proporciona
+    la lista completa de canciones en el nuevo orden deseado.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist
+    
+    **Cuerpo de la solicitud:**
+    - songs: Lista completa de IDs de canciones en el nuevo orden
+    
+    **Validaciones:**
+    - La lista debe contener todas las canciones actuales de la playlist
+    - No se pueden agregar ni quitar canciones con este endpoint (solo reordenar)
+    
+    **Retorna:**
+    - 200: Orden actualizado exitosamente
+    - 400: Error al reordenar (ej: lista de canciones no coincide)
+    - 500: Error interno del servidor
     """
     try:
         logger.info(f"Reordering playlist {playlist_id}")
@@ -571,6 +769,27 @@ async def update_playlist_metadata(
     payload: UpdatePlaylistMetadataRequest,
     user: dict = Depends(verify_token),
 ):
+    """
+    Actualizar los metadatos de una playlist (PUT).
+    
+    Este endpoint permite actualizar la información descriptiva de una playlist.
+    Por ahora solo soporta la actualización de la descripción.
+    
+    **Parámetros de ruta:**
+    - playlist_id: ID de la playlist
+    
+    **Cuerpo de la solicitud:**
+    - description: Nueva descripción de la playlist
+    
+    **Autorización:**
+    - Solo el dueño de la playlist o usuarios backoffice pueden actualizar metadatos
+    
+    **Retorna:**
+    - 200: Metadatos actualizados exitosamente con la playlist completa
+    - 400: Error al actualizar
+    - 403: No autorizado para editar esta playlist
+    - 404: Playlist no encontrada o sin acceso
+    """
     playlist = await playlists_db.get_playlist(playlist_id, user)
     if not playlist:
         return JSONResponse(
