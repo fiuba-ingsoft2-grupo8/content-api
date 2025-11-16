@@ -380,6 +380,8 @@ class UpdateCollectionRequest(BaseModel):
     coverUrl: Optional[str] = None
     songs: Optional[List[SongWithEarlyRelease]] = None
     credits: Optional[List[str]] = None
+    availableInCountries: Optional[List[str]] = None
+    notAvailableInCountries: Optional[List[str]] = None
     
     class Config:
         json_schema_extra = {
@@ -395,7 +397,8 @@ class UpdateCollectionRequest(BaseModel):
                         "earlyReleaseDate": "2025-11-20T00:00:00Z"
                     }
                 ],
-                "credits": ["Charly García", "Pedro Aznar", "Willy Iturri"]
+                "credits": ["Charly García", "Pedro Aznar", "Willy Iturri"],
+                "availableInCountries": ["AR", "UY", "CL", "BR"]
             }
         }
 

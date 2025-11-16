@@ -62,7 +62,7 @@ def client_other_user(mock_db):
 
     # Mock verify_token to return a different user
     async def mock_verify_other_user(*args, **kwargs):
-        return {"user_id": "other_user_456", "stage_name": "Other Artist", "user_type": "artist", "country": "UK"}
+        return {"user_id": "other_user_456", "stage_name": "Other Artist", "user_type": "artist", "country": "GB"}
 
     # Mock the get_db function and verify_token
     with patch("db.database.get_db", side_effect=_get_test_db):
