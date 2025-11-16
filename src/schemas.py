@@ -305,6 +305,7 @@ class CollectionBase(BaseModel):
     createdAt: datetime
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
+    availableCountries: Optional[List[str]] = None  # List of country codes where content is available
 
 class Collection(CollectionBase):
     """
@@ -345,6 +346,8 @@ class CreateCollectionRequest(BaseModel):
     songs: List[SongWithEarlyRelease] = []  # List of songs with optional early release dates
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
+    availableInCountries: Optional[List[str]] = None  # List of country codes where content IS available
+    notAvailableInCountries: Optional[List[str]] = None  # List of country codes where content is NOT available
     
     class Config:
         json_schema_extra = {
@@ -365,7 +368,8 @@ class CreateCollectionRequest(BaseModel):
                     }
                 ],
                 "releaseDate": "2025-12-01T00:00:00Z",
-                "credits": ["Charly García", "Pedro Aznar"]
+                "credits": ["Charly García", "Pedro Aznar"],
+                "availableInCountries": ["AR", "UY", "CL", "BR"]
             }
         }
 
@@ -376,6 +380,8 @@ class UpdateCollectionRequest(BaseModel):
     coverUrl: Optional[str] = None
     songs: Optional[List[SongWithEarlyRelease]] = None
     credits: Optional[List[str]] = None
+    availableInCountries: Optional[List[str]] = None
+    notAvailableInCountries: Optional[List[str]] = None
     
     class Config:
         json_schema_extra = {
@@ -391,7 +397,8 @@ class UpdateCollectionRequest(BaseModel):
                         "earlyReleaseDate": "2025-11-20T00:00:00Z"
                     }
                 ],
-                "credits": ["Charly García", "Pedro Aznar", "Willy Iturri"]
+                "credits": ["Charly García", "Pedro Aznar", "Willy Iturri"],
+                "availableInCountries": ["AR", "UY", "CL", "BR"]
             }
         }
 

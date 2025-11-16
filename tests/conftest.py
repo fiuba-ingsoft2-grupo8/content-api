@@ -37,7 +37,9 @@ def client(mock_db):
              patch("databases.about_database.get_db", side_effect=_get_test_db), \
              patch("databases.activity_database.get_db", side_effect=_get_test_db), \
              patch("databases.share_database.get_db", side_effect=_get_test_db), \
-             patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db):
+             patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db), \
+             patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
+             patch("controllers.playlists_controller.get_db", side_effect=_get_test_db):
             with TestClient(app) as test_client:
                 yield test_client
 
@@ -62,9 +64,10 @@ def client_other_user(mock_db):
 
     # Mock verify_token to return a different user
     async def mock_verify_other_user(*args, **kwargs):
-        return {"user_id": "other_user_456", "stage_name": "Other Artist", "user_type": "artist"}
+        return {"user_id": "other_user_456", "stage_name": "Other Artist", "user_type": "artist", "country": "GB"}
 
     # Mock the get_db function and verify_token
+    # Patch verify_token in all controllers where it's used
     with patch("db.database.get_db", side_effect=_get_test_db):
         with patch("databases.songs_database.get_db", side_effect=_get_test_db), \
              patch("databases.playlists_database.get_db", side_effect=_get_test_db), \
@@ -75,6 +78,9 @@ def client_other_user(mock_db):
              patch("databases.activity_database.get_db", side_effect=_get_test_db), \
              patch("databases.share_database.get_db", side_effect=_get_test_db), \
              patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db), \
-             patch("auth.verify_token", side_effect=mock_verify_other_user):
+             patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
+             patch("controllers.playlists_controller.get_db", side_effect=_get_test_db), \
+             patch("auth.verify_token", side_effect=mock_verify_other_user), \
+             patch("controllers.search_controller.verify_token", side_effect=mock_verify_other_user):
             with TestClient(app) as test_client:
                 yield test_client

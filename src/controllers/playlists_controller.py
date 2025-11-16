@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, UploadFile, File
 from fastapi.responses import JSONResponse
+from bson import ObjectId
 
 import databases.playlists_database as playlists_db
 import databases.songs_database as songs_db
@@ -11,8 +12,84 @@ import schemas
 from auth import verify_token, is_authorized
 from common.utils import create_error_response, serialize_playlist, DEFAULT_COVERS
 from resources.logger import logger
+from db.database import get_db
 
 router = APIRouter()
+
+
+async def _filter_songs_by_geography(user: dict, songs: list, db=None) -> list:
+    """
+    Filter songs based on geographical restrictions of their collections.
+    
+    A song is accessible if:
+    - User is backoffice
+    - User is the owner of the song
+    - Song is not in any collection (standalone - available everywhere)
+    - Song is in at least one collection available in user's country
+    
+    Args:
+        user: User dictionary from verify_token
+        songs: List of song documents
+        db: Database instance (optional, will use get_db() if not provided)
+        
+    Returns:
+        list: Filtered list of accessible songs
+    """
+    # Backoffice users can access all songs
+    if user.get("user_type") == "backoffice":
+        return songs
+    
+    if db is None:
+        db = get_db()
+    
+    accessible_songs = []
+    user_country = user.get("country", "")
+    
+    for song in songs:
+        song_id = song.get("_id")
+        
+        # Check if user owns the song
+        if song.get("artistId") == user.get("user_id"):
+            accessible_songs.append(song)
+            continue
+        
+        # Get collections this song belongs to
+        collection_songs = list(db.collection_songs.find(
+            {"song_id": ObjectId(song_id)},
+            {"collection_id": 1}
+        ))
+        
+        # If song is not in any collection (standalone), it's available everywhere
+        if not collection_songs:
+            accessible_songs.append(song)
+            continue
+        
+        # Check if song is in at least one collection available in user's country
+        collection_ids = [cs["collection_id"] for cs in collection_songs]
+        
+        collections = list(db.collections.find(
+            {"_id": {"$in": collection_ids}},
+            {"availableCountries": 1}
+        ))
+        
+        is_accessible = False
+        for collection in collections:
+            available_countries = collection.get("availableCountries", [])
+            
+            # If collection has no restrictions, song is accessible
+            if not available_countries:
+                is_accessible = True
+                break
+            
+            # If user's country is in the available countries, song is accessible
+            if user_country in available_countries:
+                is_accessible = True
+                break
+        
+        if is_accessible:
+            accessible_songs.append(song)
+    
+    return accessible_songs
 
 
 def _parse_iso(dt: str | None):
@@ -178,7 +255,9 @@ async def get_playlists(
         serialized_playlists = []
         for playlist in playlists:
             songs = await playlists_db.get_songs_from_playlist(playlist["_id"])
-            serialized_playlists.append(serialize_playlist(playlist, songs))
+            # Filter songs based on geographical restrictions
+            filtered_songs = await _filter_songs_by_geography(user, songs)
+            serialized_playlists.append(serialize_playlist(playlist, filtered_songs))
         return {"data": serialized_playlists}
     except Exception as e:
         logger.error(f"Failed to fetch published playlists: {str(e)}")
@@ -225,8 +304,10 @@ async def get_playlist(id: str, user: dict = Depends(verify_token)):
             )
 
         songs = await playlists_db.get_songs_from_playlist(id)
-        serialized_playlist = serialize_playlist(playlist, songs)
-        logger.info(f"Successfully retrieved playlist {id} with {len(songs)} songs")
+        # Filter songs based on geographical restrictions
+        filtered_songs = await _filter_songs_by_geography(user, songs)
+        serialized_playlist = serialize_playlist(playlist, filtered_songs)
+        logger.info(f"Successfully retrieved playlist {id} with {len(filtered_songs)} songs (filtered from {len(songs)} by geography)")
         return {"data": serialized_playlist}
     except Exception as e:
         logger.error(f"Failed to fetch playlist with id={id}: {str(e)}")
