@@ -7,10 +7,48 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from common.utils import create_error_response, serialize_collection
+from common.countries import validate_country_codes, calculate_available_countries
 from fastapi import UploadFile, File, Form
 from datetime import datetime, timezone
 
 router = APIRouter()
+
+
+def _can_access_collection(user: dict, collection: dict) -> bool:
+    """
+    Check if a user can access a collection based on geographical restrictions.
+    
+    Returns True if:
+    - User is backoffice
+    - User is the owner of the collection
+    - User's country is in the collection's availableCountries list
+    
+    Args:
+        user: User dictionary from verify_token
+        collection: Collection document from database
+        
+    Returns:
+        bool: True if user can access, False otherwise
+    """
+    # Backoffice users can access all collections
+    if user.get("user_type") == "backoffice":
+        return True
+    
+    # Owner can access their own collections
+    if user.get("user_id") == collection.get("artistId"):
+        return True
+    
+    # Check geographical restrictions
+    user_country = user.get("country", "")
+    available_countries = collection.get("availableCountries", [])
+    
+    # If no restrictions, available everywhere
+    if not available_countries:
+        return True
+    
+    # Check if user's country is in the available list
+    return user_country in available_countries
+
 
 def _parse_iso(dt: str | None):
     if not dt:
@@ -161,6 +199,30 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
         )
 
     try:
+        # Validate country codes if provided
+        if collection.availableInCountries:
+            is_valid, error_msg = validate_country_codes(collection.availableInCountries)
+            if not is_valid:
+                return JSONResponse(
+                    status_code=400,
+                    content=create_error_response(400, "Bad Request", f"availableInCountries: {error_msg}", "/collections"),
+                )
+        
+        if collection.notAvailableInCountries:
+            is_valid, error_msg = validate_country_codes(collection.notAvailableInCountries)
+            if not is_valid:
+                return JSONResponse(
+                    status_code=400,
+                    content=create_error_response(400, "Bad Request", f"notAvailableInCountries: {error_msg}", "/collections"),
+                )
+        
+        # Calculate final list of available countries
+        available_countries = calculate_available_countries(
+            collection.availableInCountries,
+            collection.notAvailableInCountries
+        )
+        logger.info(f"Collection will be available in {len(available_countries)} countries")
+        
         # uploaded_file = await storage_db.upload_cover_image(collection.artistId, collection.type, file)
         collection_type = collection.type.value if hasattr(collection.type, 'value') else collection.type
         
@@ -182,7 +244,8 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
             "None", 
             collection.releaseDate,
             collection.credits,
-            songs_with_early
+            songs_with_early,
+            available_countries
         )
         if not db_collection:
             return JSONResponse(
@@ -306,6 +369,32 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
                 ),
             )
         
+        # Validate country codes if provided
+        if update_request.availableInCountries is not None:
+            is_valid, error_msg = validate_country_codes(update_request.availableInCountries)
+            if not is_valid:
+                return JSONResponse(
+                    status_code=400,
+                    content=create_error_response(400, "Bad Request", f"availableInCountries: {error_msg}", f"/collections/{collection_id}"),
+                )
+        
+        if update_request.notAvailableInCountries is not None:
+            is_valid, error_msg = validate_country_codes(update_request.notAvailableInCountries)
+            if not is_valid:
+                return JSONResponse(
+                    status_code=400,
+                    content=create_error_response(400, "Bad Request", f"notAvailableInCountries: {error_msg}", f"/collections/{collection_id}"),
+                )
+        
+        # Calculate available countries if any country field is provided
+        available_countries = None
+        if update_request.availableInCountries is not None or update_request.notAvailableInCountries is not None:
+            available_countries = calculate_available_countries(
+                update_request.availableInCountries,
+                update_request.notAvailableInCountries
+            )
+            logger.info(f"Updating collection {collection_id} to be available in {len(available_countries)} countries")
+        
         # Build update dictionary with only provided fields
         update_data = {}
         if update_request.name is not None:
@@ -318,6 +407,8 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
             update_data["coverUrl"] = update_request.coverUrl
         if update_request.credits is not None:
             update_data["credits"] = update_request.credits
+        if available_countries is not None:
+            update_data["availableCountries"] = available_countries
         
         # Update collection metadata if there are fields to update
         if update_data:
@@ -393,8 +484,16 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
     
     try:
         collections = await collections_db.get_popular_collections(artistId=artistId, limit=limit, type=type, includeUnpublished=includeUnpublished)
+        
+        # Filter collections by geographical access
+        accessible_collections = [
+            collection for collection in collections 
+            if _can_access_collection(user, collection)
+        ]
+        logger.info(f"Filtered {len(collections)} popular collections to {len(accessible_collections)} based on geographical restrictions")
+        
         serialized_collections = []
-        for collection in collections:
+        for collection in accessible_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
             serialized_collections.append(serialize_collection(collection, songs))
         return {"data": serialized_collections}
@@ -482,8 +581,16 @@ async def get_collections(
             published_from=dt_from,
             published_to=dt_to,
         )
+        
+        # Filter collections by geographical access
+        accessible_collections = [
+            collection for collection in collections 
+            if _can_access_collection(user, collection)
+        ]
+        logger.info(f"Filtered {len(collections)} collections to {len(accessible_collections)} based on geographical restrictions")
+        
         serialized_collections = []
-        for collection in collections:
+        for collection in accessible_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
             serialized_collections.append(serialize_collection(collection, songs))
         return {"data": serialized_collections}
@@ -669,6 +776,20 @@ async def get_collection(collection_id: str, includeUnpublished: bool = False, u
                     f"/collections/{collection_id}",
                 ),
             )
+        
+        # Check geographical access
+        if not _can_access_collection(user, collection):
+            logger.warning(f"User from {user.get('country', 'unknown')} attempted to access collection {collection_id} not available in their region")
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "This collection is not available in your region",
+                    f"/collections/{collection_id}",
+                ),
+            )
+        
         songs = await collections_db.get_songs_from_collection(collection["_id"])
 
         return {"data": serialize_collection(collection, songs)}
