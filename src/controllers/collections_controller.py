@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from resources.logger import logger
 from common.utils import create_error_response, serialize_collection
+from common.countries import validate_country_codes, calculate_available_countries
 from fastapi import UploadFile, File, Form
 from datetime import datetime, timezone
 
@@ -161,6 +162,30 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
         )
 
     try:
+        # Validate country codes if provided
+        if collection.availableInCountries:
+            is_valid, error_msg = validate_country_codes(collection.availableInCountries)
+            if not is_valid:
+                return JSONResponse(
+                    status_code=400,
+                    content=create_error_response(400, "Bad Request", f"availableInCountries: {error_msg}", "/collections"),
+                )
+        
+        if collection.notAvailableInCountries:
+            is_valid, error_msg = validate_country_codes(collection.notAvailableInCountries)
+            if not is_valid:
+                return JSONResponse(
+                    status_code=400,
+                    content=create_error_response(400, "Bad Request", f"notAvailableInCountries: {error_msg}", "/collections"),
+                )
+        
+        # Calculate final list of available countries
+        available_countries = calculate_available_countries(
+            collection.availableInCountries,
+            collection.notAvailableInCountries
+        )
+        logger.info(f"Collection will be available in {len(available_countries)} countries")
+        
         # uploaded_file = await storage_db.upload_cover_image(collection.artistId, collection.type, file)
         collection_type = collection.type.value if hasattr(collection.type, 'value') else collection.type
         
@@ -182,7 +207,8 @@ async def create_collection(collection: schemas.CreateCollectionRequest, user: d
             "None", 
             collection.releaseDate,
             collection.credits,
-            songs_with_early
+            songs_with_early,
+            available_countries
         )
         if not db_collection:
             return JSONResponse(

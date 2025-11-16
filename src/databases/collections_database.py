@@ -10,12 +10,13 @@ from bson import ObjectId
 
 USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
 
-async def create_collection(name, artistId, artistName, type, genre, coverUrl, releaseDate=None, credits=None, songs_with_early_release=None):
+async def create_collection(name, artistId, artistName, type, genre, coverUrl, releaseDate=None, credits=None, songs_with_early_release=None, available_countries=None):
     """
     Create a collection with songs.
     
     Args:
         songs_with_early_release: List of dicts with 'songId' and optional 'earlyReleaseDate'
+        available_countries: List of country codes where collection is available
     """
     db = get_db()
     try:
@@ -29,6 +30,7 @@ async def create_collection(name, artistId, artistName, type, genre, coverUrl, r
             "createdAt": datetime.now(timezone.utc),
             "releaseDate": releaseDate if releaseDate else datetime.now(timezone.utc),
             "credits": credits if credits else [],
+            "availableCountries": available_countries if available_countries else [],
         }
         result = db.collections.insert_one(collection_doc)
         logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, genre={genre}, id={result.inserted_id}, releaseDate={releaseDate}")

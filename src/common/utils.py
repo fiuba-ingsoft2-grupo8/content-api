@@ -98,6 +98,7 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
         createdAt=collection.get("createdAt"),
         releaseDate=collection.get("releaseDate"),
         credits=collection.get("credits", []),
+        availableCountries=collection.get("availableCountries", []),
         totalPlays=collection.get("totalPlays"),
         totalLikes=collection.get("totalLikes"),
         totalPlaylistSaves=collection.get("totalPlaylistSaves"),

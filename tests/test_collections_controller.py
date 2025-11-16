@@ -1148,3 +1148,226 @@ class TestCollectionsEndpoints:
         
         data = response.json()["data"]
         assert len(data["earlyReleasedSongs"]) == 2
+
+
+class TestCollectionGeographicalRestrictions:
+    """Test suite for geographical restrictions on collections."""
+
+    def test_create_collection_with_available_in_countries(self, client):
+        """Test creating a collection with specific available countries."""
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Song 2", "duration": "200"}).json()["data"]
+        
+        collection_data = {
+            "name": "Latin America Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}, {"songId": song2['_id']}],
+            "availableInCountries": ["AR", "UY", "CL", "BR"]
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        assert "availableCountries" in data
+        assert set(data["availableCountries"]) == {"AR", "UY", "CL", "BR"}
+        assert len(data["availableCountries"]) == 4
+
+    def test_create_collection_with_not_available_in_countries(self, client):
+        """Test creating a collection excluding specific countries."""
+        song1 = client.post("/songs", json={"title": "Song A", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Worldwide Except US Album",
+            "type": "album",
+            "genre": "Rock",
+            "songs": [{"songId": song1['_id']}],
+            "notAvailableInCountries": ["US", "CA"]
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        assert "availableCountries" in data
+        assert "US" not in data["availableCountries"]
+        assert "CA" not in data["availableCountries"]
+        assert "AR" in data["availableCountries"]
+        assert "BR" in data["availableCountries"]
+        # Should be total countries (50) minus excluded (2)
+        assert len(data["availableCountries"]) == 48
+
+    def test_create_collection_without_country_restrictions(self, client):
+        """Test creating a collection without any country restrictions (available everywhere)."""
+        song1 = client.post("/songs", json={"title": "Global Song", "duration": "240"}).json()["data"]
+        
+        collection_data = {
+            "name": "Global Album",
+            "type": "album",
+            "genre": "Electronic",
+            "songs": [{"songId": song1['_id']}]
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        assert "availableCountries" in data
+        # Should include all 50 countries
+        assert len(data["availableCountries"]) == 50
+
+    def test_create_collection_with_invalid_country_code(self, client):
+        """Test that invalid country codes are rejected."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Invalid Country Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "availableInCountries": ["AR", "XX", "YY"]  # XX and YY are invalid
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 400
+        
+        error = response.json()
+        assert "Invalid country codes" in error["detail"]
+        assert "XX" in error["detail"]
+
+    def test_create_collection_available_in_takes_precedence(self, client):
+        """Test that availableInCountries takes precedence over notAvailableInCountries."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Precedence Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "availableInCountries": ["AR", "UY"],
+            "notAvailableInCountries": ["US", "CA"]  # Should be ignored
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        # Should only use availableInCountries, ignoring notAvailableInCountries
+        assert set(data["availableCountries"]) == {"AR", "UY"}
+        assert len(data["availableCountries"]) == 2
+
+    def test_create_collection_with_single_country(self, client):
+        """Test creating a collection available in only one country."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Argentina Only Album",
+            "type": "album",
+            "genre": "Folklore",
+            "songs": [{"songId": song1['_id']}],
+            "availableInCountries": ["AR"]
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        assert data["availableCountries"] == ["AR"]
+        assert len(data["availableCountries"]) == 1
+
+    def test_create_collection_exclude_all_except_one(self, client):
+        """Test excluding all countries except one."""
+        from common.countries import ALL_COUNTRY_CODES
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Exclude all except Argentina
+        excluded = [code for code in ALL_COUNTRY_CODES if code != "AR"]
+        
+        collection_data = {
+            "name": "Only AR Album",
+            "type": "single",
+            "genre": "Rock",
+            "songs": [{"songId": song1['_id']}],
+            "notAvailableInCountries": excluded
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        assert data["availableCountries"] == ["AR"]
+        assert len(data["availableCountries"]) == 1
+
+    def test_get_collection_includes_available_countries(self, client):
+        """Test that GET collection endpoint includes availableCountries."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "availableInCountries": ["AR", "UY", "BR"]
+        }
+        
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Get the collection
+        get_response = client.get(f"/collections/{collection_id}")
+        assert get_response.status_code == 200
+        
+        data = get_response.json()["data"]
+        assert "availableCountries" in data
+        assert set(data["availableCountries"]) == {"AR", "UY", "BR"}
+
+    def test_list_collections_includes_available_countries(self, client):
+        """Test that list collections endpoint includes availableCountries."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Test Album List",
+            "type": "album",
+            "genre": "Jazz",
+            "songs": [{"songId": song1['_id']}],
+            "availableInCountries": ["US", "CA", "MX"]
+        }
+        
+        client.post("/collections/", json=collection_data)
+        
+        # List collections
+        response = client.get("/collections/")
+        assert response.status_code == 200
+        
+        collections = response.json()["data"]
+        assert len(collections) >= 1
+        
+        # Find our collection
+        test_collection = next(
+            (c for c in collections if c["name"] == "Test Album List"), 
+            None
+        )
+        assert test_collection is not None
+        assert "availableCountries" in test_collection
+        assert set(test_collection["availableCountries"]) == {"US", "CA", "MX"}
+
+    def test_create_collection_with_empty_countries_list(self, client):
+        """Test creating collection with empty availableInCountries list."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Empty Countries Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "availableInCountries": []
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        data = response.json()["data"]
+        # Empty list should default to all countries
+        assert len(data["availableCountries"]) == 50
