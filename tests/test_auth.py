@@ -55,6 +55,8 @@ class TestVerifyToken:
             "user_id": "user123",
             "email": "user@example.com",
             "user_type": "user",
+            "stage_name": "Test User",
+            "country": "US",
             "exp": datetime.utcnow() + timedelta(hours=1)
         }
         return jwt.encode(payload, jwt_secret, algorithm="HS256")
@@ -66,6 +68,8 @@ class TestVerifyToken:
             "user_id": "user123",
             "email": "user@example.com",
             "user_type": "user",
+            "stage_name": "Test User",
+            "country": "US",
             "exp": datetime.utcnow() - timedelta(hours=1)
         }
         return jwt.encode(payload, jwt_secret, algorithm="HS256")
@@ -78,6 +82,7 @@ class TestVerifyToken:
         assert result["user_id"] == "test_user_123"
         assert result["email"] == "test@example.com"
         assert result["user_type"] == "user"
+        assert result["country"] == "AR"
 
     @patch("auth.is_testing")
     def test_verify_token_missing_authorization_header(self, mock_is_testing):
@@ -138,6 +143,8 @@ class TestVerifyToken:
         assert result["user_id"] == "user123"
         assert result["email"] == "user@example.com"
         assert result["user_type"] == "user"
+        assert result["stage_name"] == "Test User"
+        assert result["country"] == "US"
 
     @patch("auth.is_testing")
     @patch.dict(os.environ, {"JWT_SECRET": "test_secret_key_12345"})
@@ -216,4 +223,62 @@ class TestVerifyToken:
         
         assert exc_info.value.status_code == 401
         assert "Bearer" in exc_info.value.detail
+
+    @patch("auth.is_testing")
+    @patch.dict(os.environ, {"JWT_SECRET": "test_secret_key_12345"})
+    def test_verify_token_with_country_for_regular_user(self, mock_is_testing):
+        """Should decode country field for regular users."""
+        mock_is_testing.return_value = False
+        
+        # Create token for regular user with country
+        payload = {
+            "user_id": "123e4567-e89b-12d3-a456-426614174001",
+            "email": "user@example.com",
+            "user_type": "user",
+            "stage_name": "DJ Artist",
+            "country": "US",
+            "exp": datetime.utcnow() + timedelta(hours=1),
+            "iat": datetime.utcnow()
+        }
+        token = jwt.encode(payload, "test_secret_key_12345", algorithm="HS256")
+        
+        import auth
+        auth.JWT_SECRET = "test_secret_key_12345"
+        
+        result = auth.verify_token(authorization=f"Bearer {token}")
+        
+        assert result["user_id"] == "123e4567-e89b-12d3-a456-426614174001"
+        assert result["email"] == "user@example.com"
+        assert result["user_type"] == "user"
+        assert result["stage_name"] == "DJ Artist"
+        assert result["country"] == "US"
+
+    @patch("auth.is_testing")
+    @patch.dict(os.environ, {"JWT_SECRET": "test_secret_key_12345"})
+    def test_verify_token_with_empty_country_for_backoffice_user(self, mock_is_testing):
+        """Should decode empty country field for backoffice users."""
+        mock_is_testing.return_value = False
+        
+        # Create token for backoffice user with empty country
+        payload = {
+            "user_id": "1",
+            "email": "admin@example.com",
+            "user_type": "backoffice",
+            "stage_name": "",
+            "country": "",
+            "exp": datetime.utcnow() + timedelta(hours=1),
+            "iat": datetime.utcnow()
+        }
+        token = jwt.encode(payload, "test_secret_key_12345", algorithm="HS256")
+        
+        import auth
+        auth.JWT_SECRET = "test_secret_key_12345"
+        
+        result = auth.verify_token(authorization=f"Bearer {token}")
+        
+        assert result["user_id"] == "1"
+        assert result["email"] == "admin@example.com"
+        assert result["user_type"] == "backoffice"
+        assert result["stage_name"] == ""
+        assert result["country"] == ""
 

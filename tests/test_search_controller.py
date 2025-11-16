@@ -1,10 +1,23 @@
 import pytest
 from datetime import datetime
 from bson import ObjectId
+from unittest.mock import patch, AsyncMock, MagicMock
 
 
 class TestSearchController:
     """Test suite for search controller endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def mock_external_api(self):
+        """Mock external API calls to avoid real HTTP requests in tests."""
+        # Mock the httpx.AsyncClient used in _fetch_users_by_name
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"users": [], "count": 0}
+        
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+            yield mock_client
 
     def test_search_songs_by_title(self, client):
         """Test searching for songs by title."""
