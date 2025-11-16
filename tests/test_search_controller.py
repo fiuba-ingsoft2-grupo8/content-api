@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 from unittest.mock import patch, AsyncMock, MagicMock
 
@@ -457,4 +457,255 @@ class TestSearchController:
             # Should not have any MongoDB ObjectId objects
             for value in song.values():
                 assert not str(type(value)).startswith("<class 'bson")
+
+
+class TestSearchGeographicalRestrictions:
+    """Tests for geographical restrictions in search results."""
+
+    def test_search_standalone_song_accessible_everywhere(self, client):
+        """Test that standalone songs (not in collections) are accessible from all countries."""
+        # Create a standalone song (not added to any collection)
+        client.post("/songs", json={"title": "Standalone GeoTest", "duration": "180"})
+        
+        # Search for the song
+        response = client.get("/search?str_name=Standalone GeoTest")
+        assert response.status_code == 200
+        
+        data = response.json()["collections"]
+        song_titles = [s["title"] for s in data.get("songs", [])]
+        
+        # Standalone song should be accessible
+        assert "Standalone GeoTest" in song_titles
+
+    def test_search_owner_sees_own_restricted_content(self, client):
+        """Test that song owner can find their own restricted songs."""
+        # Create song that will be in a restricted collection
+        song = client.post("/songs", json={"title": "OwnerOnlySong Restricted", "duration": "180"}).json()["data"]
+        
+        # Create collection only available in US (user is from AR)
+        client.post("/collections/", json={
+            "name": "Owner US Only Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song['_id']}],
+            "availableInCountries": ["US"]
+        })
+        
+        # Search for the song - owner should see their own song even though collection is not in their country
+        response = client.get("/search?str_name=OwnerOnlySong")
+        assert response.status_code == 200
+        
+        data = response.json()["collections"]
+        song_titles = [s["title"] for s in data.get("songs", [])]
+        
+        # Owner should see their own restricted song
+        assert "OwnerOnlySong Restricted" in song_titles
+
+    def test_search_song_in_multiple_collections_accessible_if_one_available(self, client):
+        """Test that a song in multiple collections is accessible if at least one collection is available."""
+        # Create a song
+        song = client.post("/songs", json={"title": "Multi Collection Song", "duration": "180"}).json()["data"]
+        
+        # Add to collection NOT available in AR
+        client.post("/collections/", json={
+            "name": "US Only Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song['_id']}],
+            "availableInCountries": ["US"]
+        })
+        
+        # Add same song to collection available in AR
+        client.post("/collections/", json={
+            "name": "AR Available Album",
+            "type": "album",
+            "genre": "Rock",
+            "songs": [{"songId": song['_id']}],
+            "availableInCountries": ["AR"]
+        })
+        
+        # Search for the song
+        response = client.get("/search?str_name=Multi Collection")
+        assert response.status_code == 200
+        
+        data = response.json()["collections"]
+        song_titles = [s["title"] for s in data.get("songs", [])]
+        
+        # Song should be accessible because it's in at least one available collection
+        assert "Multi Collection Song" in song_titles
+
+    def test_can_user_access_song_function(self):
+        """Unit test for _can_user_access_song function."""
+        from controllers.search_controller import _can_user_access_song
+        from unittest.mock import MagicMock, patch
+        from bson import ObjectId
+        
+        # Mock database
+        mock_db = MagicMock()
+        song_id = str(ObjectId())
+        collection_id = ObjectId()
+        
+        # Setup: song in collection with country restrictions
+        mock_db.songs.find_one.return_value = {"_id": ObjectId(song_id), "artistId": "other_artist"}
+        mock_db.collection_songs.find.return_value = [{"collection_id": collection_id}]
+        mock_db.collections.find.return_value = [
+            {"_id": collection_id, "availableCountries": ["AR", "UY"], "artistId": "other_artist"}
+        ]
+        
+        user_ar = {"user_id": "user1", "country": "AR", "user_type": "user"}
+        user_us = {"user_id": "user1", "country": "US", "user_type": "user"}
+        
+        with patch("controllers.search_controller.get_db", return_value=mock_db):
+            import asyncio
+            
+            # User from AR should have access
+            result_ar = asyncio.run(_can_user_access_song(user_ar, song_id))
+            assert result_ar == True
+            
+            # User from US should NOT have access
+            result_us = asyncio.run(_can_user_access_song(user_us, song_id))
+            assert result_us == False
+
+
+class TestSearchAlbumsGeographicalRestrictions:
+    """Tests for album (collection) geographical filtering in search results"""
+    
+    @pytest.mark.asyncio
+    async def test_search_album_accessible_in_user_country(self, client, mock_db):
+        """Album available in user's country should appear in search results"""
+        # Create an album available in Argentina (user's country is AR from auth.py)
+        collection_result = mock_db.collections.insert_one({
+            "name": "Melodic Dreams",
+            "artistId": "test_user_123",
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Pop",
+            "coverUrl": "https://example.com/cover.jpg",
+            "createdAt": datetime.now(timezone.utc),
+            "releaseDate": datetime.now(timezone.utc) - timedelta(days=30),
+            "availableCountries": ["AR", "BR", "CL"]  # Available in Argentina
+        })
+        
+        # Search for the album
+        response = client.get("/search?str_name=Melodic")
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Album should appear in results
+        assert "albums" in data["collections"]
+        assert len(data["collections"]["albums"]) == 1
+        assert data["collections"]["albums"][0]["name"] == "Melodic Dreams"
+    
+    @pytest.mark.asyncio
+    async def test_search_album_not_accessible_in_user_country(self, client, mock_db):
+        """Album not available in user's country should NOT appear in search results"""
+        # Create an album available only in US and GB (NOT in Argentina where user is from)
+        collection_result = mock_db.collections.insert_one({
+            "name": "Latin Vibes",
+            "artistId": "different_artist_789",  # Different artist, not the test user
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Latin",
+            "coverUrl": "https://example.com/cover2.jpg",
+            "createdAt": datetime.now(timezone.utc),
+            "releaseDate": datetime.now(timezone.utc) - timedelta(days=15),
+            "availableCountries": ["US", "GB"]  # NOT available in Argentina
+        })
+        
+        # Search for the album as user from AR
+        response = client.get("/search?str_name=Latin")
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Album should NOT appear in results for AR user
+        assert "albums" in data["collections"]
+        assert len(data["collections"]["albums"]) == 0
+    
+    @pytest.mark.asyncio
+    async def test_search_album_owner_sees_restricted_album(self, client, mock_db):
+        """Album owner should see their own albums regardless of country restrictions"""
+        # Create an album available only in US (not in user's country AR)
+        collection_result = mock_db.collections.insert_one({
+            "name": "Owner Album",
+            "artistId": "test_user_123",  # User's own album
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Rock",
+            "coverUrl": "https://example.com/cover3.jpg",
+            "createdAt": datetime.now(timezone.utc),
+            "releaseDate": datetime.now(timezone.utc) - timedelta(days=5),
+            "availableCountries": ["US"]  # Only US, not AR
+        })
+        
+        # Owner should see their own album
+        response = client.get("/search?str_name=Owner")
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert "albums" in data["collections"]
+        assert len(data["collections"]["albums"]) == 1
+        assert data["collections"]["albums"][0]["name"] == "Owner Album"
+    
+    @pytest.mark.asyncio
+    async def test_search_album_no_restrictions_accessible_everywhere(self, client, mock_db):
+        """Album with no country restrictions should be accessible to all users"""
+        # Create an album with no country restrictions
+        collection_result = mock_db.collections.insert_one({
+            "name": "Global Hits",
+            "artistId": "different_artist_789",
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Pop",
+            "coverUrl": "https://example.com/cover4.jpg",
+            "createdAt": datetime.now(timezone.utc),
+            "releaseDate": datetime.now(timezone.utc) - timedelta(days=60),
+            "availableCountries": []  # No restrictions
+        })
+        
+        # User from any country should see it
+        response = client.get("/search?str_name=Global")
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert "albums" in data["collections"]
+        assert len(data["collections"]["albums"]) == 1
+        assert data["collections"]["albums"][0]["name"] == "Global Hits"
+    
+    @pytest.mark.asyncio
+    async def test_search_mixed_results_with_geographical_filtering(self, client, mock_db):
+        """Search should filter albums based on geographical restrictions"""
+        # Create an album available in AR (user's country)
+        collection_result = mock_db.collections.insert_one({
+            "name": "Best Album",
+            "artistId": "different_artist_789",  # Different artist
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Rock",
+            "coverUrl": "https://example.com/album.jpg",
+            "createdAt": datetime.now(timezone.utc),
+            "releaseDate": datetime.now(timezone.utc) - timedelta(days=10),
+            "availableCountries": ["AR", "BR"]  # Available in AR
+        })
+        
+        # Create an album NOT available in AR (only US)
+        collection_result2 = mock_db.collections.insert_one({
+            "name": "Best US Album",
+            "artistId": "different_artist_789",  # Different artist
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Rock",
+            "coverUrl": "https://example.com/album2.jpg",
+            "createdAt": datetime.now(timezone.utc),
+            "releaseDate": datetime.now(timezone.utc) - timedelta(days=20),
+            "availableCountries": ["US"]  # Only US, NOT AR
+        })
+        
+        # Search as AR user
+        response = client.get("/search?str_name=Best")
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should have only the AR-available album, not the US-only album
+        assert len(data["collections"]["albums"]) == 1
+        assert data["collections"]["albums"][0]["name"] == "Best Album"
 

@@ -465,15 +465,28 @@ async def get_ids_by_name(name: str, token: Optional[str] = None):
                 {"_id": 1}
             )
         )
-
+        
+        # Search for collections (albums, EPs, singles) by name
+        # Only include published collections
+        now = datetime.now(timezone.utc)
+        albums = list(
+            db.collections.find(
+                {
+                    "name": {"$regex": name, "$options": "i"},
+                    "releaseDate": {"$lte": now}
+                },
+                {"_id": 1}
+            )
+        )
 
         collections = {
             "playlists": playlists,   # ej: [{"_id": ObjectId(...)}]
             "songs": songs,           # ej: [{"_id": ObjectId(...)}]
+            "albums": albums,         # ej: [{"_id": ObjectId(...)}]
             "users": users,           # ej: [{"id": "uuid"}, ...]
         }
 
-        logger.info(f"Found {sum(len(v) for v in collections.values())} items with name '{name}'")
+        logger.info(f"Found {sum(len(v) for v in collections.values())} items with name '{name}': {len(playlists)} playlists, {len(songs)} songs, {len(albums)} albums, {len(users)} users")
         logger.debug(f"Collections: {collections}")
         return collections
 
