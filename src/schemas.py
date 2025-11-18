@@ -172,6 +172,7 @@ class ListeningHistory(BaseModel):
 class ListeningHistoryRequest(BaseModel):
     songId: str
     progress: Optional[int] = 0
+    country: Optional[str] = None  # ISO country code (e.g., "US", "AR", "BR")
 
 class SongOrder(BaseModel):
     songId: str
@@ -623,4 +624,42 @@ class CarouselImageResponse(BaseModel):
     id: str
     url: str
     isPrimary: bool
+
+# Artist metrics breakdown schemas
+class TopSong(BaseModel):
+    """Top song with metrics for artist breakdown."""
+    songId: str
+    title: str
+    artist: str
+    coverUrl: Optional[str] = None
+    plays: int
+    likes: int
+
+class TopMarket(BaseModel):
+    """Top market (country) with metrics for artist breakdown."""
+    country: str
+    plays: int
+    listeners: int
+
+class TopPlaylist(BaseModel):
+    """Top playlist containing artist's songs."""
+    playlistId: str
+    name: str
+    description: Optional[str] = None
+    coverUrl: Optional[str] = None
+    userId: str
+    songCount: int
+    isPublished: bool
+
+class TopSongsResponse(BaseModel):
+    """Response for top songs endpoint."""
+    data: List[TopSong]
+
+class TopMarketsResponse(BaseModel):
+    """Response for top markets endpoint."""
+    data: List[TopMarket]
+
+class TopPlaylistsResponse(BaseModel):
+    """Response for top playlists endpoint."""
+    data: List[TopPlaylist]
 

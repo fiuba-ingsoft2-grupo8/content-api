@@ -110,6 +110,7 @@ class Play(BaseModel):
     user_id: str
     song_id: ObjectIdStr
     played_at: datetime = Field(default_factory=datetime.utcnow)
+    country: str | None = None  # ISO country code (e.g., "US", "AR", "BR")
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 

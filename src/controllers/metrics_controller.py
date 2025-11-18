@@ -265,9 +265,16 @@ async def get_collection_metrics(collection_id: str, user: dict = Depends(verify
     return {"data": metrics}
 
 @router.get("/artists/{artist_id}", status_code=200)
-async def get_artist_metrics(artist_id: str, user: dict = Depends(verify_token)):
+async def get_artist_metrics(
+    artist_id: str, 
+    user: dict = Depends(verify_token),
+    period: str = "monthly",
+    start_date: str = None,
+    end_date: str = None,
+    country: str = None
+):
     """
-    Obtener las métricas generales de un artista específico.
+    Obtener las métricas generales de un artista específico con filtros opcionales.
     
     Este endpoint retorna un resumen completo de las estadísticas de un artista, incluyendo
     métricas del período actual y comparaciones con el período anterior para análisis de tendencias.
@@ -275,27 +282,60 @@ async def get_artist_metrics(artist_id: str, user: dict = Depends(verify_token))
     **Parámetros de ruta:**
     - artist_id: ID del artista
     
-    **Métricas retornadas:**
-    - monthlyListeners: Oyentes únicos del mes actual
-    - totalPlays: Total de reproducciones del mes actual
-    - totalSaves: Total de saves/likes del mes actual
-    - totalShares: Total de shares del mes actual
-    - Comparaciones con el mes anterior (cambios porcentuales)
+    **Parámetros de consulta opcionales:**
+    - period: Tipo de período ('daily', 'weekly', 'monthly', 'custom'). Default: 'monthly'
+    - start_date: Fecha de inicio para período custom (ISO 8601 format). Requerido si period='custom'
+    - end_date: Fecha de fin para período custom (ISO 8601 format). Requerido si period='custom'
+    - country: Código ISO del país para filtrar (ej: 'US', 'AR', 'BR')
     
-    **Período de cálculo:**
-    - Mes actual vs mes anterior
-    - Permite ver el crecimiento o decrecimiento de la audiencia
+    **Métricas retornadas:**
+    - monthlyListeners: Oyentes únicos del período
+    - plays: Total de reproducciones del período
+    - saves: Total de saves/likes del período
+    - shares: Total de shares del período
+    - Cada métrica incluye: value (valor actual), delta (cambio vs período anterior), percentChange (% de cambio)
     
     **Retorna:**
     - 200: Métricas completas del artista con comparaciones
+    - 400: Error en los parámetros (ej: período custom sin fechas)
     - 500: Error al obtener las métricas
     """
-    logger.info(f"Fetching metrics for artist {artist_id}")
+    logger.info(f"Fetching metrics for artist {artist_id} (period={period}, country={country})")
     
-    # Optionally validate that the user is requesting their own metrics
-    # or has permission to view this artist's metrics
+    # Parse dates if provided
+    parsed_start_date = None
+    parsed_end_date = None
+    if period == "custom":
+        if not start_date or not end_date:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    "start_date and end_date are required for custom period",
+                    f"/metrics/artists/{artist_id}"
+                ),
+            )
+        try:
+            from datetime import datetime
+            parsed_start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            parsed_end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    f"Invalid date format: {str(e)}",
+                    f"/metrics/artists/{artist_id}"
+                ),
+            )
     
-    metrics = await metrics_db.get_artist_metrics(artist_id)
+    metrics = await metrics_db.get_artist_metrics(
+        artist_id, 
+        period=period,
+        start_date=parsed_start_date,
+        end_date=parsed_end_date,
+        country=country
+    )
     if not metrics:
         return JSONResponse(
             status_code=500,
@@ -309,35 +349,44 @@ async def get_artist_metrics(artist_id: str, user: dict = Depends(verify_token))
     return {"data": metrics}
 
 @router.get("/artists/me/overview", status_code=200)
-async def get_my_artist_metrics(user: dict = Depends(verify_token)):
+async def get_my_artist_metrics(
+    user: dict = Depends(verify_token),
+    period: str = "monthly",
+    start_date: str = None,
+    end_date: str = None,
+    country: str = None
+):
     """
-    Obtener las métricas generales del artista autenticado.
+    Obtener las métricas generales del artista autenticado con filtros opcionales.
     
     Este endpoint retorna las estadísticas propias del artista que hace la solicitud,
     proporcionando un dashboard de métricas personales con comparaciones temporales.
     Es el endpoint principal para que los artistas vean su propio rendimiento.
     
+    **Parámetros de consulta opcionales:**
+    - period: Tipo de período ('daily', 'weekly', 'monthly', 'custom'). Default: 'monthly'
+    - start_date: Fecha de inicio para período custom (ISO 8601 format). Requerido si period='custom'
+    - end_date: Fecha de fin para período custom (ISO 8601 format). Requerido si period='custom'
+    - country: Código ISO del país para filtrar (ej: 'US', 'AR', 'BR')
+    
     **Métricas retornadas:**
-    - monthlyListeners: Oyentes únicos del mes actual
-    - totalPlays: Total de reproducciones del mes actual
-    - totalSaves: Total de saves/likes del mes actual  
-    - totalShares: Total de shares del mes actual
-    - Comparaciones con el mes anterior (cambios porcentuales y absolutos)
+    - monthlyListeners: Oyentes únicos del período
+    - plays: Total de reproducciones del período
+    - saves: Total de saves/likes del período  
+    - shares: Total de shares del período
+    - Cada métrica incluye: value (valor actual), delta (cambio vs período anterior), percentChange (% de cambio)
     
     **Validaciones:**
     - El usuario debe ser un artista (tener stage_name)
     
-    **Período de cálculo:**
-    - Mes actual vs mes anterior
-    - Útil para dashboards de artista y análisis de rendimiento personal
-    
     **Retorna:**
     - 200: Métricas completas del artista con comparaciones
+    - 400: Error en los parámetros (ej: período custom sin fechas)
     - 403: Usuario no es un artista
     - 500: Error al obtener las métricas
     """
     artist_id = user["user_id"]
-    logger.info(f"Fetching metrics for authenticated artist {artist_id}")
+    logger.info(f"Fetching metrics for authenticated artist {artist_id} (period={period}, country={country})")
     
     # Check if user is an artist
     if not user.get("stage_name"):
@@ -350,7 +399,40 @@ async def get_my_artist_metrics(user: dict = Depends(verify_token)):
             ),
         )
     
-    metrics = await metrics_db.get_artist_metrics(artist_id)
+    # Parse dates if provided
+    parsed_start_date = None
+    parsed_end_date = None
+    if period == "custom":
+        if not start_date or not end_date:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    "start_date and end_date are required for custom period",
+                    "/metrics/artists/me/overview"
+                ),
+            )
+        try:
+            from datetime import datetime
+            parsed_start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            parsed_end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    f"Invalid date format: {str(e)}",
+                    "/metrics/artists/me/overview"
+                ),
+            )
+    
+    metrics = await metrics_db.get_artist_metrics(
+        artist_id,
+        period=period,
+        start_date=parsed_start_date,
+        end_date=parsed_end_date,
+        country=country
+    )
     if not metrics:
         return JSONResponse(
             status_code=500,
@@ -362,4 +444,250 @@ async def get_my_artist_metrics(user: dict = Depends(verify_token)):
         )
     
     return {"data": metrics}
+
+@router.get("/artists/{artist_id}/top-songs", status_code=200)
+async def get_artist_top_songs(
+    artist_id: str,
+    user: dict = Depends(verify_token),
+    limit: int = 10,
+    sort_by: str = "plays",
+    start_date: str = None,
+    end_date: str = None,
+    country: str = None
+):
+    """
+    Obtener el top de canciones de un artista ordenadas por reproducciones o likes.
+    
+    Este endpoint permite visualizar las canciones más populares de un artista según diferentes métricas,
+    facilitando el análisis de qué contenido tiene mejor rendimiento.
+    
+    **Parámetros de ruta:**
+    - artist_id: ID del artista
+    
+    **Parámetros de consulta opcionales:**
+    - limit: Número de canciones a retornar (default: 10)
+    - sort_by: Ordenar por 'plays' o 'likes' (default: 'plays')
+    - start_date: Fecha de inicio para filtrar reproducciones (ISO 8601 format)
+    - end_date: Fecha de fin para filtrar reproducciones (ISO 8601 format)
+    - country: Código ISO del país para filtrar (ej: 'US', 'AR', 'BR')
+    
+    **Respuesta:**
+    - Lista de canciones con:
+        - songId, title, artist, coverUrl
+        - plays: Número de reproducciones (filtradas por período/país si se especifica)
+        - likes: Número total de likes (acumulado, sin filtro de fecha)
+    
+    **Retorna:**
+    - 200: Lista de top canciones del artista
+    - 400: Error en los parámetros
+    - 500: Error al obtener los datos
+    """
+    logger.info(f"Fetching top songs for artist {artist_id} (sort_by={sort_by}, limit={limit})")
+    
+    # Validate sort_by
+    if sort_by not in ["plays", "likes"]:
+        return JSONResponse(
+            status_code=400,
+            content=create_error_response(
+                400, "Bad Request",
+                "sort_by must be 'plays' or 'likes'",
+                f"/metrics/artists/{artist_id}/top-songs"
+            ),
+        )
+    
+    # Parse dates if provided
+    parsed_start_date = None
+    parsed_end_date = None
+    if start_date:
+        try:
+            from datetime import datetime
+            parsed_start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    f"Invalid start_date format: {str(e)}",
+                    f"/metrics/artists/{artist_id}/top-songs"
+                ),
+            )
+    if end_date:
+        try:
+            from datetime import datetime
+            parsed_end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    f"Invalid end_date format: {str(e)}",
+                    f"/metrics/artists/{artist_id}/top-songs"
+                ),
+            )
+    
+    try:
+        top_songs = await metrics_db.get_artist_top_songs(
+            artist_id,
+            limit=limit,
+            sort_by=sort_by,
+            start_date=parsed_start_date,
+            end_date=parsed_end_date,
+            country=country
+        )
+        
+        return {"data": top_songs}
+        
+    except Exception as e:
+        logger.error(f"Failed to get top songs for artist {artist_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500, "Internal Server Error",
+                str(e),
+                f"/metrics/artists/{artist_id}/top-songs"
+            ),
+        )
+
+@router.get("/artists/{artist_id}/top-markets", status_code=200)
+async def get_artist_top_markets(
+    artist_id: str,
+    user: dict = Depends(verify_token),
+    limit: int = 10,
+    start_date: str = None,
+    end_date: str = None
+):
+    """
+    Obtener los principales mercados (países) donde el artista tiene más reproducciones.
+    
+    Este endpoint permite identificar en qué países o regiones el artista tiene mayor audiencia,
+    útil para planificación de giras, marketing regional y estrategias de distribución.
+    
+    **Parámetros de ruta:**
+    - artist_id: ID del artista
+    
+    **Parámetros de consulta opcionales:**
+    - limit: Número de mercados a retornar (default: 10)
+    - start_date: Fecha de inicio para filtrar reproducciones (ISO 8601 format)
+    - end_date: Fecha de fin para filtrar reproducciones (ISO 8601 format)
+    
+    **Respuesta:**
+    - Lista de mercados ordenados por número de reproducciones con:
+        - country: Código ISO del país (ej: 'US', 'AR', 'BR')
+        - plays: Número de reproducciones en ese mercado
+        - listeners: Número de oyentes únicos en ese mercado
+    
+    **Nota:** Solo se incluyen reproducciones que tienen información de país.
+    
+    **Retorna:**
+    - 200: Lista de top mercados del artista
+    - 400: Error en los parámetros (formato de fecha inválido)
+    - 500: Error al obtener los datos
+    """
+    logger.info(f"Fetching top markets for artist {artist_id} (limit={limit})")
+    
+    # Parse dates if provided
+    parsed_start_date = None
+    parsed_end_date = None
+    if start_date:
+        try:
+            from datetime import datetime
+            parsed_start_date = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    f"Invalid start_date format: {str(e)}",
+                    f"/metrics/artists/{artist_id}/top-markets"
+                ),
+            )
+    if end_date:
+        try:
+            from datetime import datetime
+            parsed_end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request",
+                    f"Invalid end_date format: {str(e)}",
+                    f"/metrics/artists/{artist_id}/top-markets"
+                ),
+            )
+    
+    try:
+        top_markets = await metrics_db.get_artist_top_markets(
+            artist_id,
+            limit=limit,
+            start_date=parsed_start_date,
+            end_date=parsed_end_date
+        )
+        
+        return {"data": top_markets}
+        
+    except Exception as e:
+        logger.error(f"Failed to get top markets for artist {artist_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500, "Internal Server Error",
+                str(e),
+                f"/metrics/artists/{artist_id}/top-markets"
+            ),
+        )
+
+@router.get("/artists/{artist_id}/top-playlists", status_code=200)
+async def get_artist_top_playlists(
+    artist_id: str,
+    user: dict = Depends(verify_token),
+    limit: int = 10
+):
+    """
+    Obtener las principales playlists que incluyen canciones del artista.
+    
+    Este endpoint identifica las playlists más relevantes que contienen música del artista,
+    útil para entender cómo se está curando y distribuyendo su contenido en la plataforma.
+    
+    **Parámetros de ruta:**
+    - artist_id: ID del artista
+    
+    **Parámetros de consulta opcionales:**
+    - limit: Número de playlists a retornar (default: 10)
+    
+    **Respuesta:**
+    - Lista de playlists ordenadas por cantidad de canciones del artista que contienen:
+        - playlistId, name, description, coverUrl
+        - userId: ID del creador de la playlist
+        - songCount: Número de canciones del artista en la playlist
+        - isPublished: Si la playlist está publicada
+    
+    **Caso de uso:**
+    - Identificar playlists populares con tu música
+    - Contactar curadores de playlists
+    - Analizar cómo se agrupa tu música
+    
+    **Retorna:**
+    - 200: Lista de top playlists que incluyen canciones del artista
+    - 500: Error al obtener los datos
+    """
+    logger.info(f"Fetching top playlists for artist {artist_id} (limit={limit})")
+    
+    try:
+        top_playlists = await metrics_db.get_artist_top_playlists(
+            artist_id,
+            limit=limit
+        )
+        
+        return {"data": top_playlists}
+        
+    except Exception as e:
+        logger.error(f"Failed to get top playlists for artist {artist_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500, "Internal Server Error",
+                str(e),
+                f"/metrics/artists/{artist_id}/top-playlists"
+            ),
+        )
 
