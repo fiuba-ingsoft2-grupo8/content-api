@@ -318,3 +318,218 @@ class TestMetricsEndpoints:
         metrics_response3 = client.get(f"/metrics/songs/{song['_id']}")
         assert metrics_response3.json()["data"]["likes"] == 1
 
+    # ============= ARTIST METRICS WITH FILTERS =============
+    
+    def test_get_artist_metrics_with_period_filter(self, client):
+        """Test getting artist metrics with different period filters."""
+        # Create a song to get the artist ID
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        # Get metrics with daily period
+        response = client.get(f"/metrics/artists/{artist_id}?period=daily")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["period"] == "daily"
+        assert "monthlyListeners" in data
+        
+        # Get metrics with weekly period
+        response = client.get(f"/metrics/artists/{artist_id}?period=weekly")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["period"] == "weekly"
+        
+    def test_get_artist_metrics_with_country_filter(self, client):
+        """Test getting artist metrics filtered by country."""
+        # Create a song and play it with country info
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        # Play with country
+        client.post("/history/", json={"songId": song["_id"], "progress": 0, "country": "AR"})
+        
+        # Get metrics filtered by country
+        response = client.get(f"/metrics/artists/{artist_id}?country=AR")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["country"] == "AR"
+        
+    def test_get_artist_metrics_custom_period_without_dates_fails(self, client):
+        """Test that custom period without dates returns error."""
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        response = client.get(f"/metrics/artists/{artist_id}?period=custom")
+        assert response.status_code == 400
+        assert "start_date and end_date are required" in response.json()["detail"]
+    
+    # ============= ARTIST TOP SONGS =============
+    
+    def test_get_artist_top_songs(self, client):
+        """Test getting top songs for an artist."""
+        # Create liked songs playlist
+        client.post("/likedSongs/")
+        
+        # Create multiple songs
+        song1 = client.post("/songs", json={"title": "Popular Song", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Less Popular", "duration": "200"}).json()["data"]
+        artist_id = song1["artistId"]
+        
+        # Add plays to song1
+        client.post("/history/", json={"songId": song1["_id"], "progress": 0})
+        client.post("/history/", json={"songId": song1["_id"], "progress": 0})
+        
+        # Add one play to song2
+        client.post("/history/", json={"songId": song2["_id"], "progress": 0})
+        
+        # Get top songs
+        response = client.get(f"/metrics/artists/{artist_id}/top-songs")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data) >= 2
+        assert data[0]["songId"] == song1["_id"]
+        assert data[0]["plays"] >= 2
+        assert "title" in data[0]
+        assert "artist" in data[0]
+        
+    def test_get_artist_top_songs_sorted_by_likes(self, client):
+        """Test getting top songs sorted by likes."""
+        # Create liked songs playlist
+        client.post("/likedSongs/")
+        
+        # Create songs
+        song1 = client.post("/songs", json={"title": "Liked Song", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Less Liked", "duration": "200"}).json()["data"]
+        artist_id = song1["artistId"]
+        
+        # Like song1
+        client.post(f"/likedSongs/{song1['_id']}")
+        
+        # Get top songs sorted by likes
+        response = client.get(f"/metrics/artists/{artist_id}/top-songs?sort_by=likes")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data) >= 2
+        assert data[0]["songId"] == song1["_id"]
+        assert data[0]["likes"] >= 1
+        
+    def test_get_artist_top_songs_with_limit(self, client):
+        """Test top songs with limit parameter."""
+        # Create songs
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        response = client.get(f"/metrics/artists/{artist_id}/top-songs?limit=5")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data) <= 5
+        
+    def test_get_artist_top_songs_with_country_filter(self, client):
+        """Test top songs filtered by country."""
+        # Create song
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        # Play from Argentina
+        client.post("/history/", json={"songId": song["_id"], "progress": 0, "country": "AR"})
+        
+        # Get top songs for Argentina
+        response = client.get(f"/metrics/artists/{artist_id}/top-songs?country=AR")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        if len(data) > 0:
+            assert data[0]["plays"] >= 1
+            
+    def test_get_artist_top_songs_invalid_sort_by(self, client):
+        """Test that invalid sort_by parameter returns error."""
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        response = client.get(f"/metrics/artists/{artist_id}/top-songs?sort_by=invalid")
+        assert response.status_code == 400
+        assert "must be 'plays' or 'likes'" in response.json()["detail"]
+    
+    # ============= ARTIST TOP MARKETS =============
+    
+    def test_get_artist_top_markets(self, client):
+        """Test getting top markets for an artist."""
+        # Create song
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        # Play from different countries
+        client.post("/history/", json={"songId": song["_id"], "progress": 0, "country": "AR"})
+        client.post("/history/", json={"songId": song["_id"], "progress": 0, "country": "AR"})
+        client.post("/history/", json={"songId": song["_id"], "progress": 0, "country": "BR"})
+        
+        # Get top markets
+        response = client.get(f"/metrics/artists/{artist_id}/top-markets")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data) >= 1
+        if len(data) > 0:
+            assert "country" in data[0]
+            assert "plays" in data[0]
+            assert "listeners" in data[0]
+            # Argentina should be first (2 plays)
+            assert data[0]["country"] == "AR"
+            assert data[0]["plays"] == 2
+            
+    def test_get_artist_top_markets_with_limit(self, client):
+        """Test top markets with limit parameter."""
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        response = client.get(f"/metrics/artists/{artist_id}/top-markets?limit=3")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data) <= 3
+    
+    # ============= ARTIST TOP PLAYLISTS =============
+    
+    def test_get_artist_top_playlists(self, client):
+        """Test getting top playlists containing artist's songs."""
+        # Create songs
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Song 2", "duration": "200"}).json()["data"]
+        artist_id = song1["artistId"]
+        
+        # Create playlist
+        playlist = client.post("/playlists/", json={
+            "name": "Test Playlist",
+            "description": "Test"
+        }).json()["data"]
+        
+        # Add both songs to the playlist
+        client.post(f"/playlists/{playlist['id']}/songs/{song1['_id']}")
+        client.post(f"/playlists/{playlist['id']}/songs/{song2['_id']}")
+        
+        # Get top playlists
+        response = client.get(f"/metrics/artists/{artist_id}/top-playlists")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data) >= 1
+        if len(data) > 0:
+            assert "playlistId" in data[0]
+            assert "name" in data[0]
+            assert "songCount" in data[0]
+            assert data[0]["songCount"] == 2
+            
+    def test_get_artist_top_playlists_with_limit(self, client):
+        """Test top playlists with limit parameter."""
+        song = client.post("/songs", json={"title": "Test Song", "duration": "180"}).json()["data"]
+        artist_id = song["artistId"]
+        
+        response = client.get(f"/metrics/artists/{artist_id}/top-playlists?limit=5")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert len(data) <= 5
+

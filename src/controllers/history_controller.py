@@ -66,7 +66,7 @@ async def add_to_history(request: schemas.ListeningHistoryRequest, user: dict = 
         )
 
     # Record play in permanent metrics table (separate from user history)
-    metrics_error = await metrics_db.record_play(user["user_id"], request.songId)
+    metrics_error = await metrics_db.record_play(user["user_id"], request.songId, request.country)
     if metrics_error:
         logger.warning(f"Failed to record play metrics for song {request.songId}: {str(metrics_error)}")
         # Don't fail the request if metrics recording fails, just log it
