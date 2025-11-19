@@ -663,3 +663,17 @@ class TopPlaylistsResponse(BaseModel):
     """Response for top playlists endpoint."""
     data: List[TopPlaylist]
 
+# Preferences schemas
+class setGenresRequest(BaseModel):
+    """
+    Request body for setting user genre preferences.
+    Contains up to 5 genre identifiers.
+    """
+    data: List[str]
+
+class setArtistsRequest(BaseModel):
+    """
+    Request body for setting user artist preferences.
+    Contains up to 3 artist identifiers.
+    """
+    data: List[str]
