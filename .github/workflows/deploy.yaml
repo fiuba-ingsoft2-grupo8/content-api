@@ -43,11 +43,7 @@ jobs:
       - name: Create cron job for auto-active endpoint
         run: |
           echo "*/5 * * * * curl -s -X POST http://localhost:8080/collections/auto-active >> /var/log/auto-active.log 2>&1" | sudo tee /etc/cron.d/content-api-auto-active
-
           sudo chmod 644 /etc/cron.d/content-api-auto-active
 
-          if command -v systemctl &>/dev/null; then
-            sudo systemctl restart cron || sudo systemctl restart crond || true
-          else
-            sudo service cron restart || true
-          fi
+          # Reiniciar cron correctamente en Amazon Linux 2023
+          sudo systemctl restart crond
