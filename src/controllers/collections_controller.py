@@ -1044,7 +1044,7 @@ async def set_admin_block(
         )
 
 @router.post("/auto-activate", status_code=200)
-async def auto_activate_collections(user: dict = Depends(verify_token)):
+async def auto_activate_collections():
     """
     Activar automáticamente colecciones programadas que han alcanzado su fecha de lanzamiento.
     
@@ -1064,17 +1064,6 @@ async def auto_activate_collections(user: dict = Depends(verify_token)):
     **Retorna:**
     - 200: Proceso completado con estadísticas
     """
-    # Verify backoffice access (or allow system token)
-    if user.get("user_type") != "backoffice" and user.get("user_id") != "system":
-        return JSONResponse(
-            status_code=403,
-            content=create_error_response(
-                403,
-                "Forbidden",
-                "Only backoffice users or system can trigger auto-activation",
-                "/collections/auto-activate",
-            ),
-        )
     
     try:
         activated_count, errors = await collections_db.auto_activate_scheduled_collections()
