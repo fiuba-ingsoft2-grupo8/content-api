@@ -37,6 +37,7 @@ def client(mock_db):
              patch("databases.about_database.get_db", side_effect=_get_test_db), \
              patch("databases.activity_database.get_db", side_effect=_get_test_db), \
              patch("databases.share_database.get_db", side_effect=_get_test_db), \
+             patch("databases.preferences_database.get_db", side_effect=_get_test_db), \
              patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db), \
              patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
              patch("controllers.playlists_controller.get_db", side_effect=_get_test_db):
@@ -77,6 +78,7 @@ def client_other_user(mock_db):
              patch("databases.about_database.get_db", side_effect=_get_test_db), \
              patch("databases.activity_database.get_db", side_effect=_get_test_db), \
              patch("databases.share_database.get_db", side_effect=_get_test_db), \
+             patch("databases.preferences_database.get_db", side_effect=_get_test_db), \
              patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db), \
              patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
              patch("controllers.playlists_controller.get_db", side_effect=_get_test_db), \

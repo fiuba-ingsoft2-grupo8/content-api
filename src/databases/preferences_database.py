@@ -38,7 +38,7 @@ async def set_user_artists(userId: str, artists: list[str]):
 async def get_user_genres(userId: str):
     db = get_db()
     try:
-        doc = db.preferences.find_one({"userId": userId}, {"_id": 0, "genre_preferences": 1})
+        doc = db.user_preferences.find_one({"userId": userId}, {"_id": 0, "genre_preferences": 1})
         if doc and "genre_preferences" in doc:
             return doc["genre_preferences"]
         return []
@@ -50,7 +50,7 @@ async def get_user_genres(userId: str):
 async def get_user_artists(userId: str):
     db = get_db()
     try:
-        doc = db.preferences.find_one({"userId": userId}, {"_id": 0, "artist_preferences": 1})
+        doc = db.user_preferences.find_one({"userId": userId}, {"_id": 0, "artist_preferences": 1})
         if doc and "artist_preferences" in doc:
             return doc["artist_preferences"]
         return []

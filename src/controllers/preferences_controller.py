@@ -7,12 +7,14 @@ from fastapi.responses import JSONResponse
 from auth import verify_token
 from common.utils import create_error_response
 import databases.preferences_database as preferences_db
+from db.database import get_db
+
 
 router = APIRouter()
 
 
 @router.post(
-    "/preferences/genres",
+    "/genres",
     responses={
         200: {
             "description": "Successfully set genre preferences",
@@ -81,7 +83,7 @@ async def set_genre_preferences(request: schemas.setGenresRequest, user: dict = 
 
 
 @router.post(
-    "/preferences/artists",
+    "/artists",
     responses={
         200: {
             "description": "Successfully set artist preferences",
@@ -150,7 +152,7 @@ async def set_artist_preferences(request: schemas.setArtistsRequest, user: dict 
 
 
 @router.get(
-    "/preferences/genres",
+    "/genres",
     responses={
         200: {
             "description": "Successfully retrieved genre preferences",
@@ -165,17 +167,19 @@ async def set_artist_preferences(request: schemas.setArtistsRequest, user: dict 
     }
 )
 async def get_genre_preferences(user: dict = Depends(verify_token)):
+    logger.info(f"User: {user['user_id']}")
     user_id = user["user_id"]
 
     genres = await preferences_db.get_user_genres(user_id)
     if genres is None:
         return {"error": "Failed to retrieve preferences"}
 
+    logger.info(f"Genres: {genres}")
     return {"genres": genres}
 
 
 @router.get(
-    "/preferences/artists",
+    "/artists",
     responses={
         200: {
             "description": "Successfully retrieved artist preferences",
@@ -197,3 +201,7 @@ async def get_artist_preferences(user: dict = Depends(verify_token)):
         return {"error": "Failed to retrieve preferences"}
 
     return {"artists": artists}
+
+
+# get_recommended_genre_playlist
+# get_recommended_artist_playlist
