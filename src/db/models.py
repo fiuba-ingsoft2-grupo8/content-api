@@ -125,3 +125,24 @@ class ArtistAbout(BaseModel):
     artist_pick: dict | None = None  # {"type": "collection/playlist", "id": "..."}
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
+
+class CollectionAudit(BaseModel):
+    """Audit log for collection state and publication window changes."""
+    id: ObjectIdStr = Field(default_factory=ObjectId, alias="_id")
+    collection_id: ObjectIdStr
+    user_id: str  # User who made the change
+    action: str  # 'state_change', 'publication_window_update', 'auto_activation'
+    previous_state: str | None = None  # Previous effective state
+    new_state: str | None = None  # New effective state
+    previous_release_date: datetime | None = None
+    new_release_date: datetime | None = None
+    previous_no_disponible_desde: datetime | None = None
+    new_no_disponible_desde: datetime | None = None
+    previous_no_disponible_hasta: datetime | None = None
+    new_no_disponible_hasta: datetime | None = None
+    previous_bloqueado_admin: bool | None = None
+    new_bloqueado_admin: bool | None = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    metadata: dict | None = None  # Additional context
+
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}

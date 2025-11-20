@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import httpx
 from typing import List, Dict, Any, Optional
@@ -7,19 +7,37 @@ from pymongo import DESCENDING
 from db.database import get_db
 from db.models import CollectionSong
 from bson import ObjectId
+from databases.collection_states import calculate_effective_state, should_auto_activate
+from databases.audit_database import log_collection_change
 
 USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
 
-async def create_collection(name, artistId, artistName, type, genre, coverUrl, releaseDate=None, credits=None, songs_with_early_release=None, available_countries=None):
+async def create_collection(name, artistId, artistName, type, genre, coverUrl, releaseDate=None, credits=None, songs_with_early_release=None, available_countries=None, no_disponible_desde=None, no_disponible_hasta=None, user_id=None):
     """
     Create a collection with songs.
     
     Args:
         songs_with_early_release: List of dicts with 'songId' and optional 'earlyReleaseDate'
         available_countries: List of country codes where collection is available
+        no_disponible_desde: Start of no-disponible window (optional)
+        no_disponible_hasta: End of no-disponible window (optional)
+        user_id: ID of the user creating the collection (for audit logging)
     """
     db = get_db()
     try:
+        # Ensure timezone-aware datetimes
+        if releaseDate and releaseDate.tzinfo is None:
+            releaseDate = releaseDate.replace(tzinfo=timezone.utc)
+        if no_disponible_desde and no_disponible_desde.tzinfo is None:
+            no_disponible_desde = no_disponible_desde.replace(tzinfo=timezone.utc)
+        if no_disponible_hasta and no_disponible_hasta.tzinfo is None:
+            no_disponible_hasta = no_disponible_hasta.replace(tzinfo=timezone.utc)
+        
+        # Validate window if both dates provided
+        if no_disponible_desde and no_disponible_hasta:
+            if no_disponible_desde >= no_disponible_hasta:
+                return (None, ValueError("noDisponibleDesde must be before noDisponibleHasta"))
+        
         collection_doc = {
             "name": name,
             "artistId": artistId,
@@ -31,7 +49,15 @@ async def create_collection(name, artistId, artistName, type, genre, coverUrl, r
             "releaseDate": releaseDate if releaseDate else datetime.now(timezone.utc),
             "credits": credits if credits else [],
             "availableCountries": available_countries if available_countries else [],
+            "bloqueadoAdmin": False,  # Default: not blocked
         }
+        
+        # Add no-disponible window if provided
+        if no_disponible_desde:
+            collection_doc["noDisponibleDesde"] = no_disponible_desde
+        if no_disponible_hasta:
+            collection_doc["noDisponibleHasta"] = no_disponible_hasta
+        
         result = db.collections.insert_one(collection_doc)
         logger.info(f"Successfully created collection: title={name}, artist={artistName}, type={type}, genre={genre}, id={result.inserted_id}, releaseDate={releaseDate}")
 
@@ -46,6 +72,26 @@ async def create_collection(name, artistId, artistName, type, genre, coverUrl, r
                 order += 1
                 
         collection = db.collections.find_one({"_id": result.inserted_id})
+        
+        # Log creation to audit if user_id provided
+        if user_id and collection:
+            from databases.collection_states import calculate_effective_state
+            effective_state = calculate_effective_state(collection)
+            await log_collection_change(
+                collection_id=str(result.inserted_id),
+                user_id=user_id,
+                action="publication_window_update",
+                previous_state=None,  # No previous state on creation
+                new_state=effective_state,
+                previous_release_date=None,
+                new_release_date=collection.get("releaseDate"),
+                previous_no_disponible_desde=None,
+                new_no_disponible_desde=no_disponible_desde,
+                previous_no_disponible_hasta=None,
+                new_no_disponible_hasta=no_disponible_hasta,
+                metadata={"action": "collection_created"}
+            )
+        
         return (collection, None)
 
     except Exception as e:
@@ -227,14 +273,16 @@ async def update_collection_cover(collection_id: str, cover_url: str):
     )
     return result.modified_count > 0
 
-async def update_collection(collection_id: str, update_data: dict):
+async def update_collection(collection_id: str, update_data: dict, user_id: str | None = None):
     """
     Updates collection fields based on the provided update_data dictionary.
     Only updates fields that are present in update_data.
+    Recalculates effective state and logs changes to audit.
     
     Args:
         collection_id: The ID of the collection to update
         update_data: Dictionary containing the fields to update
+        user_id: ID of the user making the change (for audit logging)
         
     Returns:
         Boolean indicating if the update was successful
@@ -244,7 +292,23 @@ async def update_collection(collection_id: str, update_data: dict):
         if not update_data:
             logger.warning(f"No fields to update for collection {collection_id}")
             return True
-            
+        
+        # Get current collection state before update
+        current_collection = await get_collection(collection_id, includeUnpublished=True)
+        if not current_collection:
+            logger.error(f"Collection {collection_id} not found for update")
+            return False
+        
+        # Calculate previous state
+        previous_state = calculate_effective_state(current_collection)
+        
+        # Track changes for audit
+        previous_release_date = current_collection.get("releaseDate")
+        previous_no_disponible_desde = current_collection.get("noDisponibleDesde")
+        previous_no_disponible_hasta = current_collection.get("noDisponibleHasta")
+        previous_bloqueado_admin = current_collection.get("bloqueadoAdmin", False)
+        
+        # Update collection
         result = db.collections.update_one(
             {"_id": ObjectId(collection_id)},
             {"$set": update_data}
@@ -252,6 +316,30 @@ async def update_collection(collection_id: str, update_data: dict):
         
         if result.modified_count > 0:
             logger.info(f"Successfully updated collection {collection_id} with fields: {list(update_data.keys())}")
+            
+            # Get updated collection and calculate new state
+            updated_collection = await get_collection(collection_id, includeUnpublished=True)
+            if updated_collection:
+                new_state = calculate_effective_state(updated_collection)
+                
+                # Log changes to audit
+                if user_id:
+                    await log_collection_change(
+                        collection_id=collection_id,
+                        user_id=user_id,
+                        action="publication_window_update" if any(k in update_data for k in ["releaseDate", "noDisponibleDesde", "noDisponibleHasta"]) else "state_change",
+                        previous_state=previous_state,
+                        new_state=new_state,
+                        previous_release_date=previous_release_date,
+                        new_release_date=update_data.get("releaseDate"),
+                        previous_no_disponible_desde=previous_no_disponible_desde,
+                        new_no_disponible_desde=update_data.get("noDisponibleDesde"),
+                        previous_no_disponible_hasta=previous_no_disponible_hasta,
+                        new_no_disponible_hasta=update_data.get("noDisponibleHasta"),
+                        previous_bloqueado_admin=previous_bloqueado_admin,
+                        new_bloqueado_admin=update_data.get("bloqueadoAdmin"),
+                        metadata={"updated_fields": list(update_data.keys())}
+                    )
         else:
             logger.info(f"No changes made to collection {collection_id}")
             
@@ -493,3 +581,197 @@ async def get_ids_by_name(name: str, token: Optional[str] = None):
     except Exception as e:
         logger.exception(f"Failed to search collections by name='{name}': {e}")
         return False
+
+
+async def configure_publication_window(
+    collection_id: str,
+    release_date: datetime | None = None,
+    no_disponible_desde: datetime | None = None,
+    no_disponible_hasta: datetime | None = None,
+    user_id: str | None = None
+):
+    """
+    Configure publication window for a collection.
+    Sets releaseDate and optional no-disponible window.
+    
+    Args:
+        collection_id: ID of the collection
+        release_date: Release date/time with timezone
+        no_disponible_desde: Start of no-disponible window (optional)
+        no_disponible_hasta: End of no-disponible window (optional)
+        user_id: ID of the user making the change (for audit)
+        
+    Returns:
+        Tuple of (success: bool, error_message: str or None)
+    """
+    db = get_db()
+    try:
+        collection = await get_collection(collection_id, includeUnpublished=True)
+        if not collection:
+            return (False, "Collection not found")
+        
+        # Build update data
+        update_data = {}
+        if release_date is not None:
+            # Ensure timezone-aware
+            if release_date.tzinfo is None:
+                release_date = release_date.replace(tzinfo=timezone.utc)
+            update_data["releaseDate"] = release_date
+        
+        if no_disponible_desde is not None:
+            if no_disponible_desde.tzinfo is None:
+                no_disponible_desde = no_disponible_desde.replace(tzinfo=timezone.utc)
+            update_data["noDisponibleDesde"] = no_disponible_desde
+        
+        if no_disponible_hasta is not None:
+            if no_disponible_hasta.tzinfo is None:
+                no_disponible_hasta = no_disponible_hasta.replace(tzinfo=timezone.utc)
+            update_data["noDisponibleHasta"] = no_disponible_hasta
+        
+        if not update_data:
+            return (False, "No fields to update")
+        
+        # Validate window
+        if update_data.get("noDisponibleDesde") and update_data.get("noDisponibleHasta"):
+            if update_data["noDisponibleDesde"] >= update_data["noDisponibleHasta"]:
+                return (False, "noDisponibleDesde must be before noDisponibleHasta")
+        
+        # Update collection
+        success = await update_collection(collection_id, update_data, user_id)
+        if success:
+            return (True, None)
+        else:
+            return (False, "Failed to update collection")
+            
+    except Exception as e:
+        logger.error(f"Failed to configure publication window for collection {collection_id}: {str(e)}")
+        return (False, str(e))
+
+
+async def set_admin_block(collection_id: str, blocked: bool, user_id: str | None = None):
+    """
+    Set or remove admin block on a collection.
+    
+    Args:
+        collection_id: ID of the collection
+        blocked: True to block, False to unblock
+        user_id: ID of the admin user making the change
+        
+    Returns:
+        Tuple of (success: bool, error_message: str or None)
+    """
+    db = get_db()
+    try:
+        collection = await get_collection(collection_id, includeUnpublished=True)
+        if not collection:
+            return (False, "Collection not found")
+        
+        # Get previous state
+        previous_state = calculate_effective_state(collection)
+        previous_bloqueado_admin = collection.get("bloqueadoAdmin", False)
+        
+        # Update block status
+        result = db.collections.update_one(
+            {"_id": ObjectId(collection_id)},
+            {"$set": {"bloqueadoAdmin": blocked}}
+        )
+        
+        if result.modified_count > 0:
+            # Get new state
+            updated_collection = await get_collection(collection_id, includeUnpublished=True)
+            new_state = calculate_effective_state(updated_collection) if updated_collection else previous_state
+            
+            # Log to audit
+            if user_id:
+                await log_collection_change(
+                    collection_id=collection_id,
+                    user_id=user_id,
+                    action="state_change",
+                    previous_state=previous_state,
+                    new_state=new_state,
+                    previous_bloqueado_admin=previous_bloqueado_admin,
+                    new_bloqueado_admin=blocked,
+                    metadata={"action": "admin_block" if blocked else "admin_unblock"}
+                )
+            
+            logger.info(f"Successfully {'blocked' if blocked else 'unblocked'} collection {collection_id}")
+            return (True, None)
+        else:
+            return (False, "Failed to update collection")
+            
+    except Exception as e:
+        logger.error(f"Failed to set admin block for collection {collection_id}: {str(e)}")
+        return (False, str(e))
+
+
+async def auto_activate_scheduled_collections():
+    """
+    Automatically activate collections that have reached their release date.
+    This function should be called periodically (e.g., via cron job).
+    
+    Returns:
+        Tuple of (activated_count: int, errors: list)
+    """
+    db = get_db()
+    activated_count = 0
+    errors = []
+    
+    try:
+        now = datetime.now(timezone.utc)
+        
+        # Find all collections that should be activated
+        # (releaseDate <= now, not bloqueadoAdmin, currently in "programado" state)
+        collections = list(db.collections.find({
+            "releaseDate": {"$lte": now},
+            "bloqueadoAdmin": {"$ne": True}
+        }))
+        
+        for collection in collections:
+            try:
+                # Check if should activate
+                if should_auto_activate(collection, now):
+                    # Calculate previous state as if it were before releaseDate
+                    # (simulate a time just before releaseDate to get "programado" state)
+                    release_date = collection.get("releaseDate")
+                    if release_date and release_date.tzinfo is None:
+                        release_date = release_date.replace(tzinfo=timezone.utc)
+                    
+                    # Previous state would have been "programado" before releaseDate
+                    # Calculate state just before releaseDate
+                    just_before_release = release_date - timedelta(seconds=1) if release_date else now
+                    previous_state = calculate_effective_state(collection, now=just_before_release)
+                    
+                    # Current state is now "publicado" (since releaseDate <= now)
+                    new_state = calculate_effective_state(collection, now=now)
+                    
+                    # Only log if state actually changed
+                    if previous_state != new_state:
+                        # Log auto-activation
+                        await log_collection_change(
+                            collection_id=str(collection["_id"]),
+                            user_id="system",
+                            action="auto_activation",
+                            previous_state=previous_state,
+                            new_state=new_state,
+                            previous_release_date=collection.get("releaseDate"),
+                            new_release_date=collection.get("releaseDate"),
+                            metadata={"auto_activated_at": now.isoformat()}
+                        )
+                        
+                        activated_count += 1
+                        logger.info(f"Auto-activated collection {collection['_id']} from {previous_state} to {new_state}")
+                    else:
+                        logger.debug(f"Collection {collection['_id']} state unchanged ({previous_state}), skipping activation log")
+                    
+            except Exception as e:
+                error_msg = f"Failed to auto-activate collection {collection.get('_id')}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        logger.info(f"Auto-activation completed: {activated_count} collections activated, {len(errors)} errors")
+        return (activated_count, errors)
+        
+    except Exception as e:
+        logger.error(f"Failed to auto-activate scheduled collections: {str(e)}")
+        errors.append(str(e))
+        return (activated_count, errors)
