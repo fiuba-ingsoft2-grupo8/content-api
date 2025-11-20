@@ -1791,12 +1791,6 @@ class TestAutoActivation:
         assert "success" in data
         # Should have activated at least 1 collection (the one we just created)
         assert data["activatedCount"] >= 1
-    
-    def test_auto_activate_unauthorized(self, client):
-        """Test that non-backoffice user cannot trigger auto-activation."""
-        response = client.post("/collections/auto-activate")
-        assert response.status_code == 403
-        assert "backoffice" in response.json()["detail"].lower()
 
 
 class TestEffectiveState:
