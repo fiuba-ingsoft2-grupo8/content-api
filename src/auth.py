@@ -24,7 +24,20 @@ def verify_token(authorization: Optional[str] = Header(None)):
     Dependency to verify JWT token
     """
     # Skip authentication during testing
+    # Check if there's a TEST_USER environment variable set (for testing with different users)
     if is_testing():
+        test_user = os.getenv("TEST_USER")
+        if test_user:
+            # Parse test user from environment (format: user_id:user_type:stage_name:country)
+            parts = test_user.split(":")
+            return {
+                "user_id": parts[0] if len(parts) > 0 else "test_user_123",
+                "email": "test@example.com",
+                "user_type": parts[1] if len(parts) > 1 else "user",
+                "stage_name": parts[2] if len(parts) > 2 else "Test Artist",
+                "country": parts[3] if len(parts) > 3 else "AR"
+            }
+        # Default test user
         return {
             "user_id": "test_user_123",
             "email": "test@example.com",

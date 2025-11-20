@@ -1570,3 +1570,331 @@ class TestCollectionGeographicalRestrictions:
         
         error = update_response.json()
         assert "Invalid country codes" in error["detail"]
+
+
+class TestPublicationWindow:
+    """Tests for publication window configuration and state management."""
+    
+    def test_create_collection_with_publication_window(self, client):
+        """Test creating a collection with publication window (noDisponibleDesde/Hasta)."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        future_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        no_disponible_desde = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        no_disponible_hasta = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
+        
+        collection_data = {
+            "name": "Windowed Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "releaseDate": future_date,
+            "noDisponibleDesde": no_disponible_desde,
+            "noDisponibleHasta": no_disponible_hasta
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        collection = response.json()["data"]
+        assert collection["releaseDate"] is not None
+        # Note: noDisponibleDesde/Hasta might not be in response schema, but should be stored
+    
+    def test_create_collection_with_invalid_window(self, client):
+        """Test that creating collection with invalid window (desde >= hasta) fails."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        no_disponible_desde = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
+        no_disponible_hasta = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()  # Invalid: antes de desde
+        
+        collection_data = {
+            "name": "Invalid Window Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "noDisponibleDesde": no_disponible_desde,
+            "noDisponibleHasta": no_disponible_hasta
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 400
+        assert "noDisponibleDesde must be before noDisponibleHasta" in response.json()["detail"]
+    
+    def test_configure_publication_window(self, client):
+        """Test configuring publication window for existing collection."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create collection
+        collection_data = {
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}]
+        }
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Configure publication window
+        future_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        no_disponible_desde = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        no_disponible_hasta = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
+        
+        window_data = {
+            "releaseDate": future_date,
+            "noDisponibleDesde": no_disponible_desde,
+            "noDisponibleHasta": no_disponible_hasta
+        }
+        
+        response = client.put(f"/collections/{collection_id}/publication-window", json=window_data)
+        assert response.status_code == 200
+        
+        collection = response.json()["data"]
+        assert collection["id"] == collection_id
+    
+    def test_configure_publication_window_not_found(self, client):
+        """Test that configuring window for non-existent collection fails."""
+        from datetime import datetime, timedelta, timezone
+        
+        future_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        window_data = {"releaseDate": future_date}
+        
+        fake_id = "507f1f77bcf86cd799439011"
+        response = client.put(f"/collections/{fake_id}/publication-window", json=window_data)
+        assert response.status_code == 404
+    
+    def test_configure_publication_window_invalid_window(self, client):
+        """Test that configuring invalid window fails."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}]
+        }
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Invalid window
+        no_disponible_desde = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
+        no_disponible_hasta = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        
+        window_data = {
+            "noDisponibleDesde": no_disponible_desde,
+            "noDisponibleHasta": no_disponible_hasta
+        }
+        
+        response = client.put(f"/collections/{collection_id}/publication-window", json=window_data)
+        assert response.status_code == 400
+        assert "noDisponibleDesde must be before noDisponibleHasta" in response.json()["detail"]
+
+
+class TestAdminBlock:
+    """Tests for admin block functionality."""
+    
+    def test_set_admin_block(self, client, client_backoffice):
+        """Test that backoffice user can block a collection."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create collection as regular user
+        collection_data = {
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}]
+        }
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Block collection as backoffice user
+        response = client_backoffice.post(f"/collections/{collection_id}/admin-block?blocked=true")
+        assert response.status_code == 200
+        
+        collection = response.json()["data"]
+        assert collection["id"] == collection_id
+    
+    def test_set_admin_block_unauthorized(self, client):
+        """Test that non-backoffice user cannot block collections."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}]
+        }
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Try to block as regular user (should fail)
+        response = client.post(f"/collections/{collection_id}/admin-block?blocked=true")
+        assert response.status_code == 403
+        assert "backoffice" in response.json()["detail"].lower()
+    
+    def test_unblock_collection(self, client, client_backoffice):
+        """Test unblocking a collection."""
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        collection_data = {
+            "name": "Test Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}]
+        }
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Block then unblock as backoffice user
+        client_backoffice.post(f"/collections/{collection_id}/admin-block?blocked=true")
+        response = client_backoffice.post(f"/collections/{collection_id}/admin-block?blocked=false")
+        assert response.status_code == 200
+
+
+class TestAutoActivation:
+    """Tests for automatic activation of scheduled collections."""
+    
+    def test_auto_activate_collections(self, client, client_backoffice):
+        """Test auto-activation endpoint."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create song and collection as regular user
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create collection with past release date (should be activated)
+        past_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        collection_data = {
+            "name": "Past Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "releaseDate": past_date
+        }
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Call auto-activate as backoffice user (using separate client with backoffice user)
+        # Note: We need to use client_backoffice which has the backoffice user mocked
+        response = client_backoffice.post("/collections/auto-activate")
+        assert response.status_code == 200
+        
+        data = response.json()["data"]
+        assert "activatedCount" in data
+        assert "errors" in data
+        assert "success" in data
+        # Should have activated at least 1 collection (the one we just created)
+        assert data["activatedCount"] >= 1
+
+
+class TestEffectiveState:
+    """Tests for effective state calculation and priority."""
+    
+    def test_programado_state_with_future_release(self, client):
+        """Test that collection with future releaseDate is in 'programado' state."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        future_date = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        collection_data = {
+            "name": "Future Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "releaseDate": future_date
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        # Collection should not be visible by default (programado)
+        collection_id = response.json()["data"]["id"]
+        get_response = client.get(f"/collections/{collection_id}")
+        assert get_response.status_code == 404  # Not visible because programado
+    
+    def test_publicado_state_with_past_release(self, client):
+        """Test that collection with past releaseDate is in 'publicado' state."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        past_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        collection_data = {
+            "name": "Past Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "releaseDate": past_date
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        # Collection should be visible (publicado)
+        collection_id = response.json()["data"]["id"]
+        get_response = client.get(f"/collections/{collection_id}")
+        assert get_response.status_code == 200  # Visible because publicado
+    
+    def test_no_disponible_state_in_window(self, client):
+        """Test that collection with no-disponible window can be created."""
+        from datetime import datetime, timedelta, timezone
+        
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create collection with no-disponible window that includes now
+        no_disponible_desde = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        no_disponible_hasta = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        
+        collection_data = {
+            "name": "No Disponible Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "noDisponibleDesde": no_disponible_desde,
+            "noDisponibleHasta": no_disponible_hasta
+        }
+        
+        response = client.post("/collections/", json=collection_data)
+        assert response.status_code == 201
+        
+        # Collection should be created successfully
+        collection = response.json()["data"]
+        assert collection["id"] is not None
+    
+    def test_bloqueado_admin_priority(self, client, client_backoffice):
+        """Test that bloqueado-admin can be set and collection still exists."""
+        from datetime import datetime, timedelta, timezone
+        
+        # Create song and collection as regular user
+        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
+        
+        # Create published collection
+        past_date = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        collection_data = {
+            "name": "Blocked Album",
+            "type": "album",
+            "genre": "Pop",
+            "songs": [{"songId": song1['_id']}],
+            "releaseDate": past_date
+        }
+        create_response = client.post("/collections/", json=collection_data)
+        collection_id = create_response.json()["data"]["id"]
+        
+        # Verify it's visible
+        get_response = client.get(f"/collections/{collection_id}")
+        assert get_response.status_code == 200
+        
+        # Block it as admin (using client_backoffice which has backoffice user)
+        block_response = client_backoffice.post(f"/collections/{collection_id}/admin-block?blocked=true")
+        assert block_response.status_code == 200
+        
+        # Collection should still exist in response
+        blocked_collection = block_response.json()["data"]
+        assert blocked_collection["id"] == collection_id

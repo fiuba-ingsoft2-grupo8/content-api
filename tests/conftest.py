@@ -26,7 +26,7 @@ def client(mock_db):
     def _get_test_db():
         return mock_db
 
-    # Mock the get_db function to return our test database
+        # Mock the get_db function to return our test database
     with patch("db.database.get_db", side_effect=_get_test_db):
         # Also patch in the database modules that import get_db
         with patch("databases.songs_database.get_db", side_effect=_get_test_db), \
@@ -37,6 +37,7 @@ def client(mock_db):
              patch("databases.about_database.get_db", side_effect=_get_test_db), \
              patch("databases.activity_database.get_db", side_effect=_get_test_db), \
              patch("databases.share_database.get_db", side_effect=_get_test_db), \
+             patch("databases.audit_database.get_db", side_effect=_get_test_db), \
              patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db), \
              patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
              patch("controllers.playlists_controller.get_db", side_effect=_get_test_db):
@@ -77,6 +78,7 @@ def client_other_user(mock_db):
              patch("databases.about_database.get_db", side_effect=_get_test_db), \
              patch("databases.activity_database.get_db", side_effect=_get_test_db), \
              patch("databases.share_database.get_db", side_effect=_get_test_db), \
+             patch("databases.audit_database.get_db", side_effect=_get_test_db), \
              patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db), \
              patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
              patch("controllers.playlists_controller.get_db", side_effect=_get_test_db), \
@@ -84,3 +86,38 @@ def client_other_user(mock_db):
              patch("controllers.search_controller.verify_token", side_effect=mock_verify_other_user):
             with TestClient(app) as test_client:
                 yield test_client
+
+@pytest.fixture()
+def client_backoffice(mock_db):
+    """Create a test client with a backoffice user."""
+    import os
+    def _get_test_db():
+        return mock_db
+
+    # Set environment variable to override default test user
+    original_test_user = os.environ.get("TEST_USER")
+    os.environ["TEST_USER"] = "backoffice_user:backoffice:Admin:AR"
+    
+    try:
+        # Mock the get_db function
+        with patch("db.database.get_db", side_effect=_get_test_db):
+            with patch("databases.songs_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.playlists_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.history_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.collections_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.metrics_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.about_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.activity_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.share_database.get_db", side_effect=_get_test_db), \
+                 patch("databases.audit_database.get_db", side_effect=_get_test_db), \
+                 patch("controllers.liked_songs_controller.metrics_db.get_db", side_effect=_get_test_db), \
+                 patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
+                 patch("controllers.playlists_controller.get_db", side_effect=_get_test_db):
+                with TestClient(app) as test_client:
+                    yield test_client
+    finally:
+        # Restore original TEST_USER or remove it
+        if original_test_user:
+            os.environ["TEST_USER"] = original_test_user
+        elif "TEST_USER" in os.environ:
+            del os.environ["TEST_USER"]
