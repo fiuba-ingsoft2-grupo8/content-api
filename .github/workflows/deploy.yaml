@@ -40,3 +40,10 @@ jobs:
             -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
             -e USER_API_BASE="${{ secrets.USER_API_BASE }}" \
             jandresen99/content-api:latest
+      - name: Create cron job for auto-active endpoint
+        run: |
+          echo "*/5 * * * * curl -s -X POST http://localhost:8080/collections/auto-active >> /var/log/auto-active.log 2>&1" | sudo tee /etc/cron.d/content-api-auto-active
+          sudo chmod 644 /etc/cron.d/content-api-auto-active
+
+          # Reiniciar cron correctamente en Amazon Linux 2023
+          sudo systemctl restart crond

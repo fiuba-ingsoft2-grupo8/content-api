@@ -349,6 +349,8 @@ class CreateCollectionRequest(BaseModel):
     credits: Optional[List[str]] = None
     availableInCountries: Optional[List[str]] = None  # List of country codes where content IS available
     notAvailableInCountries: Optional[List[str]] = None  # List of country codes where content is NOT available
+    noDisponibleDesde: Optional[datetime] = None  # Inicio de ventana no-disponible
+    noDisponibleHasta: Optional[datetime] = None  # Fin de ventana no-disponible
     
     class Config:
         json_schema_extra = {
@@ -370,7 +372,9 @@ class CreateCollectionRequest(BaseModel):
                 ],
                 "releaseDate": "2025-12-01T00:00:00Z",
                 "credits": ["Charly García", "Pedro Aznar"],
-                "availableInCountries": ["AR", "UY", "CL", "BR"]
+                "availableInCountries": ["AR", "UY", "CL", "BR"],
+                "noDisponibleDesde": "2025-12-25T00:00:00Z",
+                "noDisponibleHasta": "2026-01-05T00:00:00Z"
             }
         }
 
@@ -400,6 +404,21 @@ class UpdateCollectionRequest(BaseModel):
                 ],
                 "credits": ["Charly García", "Pedro Aznar", "Willy Iturri"],
                 "availableInCountries": ["AR", "UY", "CL", "BR"]
+            }
+        }
+
+class PublicationWindowRequest(BaseModel):
+    """Request to configure publication window for a collection."""
+    releaseDate: Optional[datetime] = None  # Fecha/hora de lanzamiento con zona horaria
+    noDisponibleDesde: Optional[datetime] = None  # Inicio de ventana no-disponible
+    noDisponibleHasta: Optional[datetime] = None  # Fin de ventana no-disponible
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "releaseDate": "2025-12-31T00:00:00Z",
+                "noDisponibleDesde": "2025-12-25T00:00:00Z",
+                "noDisponibleHasta": "2026-01-05T00:00:00Z"
             }
         }
 
