@@ -88,5 +88,3 @@ class TestPreferencesEndpoints:
 
         assert response_a.status_code == 200
         assert response_a.json() == {"artists": []}
-
-

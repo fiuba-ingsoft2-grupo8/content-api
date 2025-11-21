@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from auth import verify_token
 from common.utils import create_error_response
 import databases.preferences_database as preferences_db
+import databases.collections_database as collections_db
 from db.database import get_db
 
 
@@ -105,7 +106,7 @@ async def set_genre_preferences(request: schemas.setGenresRequest, user: dict = 
 )
 async def set_artist_preferences(request: schemas.setArtistsRequest, user: dict = Depends(verify_token)):
     """
-    Save up to 5 selected artists for the current user.
+    Save up to 5 selected artists (artistId) for the current user.
     """
     try:
         artists = request.data
@@ -202,6 +203,61 @@ async def get_artist_preferences(user: dict = Depends(verify_token)):
 
     return {"artists": artists}
 
+# No se si vamos a necesitar estos, los dejo por las dudas
 
-# get_recommended_genre_playlist
-# get_recommended_artist_playlist
+# @router.get(
+#     "/genres",
+#     responses={
+#         200: {
+#             "description": "Successfully recommended albums by genre",
+#             "content": {
+#                 "application/json": {
+#                     "example": {
+#                         "albums": ["collectionID1", "collectionID2", "collectionID3"]
+#                     }
+#                 }
+#             }
+#         }
+#     }
+# )
+# async def get_recommended_albums_by_genre(user: dict = Depends(verify_token)):
+#     user_id = user["user_id"]
+#     genres = await preferences_db.get_user_genres(user_id)
+#     if genres is None:
+#         return {"error": "Failed to retrieve preferences"}
+#     albums = await collections_db.get_albums_by_field("genre", genres, 10)
+#     if albums is None:
+#         return {"error": "Failed to retrieve recommended albums"}
+    
+#     logger.info(f"Recommended albums by genres {genres}: {albums}")
+#     return {"albums": albums}
+
+    
+# @router.get(
+#     "/genres",
+#     responses={
+#         200: {
+#             "description": "Successfully recommended albums by artist",
+#             "content": {
+#                 "application/json": {
+#                     "example": {
+#                         "albums": ["collectionID1", "collectionID2", "collectionID3"]
+#                     }
+#                 }
+#             }
+#         }
+#     }
+# )
+# async def get_recommended_albums_by_artist(user: dict = Depends(verify_token)):
+#     user_id = user["user_id"]
+#     artists = await preferences_db.get_user_artists(user_id)
+#     if artists is None:
+#         return {"error": "Failed to retrieve preferences"}
+#     albums = await collections_db.get_albums_by_field("artistId", artists, 10)
+#     if albums is None:
+#         return {"error": "Failed to retrieve recommended albums"}
+
+#     logger.info(f"Recommended albums by artists {artists}: {albums}")
+#     return {"albums": albums}
+
+
