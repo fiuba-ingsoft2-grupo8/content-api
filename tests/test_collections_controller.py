@@ -1,5 +1,6 @@
 import pytest
 from bson import ObjectId
+from datetime import datetime, timezone
 
 @pytest.fixture
 def sample_song_data():
@@ -1570,6 +1571,124 @@ class TestCollectionGeographicalRestrictions:
         
         error = update_response.json()
         assert "Invalid country codes" in error["detail"]
+
+class TestCollectionRecommendedAlbums:
+    def _make_album(self, client, name, genre, releaseDate=None):
+        payload = {
+            "name": name,
+            "type": "album",
+            "genre": genre,
+            "songs": [],
+        }
+        if releaseDate:
+            payload["releaseDate"] = releaseDate
+
+        return client.post("/collections/", json=payload).json()["data"]
+
+    def test_recommended_no_preferences_returns_popular(self, client):
+        """If user has no genre or artist preferences → return global most popular."""
+        for i in range(12):
+            self._make_album(client, f"A{i}", "Pop")
+
+        client.delete("/preferences/genres")
+        client.delete("/preferences/artists")
+
+        resp = client.get("/collections/recommended?n=10")
+        assert resp.status_code == 200
+
+        data = resp.json()
+        assert "albums" in data
+        assert len(data["albums"]) == 10
+
+    def test_recommended_with_genres_only(self, client):
+        """User has only genre preferences → genre-based selection."""
+        pop_ids = [
+            self._make_album(client, f"PopA{i}", "Pop")["id"]
+            for i in range(8)
+        ]
+        rock_ids = [
+            self._make_album(client, f"RockA{i}", "Rock")["id"]
+            for i in range(3)
+        ]
+
+        client.put("/preferences/genres", json={"genres": ["Pop"]})
+        client.delete("/preferences/artists")
+
+        resp = client.get("/collections/recommended?n=10")
+        assert resp.status_code == 200
+        albums = resp.json()["albums"]
+
+        assert len(albums) == 10
+
+        returned_ids = {a["id"] for a in albums}
+        assert returned_ids.issubset(set(pop_ids + rock_ids))
+
+    def test_recommended_with_artists_only(self, client):
+        """If only artists are preferred → they get all matching albums."""
+
+        for i in range(6):
+            self._make_album(client, f"ArtistA{i}", "Pop")
+
+        for i in range(3):
+            self._make_album(client, f"Other{i}", "Rock")
+
+        artist_id = "test_user_123"
+
+        client.post("/preferences/artists", json={"data": [artist_id]})
+
+        resp = client.get("/collections/recommended?n=10")
+        assert resp.status_code == 200
+
+        albums = resp.json()["albums"]
+
+        artist_pref_count = sum(a["artistId"] == artist_id for a in albums)
+        assert artist_pref_count == 9
+
+
+    def test_recommended_genres_and_artists_and_fallback(self, client):
+        """Genres + artists produce fewer than n → fill with globals."""
+
+        for i in range(3):
+            self._make_album(client, f"A{i}", "Pop")
+
+        for i in range(4):
+            self._make_album(client, f"G{i}", "Rock")
+
+        for i in range(10):
+            self._make_album(client, f"P{i}", "Ballad")
+
+        client.post("/preferences/genres", json={"genres": ["Rock"]})
+        client.post("/preferences/artists", json={"data": ["test_user_123"]})
+
+        resp = client.get("/collections/recommended?n=10")
+        assert resp.status_code == 200
+
+        albums = resp.json()["albums"]
+        artist_matches = [a for a in albums if a["artistId"] == "test_user_123"]
+        genre_matches = [a for a in albums if a["genre"] == "Rock"]
+
+        assert len(artist_matches) == len(albums)
+
+        assert len(genre_matches) >= 4
+
+
+    def test_recommended_no_duplicates(self, client):
+        """Test that deduplication works even with overlapping sources."""
+
+        for i in range(5):
+            self._make_album(client, f"A{i}", "Pop")
+
+        client.post("/preferences/genres", json={"genres": ["Pop"]})
+        client.post("/preferences/artists", json={"artists": ["test_user_123"]})
+
+        resp = client.get("/collections/recommended?n=10")
+        assert resp.status_code == 200
+
+        albums = resp.json()["albums"]
+
+        ids = [a["id"] for a in albums]
+        assert len(ids) == len(set(ids))
+
 
 
 class TestPublicationWindow:

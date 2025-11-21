@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from resources.logger import logger, LOGGING_CONFIG
-from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, metrics_controller, search_controller, about_controller, activity_controller, share_controller
+from controllers import songs_controller, playlists_controller, liked_songs_controller, history_controller, collections_controller, metrics_controller, search_controller, about_controller, activity_controller, share_controller, preferences_controller
 from common.utils import create_error_response
 from db.database import Database
 from db.supabase import Supabase
@@ -61,6 +61,7 @@ app.include_router(metrics_controller.router, prefix="/metrics", tags=["metrics"
 app.include_router(about_controller.router, prefix="/about", tags=["about"])
 app.include_router(activity_controller.router, prefix="/activity", tags=["activity"])
 app.include_router(share_controller.router, prefix="/share", tags=["share"])
+app.include_router(preferences_controller.router, prefix="/preferences", tags=["preferences"])
 
 # Health check endpoint
 @app.get("/health", tags=["health"])
