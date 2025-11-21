@@ -12,6 +12,14 @@ from databases.audit_database import log_collection_change
 
 USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
 
+def normalize_base(base: Optional[str], default: str) -> str:
+    base = (base or "").strip()
+    if not base:
+        base = default
+    if not base.startswith(("http://", "https://")):
+        base = "http://" + base
+    return base.rstrip("/")
+
 async def create_collection(name, artistId, artistName, type, genre, coverUrl, releaseDate=None, credits=None, songs_with_early_release=None, available_countries=None, no_disponible_desde=None, no_disponible_hasta=None, user_id=None):
     """
     Create a collection with songs.
@@ -151,6 +159,7 @@ async def get_collection(id, includeUnpublished: bool = False):
         logger.error(f"Failed to get collection with id={id}: {str(e)}")
         return None
 
+
 async def get_songs_from_collection(collection_id: str, include_unreleased=True):
     """
     Get songs from a collection.
@@ -196,6 +205,8 @@ async def get_songs_from_collection(collection_id: str, include_unreleased=True)
         for ps in collection_songs
         if ps["song_id"] in song_map
     ]
+
+
 async def get_collections(
     type: str = None,
     artistId: str = None,
@@ -204,6 +215,7 @@ async def get_collections(
     state: str = "",
     published_from=None,
     published_to=None,
+    genre=None,
 ):
     """
     Filtros:
@@ -244,6 +256,9 @@ async def get_collections(
             else:
                 query["releaseDate"] = range_q
 
+        if genre:
+            query["genre"] = genre  
+
         collections = list(
             db.collections.find(query).sort([("createdAt", DESCENDING), ("name", 1)])
         )
@@ -264,6 +279,7 @@ async def delete_songs_from_collection(collection_id: str):
     except Exception as e:
         logger.error(f"Failed to delete songs from collections: {str(e)}")
         return
+
 
 async def update_collection_cover(collection_id: str, cover_url: str):
     db = get_db()
@@ -348,6 +364,7 @@ async def update_collection(collection_id: str, update_data: dict, user_id: str 
         logger.error(f"Failed to update collection {collection_id}: {str(e)}")
         return False
 
+
 async def publish_collection_now(collection_id: str, artist_id: str):
     """
     Publishes a collection immediately by setting its release date to now.
@@ -399,6 +416,7 @@ async def publish_collection_now(collection_id: str, artist_id: str):
     except Exception as e:
         logger.error(f"Failed to publish collection {collection_id}: {str(e)}")
         return (False, str(e))
+
 
 async def get_popular_collections(artistId: str, limit: int = 50, type: str = None, includeUnpublished: bool = False):
     """
@@ -499,13 +517,86 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         return []
 
 
-def normalize_base(base: Optional[str], default: str) -> str:
-    base = (base or "").strip()
-    if not base:
-        base = default
-    if not base.startswith(("http://", "https://")):
-        base = "http://" + base
-    return base.rstrip("/")
+async def get_most_popular_albums_overall(limit: int = 50):
+    """
+    Get the most popular albums globally (any artist), ordered by popularity score.
+
+    Popularity score uses the same metrics:
+    - Plays
+    - Likes
+    - Playlist saves
+    - Shares
+    """
+    db = get_db()
+
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Only albums, only published
+        query = {
+            "type": "album",
+            "releaseDate": {"$lte": now}
+        }
+
+        albums = list(db.collections.find(query))
+        albums_with_metrics = []
+
+        for album in albums:
+            # Fetch songs belonging to the album
+            album_songs = list(db.collection_songs.find(
+                {"collection_id": album["_id"]},
+                {"song_id": 1}
+            ))
+
+            song_ids = [s["song_id"] for s in album_songs]
+
+            total_plays = 0
+            total_likes = 0
+            total_playlist_saves = 0
+            total_shares = 0
+
+            if song_ids:
+                total_plays = db.plays.count_documents({"song_id": {"$in": song_ids}})
+                total_likes = db.likes.count_documents({
+                    "target_id": {"$in": song_ids},
+                    "target_type": "song"
+                })
+                total_playlist_saves = db.playlist_songs.count_documents({
+                    "song_id": {"$in": song_ids}
+                })
+                total_shares = db.shares.count_documents({
+                    "target_id": {"$in": song_ids},
+                    "target_type": "song"
+                })
+
+            popularity_score = (
+                total_plays * 1.0 +
+                total_likes * 2.0 +
+                total_playlist_saves * 3.0 +
+                total_shares * 5.0
+            )
+
+            album["totalPlays"] = total_plays
+            album["totalLikes"] = total_likes
+            album["totalPlaylistSaves"] = total_playlist_saves
+            album["totalShares"] = total_shares
+            album["popularityScore"] = popularity_score
+
+            albums_with_metrics.append(album)
+
+        albums_with_metrics.sort(
+            key=lambda x: x["popularityScore"],
+            reverse=True
+        )
+
+        result = albums_with_metrics[:limit]
+        logger.info(f"Retrieved {len(result)} most popular albums overall")
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to compute global popular albums: {str(e)}")
+        return []
+
 
 async def _fetch_users_by_name(name: str, base_url: str = USER_API_BASE, token: Optional[str] = None) -> List[Dict[str, Any]]:
     """
@@ -527,6 +618,7 @@ async def _fetch_users_by_name(name: str, base_url: str = USER_API_BASE, token: 
         # La respuesta esperada es {"users": [...], "count": N}
         items = data.get("users") or data.get("result") or []
         return [{"id": u.get("id")} for u in items if u.get("id")]
+
 
 async def get_ids_by_name(name: str, token: Optional[str] = None):
     db = get_db()
@@ -581,6 +673,65 @@ async def get_ids_by_name(name: str, token: Optional[str] = None):
     except Exception as e:
         logger.exception(f"Failed to search collections by name='{name}': {e}")
         return False
+    
+
+async def get_albums_by_field(field: str, values: list[str], limit: int):
+    db = get_db()
+
+    try:
+        now = datetime.now(timezone.utc)
+        per_value = max(limit // len(values), 1)
+        results = []
+
+        for value in values:
+            query = {
+                field: value,
+                "type": "album",
+                "releaseDate": {"$lte": now},
+            }
+
+            cursor = db.collections.find(query).limit(per_value)
+            items = list(cursor)
+
+            logger.info(f"{field}={value}: fetched {len(items)} albums")
+
+            results.extend(items)
+
+        logger.info(f"Total albums fetched using {field}: {len(results)}")
+        return results[:limit]
+
+    except Exception as e:
+        logger.error(f"Failed to get albums for {field}={values}: {str(e)}")
+        return None
+    
+
+async def get_albums_by_field_greedy(field: str, values: list[str], limit: int):
+    db = get_db()
+    
+    try:
+        now = datetime.now(timezone.utc)
+        results = []
+
+        for value in values:
+            if len(results) >= limit:
+                break
+            query = {
+                field: value,
+                "type": "album",
+                "releaseDate": {"$lte": now},
+            }
+
+            remaining = limit - len(results)
+            cursor = db.collections.find(query).limit(remaining)
+            items = list(cursor)
+            results.extend(items)
+
+        logger.info(f"Total albums fetched using {field}: {len(results)}")
+        return results[:limit]
+
+    except Exception as e:
+        logger.error(f"Failed greedy fetch for {field}={values}: {str(e)}")
+        return []
 
 
 async def configure_publication_window(

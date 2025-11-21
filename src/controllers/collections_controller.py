@@ -1,5 +1,6 @@
 import databases.storage_database as storage_db
 import databases.collections_database as collections_db
+import databases.preferences_database as preferences_db
 import schemas
 from fastapi import Depends
 from auth import verify_token, is_authorized
@@ -474,6 +475,86 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         )
 
 
+@router.get(
+    "/recommended",
+    responses={
+        200: {
+            "description": "Album recommendations based on user preferences",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "albums": ["id1", "id2", "id3"]
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_album_recommendations(n: int = 10, user: dict = Depends(verify_token)):
+    user_id = user["user_id"]
+
+    genres = await preferences_db.get_user_genres(user_id) or []
+    artists = await preferences_db.get_user_artists(user_id) or []
+
+    if len(genres) == 0 and len(artists) == 0:
+        popular = await collections_db.get_most_popular_albums_overall(n)
+        return {
+            "albums": [
+                serialize_collection(a, a.get("songs", []))
+                for a in popular
+            ]
+        }
+
+    half = n // 2
+
+    albums = []
+
+    if genres:
+        g = await collections_db.get_albums_by_field("genre", genres, half)
+        albums.extend(g or [])
+
+    if artists:
+        limit = n if not genres else half
+        a = await collections_db.get_albums_by_field("artistId", artists, limit)
+        albums.extend(a or [])
+
+    if len(albums) < n and genres:
+        needed = n - len(albums)
+        extra_g = await collections_db.get_albums_by_field_greedy("genre", genres, needed)
+        albums.extend(extra_g or [])
+
+    seen = set()
+    unique = []
+    for a in albums:
+        key = str(a["_id"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(a)
+
+    if len(unique) < n:
+        needed = n - len(unique)
+        popular = await collections_db.get_most_popular_albums_overall(needed)
+        unique.extend(popular)
+
+    final_seen = set()
+    final_list = []
+    for a in unique:
+        key = str(a["_id"])
+        if key not in final_seen:
+            final_seen.add(key)
+            final_list.append(a)
+        if len(final_list) == n:
+            break
+
+    serialized = [
+        serialize_collection(a, a.get("songs", []))
+        for a in final_list
+    ]
+
+    logger.info(f"Generated {len(serialized)} recommendations for user {user_id}")
+    return {"albums": serialized}
+
+
 @router.get("/popular/{artistId}", status_code=200)
 async def get_popular_collections(artistId: str, limit: int = 50, type: str = None, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
     """
@@ -524,6 +605,7 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         logger.error(f"Failed to fetch popular collections: {str(e)}")
         raise
 
+
 @router.get(
     "/",
     status_code=200,
@@ -560,6 +642,7 @@ async def get_collections(
     state: str | None = None,          # "Publicado" | "Programado"
     publishedFrom: str | None = None,  # ISO date/datetime -> sobre releaseDate
     publishedTo: str | None = None,    # ISO date/datetime
+    genre: str | None = None, 
     user: dict = Depends(verify_token),
 ):
     """
@@ -602,6 +685,7 @@ async def get_collections(
             state=st,
             published_from=dt_from,
             published_to=dt_to,
+            genre=genre,
         )
         
         # Filter collections by geographical access and effective state
@@ -717,6 +801,7 @@ async def publish_collection(collection_id: str, user: dict = Depends(verify_tok
             ),
         )
 
+
 @router.get("/{collection_id}/early-releases", status_code=200)
 async def get_collection_early_releases(collection_id: str, user: dict = Depends(verify_token)):
     """
@@ -777,6 +862,7 @@ async def get_collection_early_releases(collection_id: str, user: dict = Depends
     except Exception as e:
         logger.error(f"Failed to fetch early releases: {str(e)}")
         raise
+
 
 @router.get("/{collection_id}", status_code=200)
 async def get_collection(collection_id: str, includeUnpublished: bool = False, user: dict = Depends(verify_token)):
