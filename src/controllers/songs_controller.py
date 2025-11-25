@@ -118,10 +118,20 @@ async def get_all_songs(includeUnpublished: bool = False, user: dict = Depends(v
     **Retorna:**
     - 200: Lista completa de canciones que cumplan los criterios
     """
-    logger.info(f"Fetching all songs (includeUnpublished={includeUnpublished})")
+    if user.get("user_type") == "backoffice":
+        # Backoffice: no filtramos por dueño, vemos TODO el catálogo
+        effective_user_id = None
+    else:
+        # Artista / usuario normal: sólo sus canciones (igual que antes)
+        effective_user_id = user["user_id"]
+
+    logger.info(
+        f"Fetching all songs (includeUnpublished={includeUnpublished}, userId={effective_user_id})"
+    )
+
     try:
-        songs = await songs_db.get_all_songs(includeUnpublished, user["user_id"])
-        return { "data": [serialize_song(song) for song in songs] }
+        songs = await songs_db.get_all_songs(includeUnpublished, effective_user_id)
+        return {"data": [serialize_song(song) for song in songs]}
     except Exception as e:
         logger.error(f"Failed to fetch all songs: {str(e)}")
         raise

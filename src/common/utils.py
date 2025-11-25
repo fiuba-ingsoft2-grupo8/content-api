@@ -1,6 +1,6 @@
 from resources.logger import logger
 import schemas
-
+from databases.collection_states import calculate_effective_state
 # Portadas por defecto (se usan si no se pasa cover explícito)
 DEFAULT_COVERS = [
     "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-green.png",
@@ -86,7 +86,10 @@ def serialize_song(song: dict, is_liked: bool | None = None):
     return song
 
 
-def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
+def serialize_collection(collection, songs, user_country=None):
+    # calculamos el estado efectivo según las reglas de prioridad
+    effective_status = calculate_effective_state(collection, user_country)
+
     return schemas.Collection(
         id=str(collection.get("_id", "")),
         name=_str_or_fallback(collection.get("name"), "(sin nombre)"),
@@ -96,14 +99,23 @@ def serialize_collection(collection: dict, songs: list) -> schemas.Collection:
         genre=_str_or_fallback(collection.get("genre"), "Unknown"),
         coverUrl=collection.get("coverUrl"),
         createdAt=collection.get("createdAt"),
-        releaseDate=collection.get("releaseDate"),
+
         credits=collection.get("credits", []),
+        releaseDate=collection.get("releaseDate"),
+
+        noDisponibleDesde=collection.get("noDisponibleDesde"),
+        noDisponibleHasta=collection.get("noDisponibleHasta"),
+
+        effectiveStatus=effective_status,
+
         availableCountries=collection.get("availableCountries", []),
+
         totalPlays=collection.get("totalPlays"),
         totalLikes=collection.get("totalLikes"),
         totalPlaylistSaves=collection.get("totalPlaylistSaves"),
         totalShares=collection.get("totalShares"),
         popularityScore=collection.get("popularityScore"),
+
         songs=[
             schemas.CollectionSong(
                 id=str(song.get("_id", "")),
