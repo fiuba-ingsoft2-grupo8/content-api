@@ -7,6 +7,7 @@ from db.database import get_db
 from db.models import PlaylistSong
 from resources.logger import logger
 from auth import is_authorized  # usado en get_playlist (acceso privado)
+import random
 
 # ----------------- CRUD y consultas ----------------- #
 
@@ -273,3 +274,15 @@ async def update_playlist_description(playlist_id: str, description: str) -> boo
     except Exception as e:
         logger.error(f"Failed to update description for playlist {playlist_id}: {e}")
         return False
+
+
+
+async def get_random_playlists(limit: int = 5):
+    db = get_db()
+    playlists = list(
+        db.playlists.find({"is_published": True})
+        .sort([("_id", 1)])
+    )
+    if not playlists:
+        return []
+    return random.sample(playlists, min(limit, len(playlists)))
