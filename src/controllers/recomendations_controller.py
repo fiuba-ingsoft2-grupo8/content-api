@@ -14,30 +14,36 @@ router = APIRouter()
 @router.get("/daily-mix")
 async def get_daily_mix(user: dict = Depends(verify_token)):
     try:
-        songs = await songs_db.get_random_songs()
-        return { "data": [serialize_song(song) for song in songs] }
+        user_id = user["user_id"]
+        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Daily Mix")
+        return { "data": serialize_playlist(playlist, []) }
+
     except Exception as e:
-        logger.error(f"Failed to fetch songs: {str(e)}")
+        logger.error(f"Failed to fetch Daily Mix: {str(e)}")
         raise
 
 
 @router.get("/mood-mix")
 async def get_mood_mix(user: dict = Depends(verify_token)):
     try:
-        songs = await songs_db.get_random_songs()
-        return { "data": [serialize_song(song) for song in songs] }
+        user_id = user["user_id"]
+        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Mood Mix")
+        return { "data": serialize_playlist(playlist, []) }
+
     except Exception as e:
-        logger.error(f"Failed to fetch songs: {str(e)}")
+        logger.error(f"Failed to fetch Mood Mix: {str(e)}")
         raise
 
 
 @router.get("/because-you-listened")
 async def get_because_you_listened_to(user: dict = Depends(verify_token)):
     try:
-        songs = await songs_db.get_random_songs()
-        return { "data": [serialize_song(song) for song in songs] }
+        user_id = user["user_id"]
+        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Because You Listened To")
+        return { "data": serialize_playlist(playlist, []) }
+
     except Exception as e:
-        logger.error(f"Failed to fetch songs: {str(e)}")
+        logger.error(f"Failed to fetch BYL Mix: {str(e)}")
         raise
 
 

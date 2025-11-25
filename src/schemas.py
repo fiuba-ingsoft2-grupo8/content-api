@@ -83,6 +83,7 @@ class PlaylistBase(BaseModel):
     userId: str
     coverUrl: Optional[str] = None
     isLikedSongs: Optional[bool] = False
+    isMix: Optional[bool] = False
 
 
 class CreatePlaylistRequest(BaseModel):
@@ -90,6 +91,7 @@ class CreatePlaylistRequest(BaseModel):
     description: str
     coverUrl: Optional[str] = None
     isLikedSongs: Optional[bool] = False
+    isMix: Optional[bool] = False
     
 
 

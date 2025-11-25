@@ -47,6 +47,7 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
     """
     cover_url = playlist.get("coverUrl")
     is_liked_songs = bool(playlist.get("isLikedSongs", False))
+    is_mix = bool(playlist.get("isMix", False))
 
     # Fallbacks seguros para Pydantic
     _id = str(playlist.get("_id", ""))
@@ -76,6 +77,7 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
         ],
         coverUrl=cover_url,
         isLikedSongs=is_liked_songs,
+        isMix=is_mix,
     )
 
 
