@@ -100,17 +100,14 @@ def serialize_collection(collection, songs, user_country=None):
         coverUrl=collection.get("coverUrl"),
         createdAt=collection.get("createdAt"),
 
-        # ⬇️ fecha de lanzamiento tal cual viene de la DB
+        credits=collection.get("credits", []),
         releaseDate=collection.get("releaseDate"),
 
-        # ⬇️ NUEVO: ventana no-disponible (si existe en la colección)
         noDisponibleDesde=collection.get("noDisponibleDesde"),
         noDisponibleHasta=collection.get("noDisponibleHasta"),
 
-        # ⬇️ NUEVO: estado efectivo para que el front no tenga que recalcular
         effectiveStatus=effective_status,
 
-        # países donde está disponible (ya lo tenías)
         availableCountries=collection.get("availableCountries", []),
 
         totalPlays=collection.get("totalPlays"),
