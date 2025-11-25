@@ -7,10 +7,11 @@ from db.database import get_db
 from db.models import PlaylistSong
 from resources.logger import logger
 from auth import is_authorized  # usado en get_playlist (acceso privado)
+import random
 
 # ----------------- CRUD y consultas ----------------- #
 
-async def create_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False):
+async def create_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False, isMix=False):
     db = get_db()
     try:
         publish_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -22,7 +23,8 @@ async def create_playlist(name, description, is_published, userId, coverUrl=None
             "userId": userId,
             "songs": [],
             "coverUrl": coverUrl or "default_cover.png",
-            "isLikedSongs": isLikedSongs
+            "isLikedSongs": isLikedSongs,
+            "isMix": isMix,
         }
         result = db.playlists.insert_one(playlist_doc)
         logger.info(f"Successfully created playlist with id={result.inserted_id}")
@@ -66,6 +68,9 @@ async def get_playlists(published: bool, userId: str = None, state: str = "", pu
             if published_to:
                 range_q["$lte"] = published_to
             query["published_at"] = range_q
+
+        # No traigo los mixes del inicio
+        query["isMix"] = False
 
         playlists = list(
             db.playlists.find(query)
@@ -273,3 +278,35 @@ async def update_playlist_description(playlist_id: str, description: str) -> boo
     except Exception as e:
         logger.error(f"Failed to update description for playlist {playlist_id}: {e}")
         return False
+
+
+
+async def get_random_playlists(limit: int = 5):
+    db = get_db()
+    playlists = list(
+        db.playlists.find({"is_published": True})
+        .sort([("_id", 1)])
+    )
+    if not playlists:
+        return []
+    return random.sample(playlists, min(limit, len(playlists)))
+
+
+async def get_or_create_mix_playlist(user_id: str, name: str):
+    db = get_db()
+
+    playlist = db.playlists.find_one({"userId": user_id, "name": name})
+    if playlist:
+        return playlist
+    
+    playlist_doc, err = await create_playlist(
+        name=name,
+        description="",
+        is_published=True,
+        userId=user_id,
+        coverUrl="https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/liked-songs.png",
+        isLikedSongs=False,
+        isMix=True
+    )
+    return playlist_doc
+

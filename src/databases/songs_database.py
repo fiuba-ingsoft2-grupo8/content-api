@@ -234,3 +234,13 @@ async def delete_song(existing_song):
         return None
     except Exception as e:
         logger.error(f"Failed to delete song with id={existing_song['_id']}: {str(e)}")
+
+
+async def get_random_songs():
+    try:
+        db = get_db()
+        all_songs = list(db.songs.find().limit(20))
+        return all_songs
+    except Exception as e:
+        logger.error(f"Failed to retrieve test songs: {str(e)}")
+        return []
