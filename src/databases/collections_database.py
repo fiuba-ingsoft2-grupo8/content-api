@@ -9,6 +9,7 @@ from db.models import CollectionSong
 from bson import ObjectId
 from databases.collection_states import calculate_effective_state, should_auto_activate
 from databases.audit_database import log_collection_change
+import random
 
 USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
 
@@ -926,3 +927,31 @@ async def auto_activate_scheduled_collections():
         logger.error(f"Failed to auto-activate scheduled collections: {str(e)}")
         errors.append(str(e))
         return (activated_count, errors)
+
+async def get_random_collections(limit: int = 5):
+    """
+    Returns `limit` random published collections from ANY artist.
+    Used only for mock sections like Daily Mix, Mood Mix, etc.
+    """
+    db = get_db()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Only published collections
+        collections = list(
+            db.collections.find({
+                "releaseDate": {"$lte": now}
+            })
+        )
+
+        if not collections:
+            return []
+
+        if len(collections) <= limit:
+            return collections
+
+        return random.sample(collections, limit)
+
+    except Exception as e:
+        logger.error(f"Failed to fetch random collections: {str(e)}")
+        return []
