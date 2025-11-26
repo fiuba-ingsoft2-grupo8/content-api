@@ -2,6 +2,7 @@ import databases.storage_database as storage_db
 import databases.collections_database as collections_db
 import databases.preferences_database as preferences_db
 import schemas
+from schemas import AdminBlockRequest
 from fastapi import Depends
 from auth import verify_token, is_authorized
 from fastapi import APIRouter
@@ -1042,34 +1043,19 @@ async def configure_publication_window(
 @router.post("/{collection_id}/admin-block", status_code=200)
 async def set_admin_block(
     collection_id: str,
-    blocked: bool,
+    req: AdminBlockRequest,
     user: dict = Depends(verify_token)
 ):
     """
-    Bloquear o desbloquear una colección como administrador.
-    
-    Este endpoint permite a usuarios backoffice bloquear o desbloquear
-    una colección. Cuando está bloqueada, la reproducción permanece
-    deshabilitada independientemente de otros estados.
-    
-    **Parámetros:**
-    - blocked: true para bloquear, false para desbloquear
-    
-    **Prioridad de estados:**
-    - Bloqueado-admin tiene la máxima prioridad
-    - Incluso si está Publicado, si está bloqueado-admin, no se puede reproducir
-    
-    **Autorización:**
-    - Solo usuarios backoffice pueden bloquear/desbloquear
-    
-    **Retorna:**
-    - 200: Estado de bloqueo actualizado exitosamente
-    - 403: No autorizado (no es backoffice)
-    - 404: Colección no encontrada
+    Bloquear o desbloquear una colección como administrador, con alcance + motivo.
+
+    CA1: en bloqueo requiere scope (global/regiones) y reasonCode (y regions si scope=regions)
+    CA3: desbloqueo revierte override y aplica disponibilidad vigente
+    CA4: auditoría usuario/timestamp/alcance/motivo
     """
-    logger.info(f"Setting admin block for collection {collection_id} to {blocked} by user {user['user_id']}")
-    
-    # Verify backoffice access
+    logger.info(f"Setting admin block for collection {collection_id} to {req.blocked} by user {user.get('user_id')}")
+
+    # Solo backoffice
     if user.get("user_type") != "backoffice":
         return JSONResponse(
             status_code=403,
@@ -1080,14 +1066,40 @@ async def set_admin_block(
                 f"/collections/{collection_id}/admin-block",
             ),
         )
-    
+
+    # Validación CA1
+    if req.blocked:
+        if not req.scope or not req.reasonCode:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400,
+                    "Bad Request",
+                    "scope and reasonCode are required when blocking",
+                    f"/collections/{collection_id}/admin-block",
+                ),
+            )
+        if req.scope == "regions" and (not req.regions or len(req.regions) == 0):
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400,
+                    "Bad Request",
+                    "regions is required when scope=regions",
+                    f"/collections/{collection_id}/admin-block",
+                ),
+            )
+
     try:
         success, error = await collections_db.set_admin_block(
             collection_id=collection_id,
-            blocked=blocked,
-            user_id=user["user_id"]
+            blocked=req.blocked,
+            scope=req.scope,
+            regions=req.regions,
+            reason_code=req.reasonCode,
+            user_id=user["user_id"],
         )
-        
+
         if not success:
             if error == "Collection not found":
                 return JSONResponse(
@@ -1099,24 +1111,22 @@ async def set_admin_block(
                         f"/collections/{collection_id}/admin-block",
                     ),
                 )
-            else:
-                return JSONResponse(
-                    status_code=400,
-                    content=create_error_response(
-                        400,
-                        "Bad Request",
-                        error,
-                        f"/collections/{collection_id}/admin-block",
-                    ),
-                )
-        
-        # Get updated collection
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400,
+                    "Bad Request",
+                    error or "Failed to update collection",
+                    f"/collections/{collection_id}/admin-block",
+                ),
+            )
+
+        # devolver colección actualizada
         collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
         songs = await collections_db.get_songs_from_collection(collection_id)
-        
-        logger.info(f"Successfully {'blocked' if blocked else 'unblocked'} collection {collection_id}")
+
         return {"data": serialize_collection(collection, songs)}
-        
+
     except Exception as e:
         logger.error(f"Failed to set admin block for collection {collection_id}: {str(e)}")
         return JSONResponse(
@@ -1128,6 +1138,7 @@ async def set_admin_block(
                 f"/collections/{collection_id}/admin-block",
             ),
         )
+
 
 @router.post("/auto-activate", status_code=200)
 async def auto_activate_collections():

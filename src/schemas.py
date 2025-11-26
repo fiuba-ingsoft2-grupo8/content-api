@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime
 from fastapi import UploadFile, File
 from enum import Enum
@@ -696,3 +696,9 @@ class setArtistsRequest(BaseModel):
     Contains up to 3 artist identifiers.
     """
     data: List[str]
+    
+class AdminBlockRequest(BaseModel):
+    blocked: bool
+    scope: Optional[Literal["global", "regions"]] = None
+    regions: Optional[List[str]] = None
+    reasonCode: Optional[str] = None

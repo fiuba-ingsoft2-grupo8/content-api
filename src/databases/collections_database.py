@@ -291,75 +291,121 @@ async def update_collection_cover(collection_id: str, cover_url: str):
 
 async def update_collection(collection_id: str, update_data: dict, user_id: str | None = None):
     """
-    Updates collection fields based on the provided update_data dictionary.
-    Only updates fields that are present in update_data.
+    Updates collection fields based on update_data.
     Recalculates effective state and logs changes to audit.
-    
-    Args:
-        collection_id: The ID of the collection to update
-        update_data: Dictionary containing the fields to update
-        user_id: ID of the user making the change (for audit logging)
-        
-    Returns:
-        Boolean indicating if the update was successful
+
+    Auditoría (CA3):
+      - user_id, timestamp
+      - cambios (territorios y/o vigencias)
+      - alcance/región (scope)
     """
     db = get_db()
+
+    def _diff_list(prev: list[str] | None, new: list[str] | None):
+        prev = prev or []
+        new = new or []
+        return {
+            "from": prev,
+            "to": new,
+            "added": [x for x in new if x not in prev],
+            "removed": [x for x in prev if x not in new],
+        }
+
     try:
         if not update_data:
             logger.warning(f"No fields to update for collection {collection_id}")
             return True
-        
-        # Get current collection state before update
+
         current_collection = await get_collection(collection_id, includeUnpublished=True)
         if not current_collection:
             logger.error(f"Collection {collection_id} not found for update")
             return False
-        
-        # Calculate previous state
+
         previous_state = calculate_effective_state(current_collection)
-        
-        # Track changes for audit
+
+        # Snapshot previo para auditoría
         previous_release_date = current_collection.get("releaseDate")
         previous_no_disponible_desde = current_collection.get("noDisponibleDesde")
         previous_no_disponible_hasta = current_collection.get("noDisponibleHasta")
         previous_bloqueado_admin = current_collection.get("bloqueadoAdmin", False)
-        
-        # Update collection
+        previous_admin_block = current_collection.get("adminBlock")
+        previous_available_countries = current_collection.get("availableCountries", [])
+
+        # Update
         result = db.collections.update_one(
             {"_id": ObjectId(collection_id)},
             {"$set": update_data}
         )
-        
-        if result.modified_count > 0:
-            logger.info(f"Successfully updated collection {collection_id} with fields: {list(update_data.keys())}")
-            
-            # Get updated collection and calculate new state
-            updated_collection = await get_collection(collection_id, includeUnpublished=True)
-            if updated_collection:
-                new_state = calculate_effective_state(updated_collection)
-                
-                # Log changes to audit
-                if user_id:
-                    await log_collection_change(
-                        collection_id=collection_id,
-                        user_id=user_id,
-                        action="publication_window_update" if any(k in update_data for k in ["releaseDate", "noDisponibleDesde", "noDisponibleHasta"]) else "state_change",
-                        previous_state=previous_state,
-                        new_state=new_state,
-                        previous_release_date=previous_release_date,
-                        new_release_date=update_data.get("releaseDate"),
-                        previous_no_disponible_desde=previous_no_disponible_desde,
-                        new_no_disponible_desde=update_data.get("noDisponibleDesde"),
-                        previous_no_disponible_hasta=previous_no_disponible_hasta,
-                        new_no_disponible_hasta=update_data.get("noDisponibleHasta"),
-                        previous_bloqueado_admin=previous_bloqueado_admin,
-                        new_bloqueado_admin=update_data.get("bloqueadoAdmin"),
-                        metadata={"updated_fields": list(update_data.keys())}
-                    )
-        else:
+
+        if result.modified_count <= 0:
             logger.info(f"No changes made to collection {collection_id}")
-            
+            return True
+
+        logger.info(f"Successfully updated collection {collection_id} with fields: {list(update_data.keys())}")
+
+        updated_collection = await get_collection(collection_id, includeUnpublished=True)
+        if not updated_collection:
+            return True
+
+        new_state = calculate_effective_state(updated_collection)
+
+        # Armar changes (territorios / vigencias)
+        changes: dict = {}
+
+        if "availableCountries" in update_data:
+            changes["territorios"] = _diff_list(previous_available_countries, update_data.get("availableCountries"))
+
+        if any(k in update_data for k in ["releaseDate", "noDisponibleDesde", "noDisponibleHasta"]):
+            changes["vigencias"] = {
+                "from": {
+                    "releaseDate": previous_release_date,
+                    "noDisponibleDesde": previous_no_disponible_desde,
+                    "noDisponibleHasta": previous_no_disponible_hasta,
+                },
+                "to": {
+                    "releaseDate": update_data.get("releaseDate", previous_release_date),
+                    "noDisponibleDesde": update_data.get("noDisponibleDesde", previous_no_disponible_desde),
+                    "noDisponibleHasta": update_data.get("noDisponibleHasta", previous_no_disponible_hasta),
+                },
+            }
+
+        # Alcance/scope (simple): si hay lista de países => "regions"
+        scope = {
+            "type": "regions" if (update_data.get("availableCountries") or previous_available_countries) else "global",
+            "regions": update_data.get("availableCountries") or previous_available_countries or [],
+        }
+
+        # Acción para auditoría como antes
+        action = "publication_window_update" if any(
+            k in update_data for k in ["releaseDate", "noDisponibleDesde", "noDisponibleHasta"]
+        ) else "state_change"
+
+        if user_id:
+            await log_collection_change(
+                collection_id=collection_id,
+                user_id=user_id,
+                action=action,
+                previous_state=previous_state,
+                new_state=new_state,
+                previous_release_date=previous_release_date,
+                new_release_date=update_data.get("releaseDate"),
+                previous_no_disponible_desde=previous_no_disponible_desde,
+                new_no_disponible_desde=update_data.get("noDisponibleDesde"),
+                previous_no_disponible_hasta=previous_no_disponible_hasta,
+                new_no_disponible_hasta=update_data.get("noDisponibleHasta"),
+                previous_bloqueado_admin=previous_bloqueado_admin,
+                new_bloqueado_admin=update_data.get("bloqueadoAdmin"),
+                metadata={
+                    "updated_fields": list(update_data.keys()),
+                    "scope": scope,
+                    "changes": changes,
+                    "previous_adminBlock": previous_admin_block,
+                    "new_adminBlock": update_data.get("adminBlock"),
+                }
+            )
+
         return True
+
     except Exception as e:
         logger.error(f"Failed to update collection {collection_id}: {str(e)}")
         return False
@@ -519,30 +565,28 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
 
 async def get_most_popular_albums_overall(limit: int = 50):
     """
-    Get the most popular albums globally (any artist), ordered by popularity score.
-
-    Popularity score uses the same metrics:
-    - Plays
-    - Likes
-    - Playlist saves
-    - Shares
+    Get the most popular albums globally, excluding admin-blocked ones.
+    CA2: no debe mostrarse en rankings/listados si está Bloqueado-admin.
     """
     db = get_db()
 
     try:
         now = datetime.now(timezone.utc)
 
-        # Only albums, only published
         query = {
             "type": "album",
-            "releaseDate": {"$lte": now}
+            "releaseDate": {"$lte": now},
+            # excluir bloqueos admin (legacy y nuevo global)
+            "$nor": [
+                {"bloqueadoAdmin": True},
+                {"adminBlock.enabled": True, "adminBlock.scope": "global"},
+            ],
         }
 
         albums = list(db.collections.find(query))
         albums_with_metrics = []
 
         for album in albums:
-            # Fetch songs belonging to the album
             album_songs = list(db.collection_songs.find(
                 {"collection_id": album["_id"]},
                 {"song_id": 1}
@@ -561,9 +605,7 @@ async def get_most_popular_albums_overall(limit: int = 50):
                     "target_id": {"$in": song_ids},
                     "target_type": "song"
                 })
-                total_playlist_saves = db.playlist_songs.count_documents({
-                    "song_id": {"$in": song_ids}
-                })
+                total_playlist_saves = db.playlist_songs.count_documents({"song_id": {"$in": song_ids}})
                 total_shares = db.shares.count_documents({
                     "target_id": {"$in": song_ids},
                     "target_type": "song"
@@ -584,13 +626,10 @@ async def get_most_popular_albums_overall(limit: int = 50):
 
             albums_with_metrics.append(album)
 
-        albums_with_metrics.sort(
-            key=lambda x: x["popularityScore"],
-            reverse=True
-        )
+        albums_with_metrics.sort(key=lambda x: x["popularityScore"], reverse=True)
 
         result = albums_with_metrics[:limit]
-        logger.info(f"Retrieved {len(result)} most popular albums overall")
+        logger.info(f"Retrieved {len(result)} most popular albums overall (excluding admin blocked)")
         return result
 
     except Exception as e:
@@ -799,57 +838,86 @@ async def configure_publication_window(
         return (False, str(e))
 
 
-async def set_admin_block(collection_id: str, blocked: bool, user_id: str | None = None):
+async def set_admin_block(
+    collection_id: str,
+    blocked: bool,
+    scope: str | None = None,
+    regions: list[str] | None = None,
+    reason_code: str | None = None,
+    user_id: str | None = None
+):
     """
-    Set or remove admin block on a collection.
-    
-    Args:
-        collection_id: ID of the collection
-        blocked: True to block, False to unblock
-        user_id: ID of the admin user making the change
-        
-    Returns:
-        Tuple of (success: bool, error_message: str or None)
+    Set or remove admin block on a collection, with scope + reason code.
+
+    - blocked=True: requiere scope + reason_code. Si scope="regions", requiere regions.
+    - blocked=False: elimina el override (adminBlock) y vuelve a aplicar la disponibilidad vigente.
+
+    Auditoría (CA4): usuario, timestamp, alcance(scope/regions) y motivo(reasonCode)
     """
     db = get_db()
     try:
         collection = await get_collection(collection_id, includeUnpublished=True)
         if not collection:
             return (False, "Collection not found")
-        
-        # Get previous state
-        previous_state = calculate_effective_state(collection)
+
+        # Validaciones CA1 (en backend por seguridad)
+        if blocked:
+            if not scope or not reason_code:
+                return (False, "scope and reasonCode are required when blocking")
+            if scope == "regions" and (not regions or len(regions) == 0):
+                return (False, "regions is required when scope=regions")
+
+        previous_state = calculate_effective_state(collection, user_country=None)
         previous_bloqueado_admin = collection.get("bloqueadoAdmin", False)
-        
-        # Update block status
-        result = db.collections.update_one(
-            {"_id": ObjectId(collection_id)},
-            {"$set": {"bloqueadoAdmin": blocked}}
-        )
-        
-        if result.modified_count > 0:
-            # Get new state
-            updated_collection = await get_collection(collection_id, includeUnpublished=True)
-            new_state = calculate_effective_state(updated_collection) if updated_collection else previous_state
-            
-            # Log to audit
-            if user_id:
-                await log_collection_change(
-                    collection_id=collection_id,
-                    user_id=user_id,
-                    action="state_change",
-                    previous_state=previous_state,
-                    new_state=new_state,
-                    previous_bloqueado_admin=previous_bloqueado_admin,
-                    new_bloqueado_admin=blocked,
-                    metadata={"action": "admin_block" if blocked else "admin_unblock"}
-                )
-            
-            logger.info(f"Successfully {'blocked' if blocked else 'unblocked'} collection {collection_id}")
-            return (True, None)
+        previous_admin_block = collection.get("adminBlock")
+
+        now = datetime.now(timezone.utc)
+
+        if blocked:
+            admin_block = {
+                "enabled": True,
+                "scope": (scope or "global"),
+                "regions": regions or [],
+                "reasonCode": reason_code,
+                "by": user_id,
+                "at": now,
+            }
+            update = {"$set": {"adminBlock": admin_block, "bloqueadoAdmin": True}}
         else:
+            update = {"$unset": {"adminBlock": ""}, "$set": {"bloqueadoAdmin": False}}
+
+        result = db.collections.update_one({"_id": ObjectId(collection_id)}, update)
+        if result.modified_count <= 0:
             return (False, "Failed to update collection")
-            
+
+        updated_collection = await get_collection(collection_id, includeUnpublished=True)
+        new_state = calculate_effective_state(updated_collection, user_country=None) if updated_collection else previous_state
+
+        # Auditoría CA4 (incluye alcance + motivo)
+        if user_id:
+            # motivo en desbloqueo: usar el anterior o UNBLOCK
+            unblock_reason = reason_code or (previous_admin_block or {}).get("reasonCode") or "UNBLOCK"
+            meta = {
+                "scope": (scope or (previous_admin_block or {}).get("scope") or "global"),
+                "regions": regions or (previous_admin_block or {}).get("regions") or [],
+                "reasonCode": reason_code if blocked else unblock_reason,
+                "action": "admin_block" if blocked else "admin_unblock",
+            }
+
+            await log_collection_change(
+                collection_id=collection_id,
+                user_id=user_id,
+                action="state_change",
+                previous_state=previous_state,
+                new_state=new_state,
+                previous_bloqueado_admin=previous_bloqueado_admin,
+                new_bloqueado_admin=blocked,
+                metadata=meta
+            )
+
+        logger.info(f"Successfully {'blocked' if blocked else 'unblocked'} collection {collection_id}")
+        return (True, None)
+
     except Exception as e:
         logger.error(f"Failed to set admin block for collection {collection_id}: {str(e)}")
         return (False, str(e))
