@@ -684,3 +684,154 @@ async def delete_carousel_image(
             )
         )
 
+
+@router.get(
+    "/appears-in/{artist_id}",
+    status_code=200,
+    responses={
+        200: {
+            "description": "Collections and playlists where the artist appears",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "data": {
+                            "collections": [
+                                {
+                                    "id": "507f1f77bcf86cd799439011",
+                                    "name": "Abbey Road",
+                                    "artistName": "The Beatles",
+                                    "coverUrl": "https://example.com/cover.jpg",
+                                    "type": "album",
+                                    "year": 1969
+                                }
+                            ],
+                            "playlists": [
+                                {
+                                    "id": "507f1f77bcf86cd799439012",
+                                    "name": "Rock Classics",
+                                    "coverUrl": "https://example.com/playlist.jpg",
+                                    "type": "playlist",
+                                    "year": 2024
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_artist_appears_in(artist_id: str, limit: int = Query(6, ge=4, le=6)):
+    """
+    Obtener colecciones y playlists donde aparece un artista.
+    
+    Este endpoint retorna las colecciones (álbumes, EPs, singles) y playlists públicas
+    donde el artista aparece, ya sea como artista principal o en los créditos.
+    
+    **Criterios de Aceptación:**
+    
+    **CA 1: Fuentes y alcance**
+    - Incluye Álbum/EP/Single donde el artista es el principal o está en créditos
+    - Incluye Playlists públicas que contengan ≥1 canción del artista
+    
+    **CA 2: Presentación**
+    - Cada ítem muestra: portada, título, chip de tipo (Álbum/EP/Playlist/Single) y año
+    
+    **CA 3: Cantidad y orden**
+    - Retorna 4-6 tarjetas (configurable via query param limit)
+    - Releases (Álbum/EP/Single): ordenados por fecha de publicación descendente (más reciente primero),
+      desempate alfabético
+    - Playlists públicas: ordenadas por popularidad reciente (número de canciones como proxy),
+      desempate alfabético
+    
+    **Parámetros:**
+    - artist_id: ID único del artista (user_id)
+    - limit: Número de resultados a retornar (entre 4 y 6, por defecto 6)
+    
+    **Retorna:**
+    - 200: Listas de colecciones y playlists donde aparece el artista
+    - 404: Artista no encontrado o sin página "About"
+    - 500: Error interno del servidor
+    """
+    try:
+        # Get artist about page to get stage name
+        about_doc = await about_db.get_artist_about_by_id(artist_id)
+        
+        if about_doc is None:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Artist about page not found for artist_id: {artist_id}",
+                    f"/about/appears-in/{artist_id}"
+                )
+            )
+        
+        stage_name = about_doc.get("artist")
+        if not stage_name:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Artist stage name not found for artist_id: {artist_id}",
+                    f"/about/appears-in/{artist_id}"
+                )
+            )
+        
+        # Get appearances
+        appearances = await about_db.get_artist_appearances(artist_id, stage_name, limit)
+        
+        # Serialize collections
+        collections_data = []
+        for collection in appearances.get("collections", []):
+            release_date = collection.get("releaseDate")
+            year = release_date.year if release_date else None
+            
+            collections_data.append({
+                "id": str(collection["_id"]),
+                "name": collection.get("name", ""),
+                "artistName": collection.get("artistName", ""),
+                "coverUrl": collection.get("coverUrl", ""),
+                "type": collection.get("type", ""),
+                "year": year
+            })
+        
+        # Serialize playlists
+        playlists_data = []
+        for playlist in appearances.get("playlists", []):
+            published_at = playlist.get("published_at")
+            year = published_at.year if published_at else None
+            
+            playlists_data.append({
+                "id": str(playlist["_id"]),
+                "name": playlist.get("name", ""),
+                "coverUrl": playlist.get("coverUrl"),
+                "type": "playlist",
+                "year": year
+            })
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "data": {
+                    "collections": collections_data,
+                    "playlists": playlists_data
+                }
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error retrieving artist appearances: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                "An error occurred while retrieving artist appearances",
+                f"/about/appears-in/{artist_id}"
+            )
+        )
+
