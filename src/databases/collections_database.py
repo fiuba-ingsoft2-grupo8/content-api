@@ -325,6 +325,23 @@ async def update_collection(collection_id: str, update_data: dict, user_id: str 
         previous_no_disponible_hasta = current_collection.get("noDisponibleHasta")
         previous_bloqueado_admin = current_collection.get("bloqueadoAdmin", False)
         
+        # Track all field changes for metadata
+        field_changes = {}
+        for field, new_value in update_data.items():
+            old_value = current_collection.get(field)
+            # Special handling for lists (like availableCountries)
+            if isinstance(old_value, list) and isinstance(new_value, list):
+                if set(old_value) != set(new_value):
+                    field_changes[field] = {
+                        "previous": old_value,
+                        "new": new_value
+                    }
+            elif old_value != new_value:
+                field_changes[field] = {
+                    "previous": str(old_value) if old_value is not None else None,
+                    "new": str(new_value) if new_value is not None else None
+                }
+        
         # Update collection
         result = db.collections.update_one(
             {"_id": ObjectId(collection_id)},
@@ -339,12 +356,20 @@ async def update_collection(collection_id: str, update_data: dict, user_id: str 
             if updated_collection:
                 new_state = calculate_effective_state(updated_collection)
                 
-                # Log changes to audit
-                if user_id:
+                # Log changes to audit (always log if user_id is provided and there were changes)
+                if user_id and field_changes:
+                    # Determine action type
+                    if any(k in update_data for k in ["releaseDate", "noDisponibleDesde", "noDisponibleHasta"]):
+                        action = "publication_window_update"
+                    elif "bloqueadoAdmin" in update_data:
+                        action = "state_change"
+                    else:
+                        action = "collection_edit"
+                    
                     await log_collection_change(
                         collection_id=collection_id,
                         user_id=user_id,
-                        action="publication_window_update" if any(k in update_data for k in ["releaseDate", "noDisponibleDesde", "noDisponibleHasta"]) else "state_change",
+                        action=action,
                         previous_state=previous_state,
                         new_state=new_state,
                         previous_release_date=previous_release_date,
@@ -355,7 +380,10 @@ async def update_collection(collection_id: str, update_data: dict, user_id: str 
                         new_no_disponible_hasta=update_data.get("noDisponibleHasta"),
                         previous_bloqueado_admin=previous_bloqueado_admin,
                         new_bloqueado_admin=update_data.get("bloqueadoAdmin"),
-                        metadata={"updated_fields": list(update_data.keys())}
+                        metadata={
+                            "updated_fields": list(update_data.keys()),
+                            "field_changes": field_changes
+                        }
                     )
         else:
             logger.info(f"No changes made to collection {collection_id}")

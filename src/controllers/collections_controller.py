@@ -1,6 +1,7 @@
 import databases.storage_database as storage_db
 import databases.collections_database as collections_db
 import databases.preferences_database as preferences_db
+import databases.audit_database as audit_db
 import schemas
 from fastapi import Depends
 from auth import verify_token, is_authorized
@@ -1126,6 +1127,140 @@ async def set_admin_block(
                 "Internal Server Error",
                 str(e),
                 f"/collections/{collection_id}/admin-block",
+            ),
+        )
+
+@router.get("/{collection_id}/audit", status_code=200)
+async def get_collection_audit_history(
+    collection_id: str,
+    limit: int = 10,
+    user: dict = Depends(verify_token)
+):
+    """
+    Obtener el historial de cambios de auditoría de una colección.
+    
+    Este endpoint retorna los últimos cambios registrados en la auditoría de una colección,
+    incluyendo cambios de estado, ediciones de campos, actualizaciones de ventana de publicación,
+    cambios en países disponibles, etc.
+    
+    **Parámetros de ruta:**
+    - collection_id: ID de la colección
+    
+    **Parámetros de consulta:**
+    - limit: Número máximo de cambios a retornar (por defecto: 10, máximo: 50)
+    
+    **Autorización:**
+    - Solo el artista dueño o usuarios backoffice pueden ver el historial de auditoría
+    
+    **Retorna:**
+    - 200: Lista de cambios ordenados por fecha (más recientes primero)
+    - 403: No autorizado para ver el historial
+    - 404: Colección no encontrada
+    """
+    logger.info(f"Fetching audit history for collection {collection_id} (limit={limit})")
+    
+    try:
+        # Validate limit
+        if limit > 50:
+            limit = 50
+        if limit < 1:
+            limit = 10
+        
+        # Get collection to verify access
+        collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
+        if not collection:
+            return JSONResponse(
+                status_code=404,
+                content=create_error_response(
+                    404,
+                    "Not Found",
+                    f"Collection with id {collection_id} not found",
+                    f"/collections/{collection_id}/audit",
+                ),
+            )
+        
+        # Verify authorization (owner or backoffice)
+        if not is_authorized(user, collection["artistId"]):
+            return JSONResponse(
+                status_code=403,
+                content=create_error_response(
+                    403,
+                    "Forbidden",
+                    "You are not authorized to view audit history for this collection",
+                    f"/collections/{collection_id}/audit",
+                ),
+            )
+        
+        # Get audit log entries
+        audit_entries = await audit_db.get_collection_audit_log(collection_id, limit=limit)
+        
+        # Serialize audit entries
+        serialized_entries = []
+        for entry in audit_entries:
+            serialized_entry = {
+                "id": str(entry["_id"]),
+                "collectionId": str(entry["collection_id"]),
+                "userId": entry["user_id"],
+                "action": entry["action"],
+                "timestamp": entry["timestamp"].isoformat() if entry.get("timestamp") else None,
+            }
+            
+            # Add state changes if present
+            if entry.get("previous_state") or entry.get("new_state"):
+                serialized_entry["stateChange"] = {
+                    "previous": entry.get("previous_state"),
+                    "new": entry.get("new_state")
+                }
+            
+            # Add publication window changes if present
+            publication_changes = {}
+            if entry.get("previous_release_date") or entry.get("new_release_date"):
+                publication_changes["releaseDate"] = {
+                    "previous": entry.get("previous_release_date").isoformat() if entry.get("previous_release_date") else None,
+                    "new": entry.get("new_release_date").isoformat() if entry.get("new_release_date") else None
+                }
+            if entry.get("previous_no_disponible_desde") or entry.get("new_no_disponible_desde"):
+                publication_changes["noDisponibleDesde"] = {
+                    "previous": entry.get("previous_no_disponible_desde").isoformat() if entry.get("previous_no_disponible_desde") else None,
+                    "new": entry.get("new_no_disponible_desde").isoformat() if entry.get("new_no_disponible_desde") else None
+                }
+            if entry.get("previous_no_disponible_hasta") or entry.get("new_no_disponible_hasta"):
+                publication_changes["noDisponibleHasta"] = {
+                    "previous": entry.get("previous_no_disponible_hasta").isoformat() if entry.get("previous_no_disponible_hasta") else None,
+                    "new": entry.get("new_no_disponible_hasta").isoformat() if entry.get("new_no_disponible_hasta") else None
+                }
+            if entry.get("previous_bloqueado_admin") is not None or entry.get("new_bloqueado_admin") is not None:
+                publication_changes["bloqueadoAdmin"] = {
+                    "previous": entry.get("previous_bloqueado_admin"),
+                    "new": entry.get("new_bloqueado_admin")
+                }
+            if publication_changes:
+                serialized_entry["publicationChanges"] = publication_changes
+            
+            # Add metadata if present
+            if entry.get("metadata"):
+                serialized_entry["metadata"] = entry["metadata"]
+            
+            serialized_entries.append(serialized_entry)
+        
+        logger.info(f"Retrieved {len(serialized_entries)} audit entries for collection {collection_id}")
+        return {
+            "data": {
+                "collectionId": collection_id,
+                "collectionName": collection.get("name"),
+                "auditHistory": serialized_entries
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch audit history for collection {collection_id}: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content=create_error_response(
+                500,
+                "Internal Server Error",
+                str(e),
+                f"/collections/{collection_id}/audit",
             ),
         )
 
