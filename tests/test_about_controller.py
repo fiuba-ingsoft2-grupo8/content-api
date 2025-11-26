@@ -720,3 +720,327 @@ class TestDeleteCarouselImage:
         remaining_ids = [img["id"] for img in carousel]
         assert image_ids[0] in remaining_ids
         assert image_ids[2] in remaining_ids
+
+
+class TestArtistAppearsIn:
+    """Test suite for artist appears-in endpoint."""
+    
+    @pytest.fixture(autouse=True)
+    def setup(self, client, mock_db):
+        """Setup for each test."""
+        from datetime import datetime, timezone
+        from bson import ObjectId
+        
+        self.client = client
+        self.db = mock_db
+        
+        # Clear collections
+        self.db.artist_about.delete_many({})
+        self.db.collections.delete_many({})
+        self.db.playlists.delete_many({})
+        self.db.songs.delete_many({})
+        self.db.playlist_songs.delete_many({})
+        
+        # Create artist about page
+        self.db.artist_about.insert_one({
+            "artist_id": "test_user_123",
+            "artist": "Test Artist",
+            "bio": None,
+            "social_media": None,
+            "carousel_images": [],
+            "artist_pick": None
+        })
+        
+        # Create some songs by the artist
+        self.song1_id = ObjectId()
+        self.song2_id = ObjectId()
+        self.song3_id = ObjectId()
+        
+        self.db.songs.insert_many([
+            {
+                "_id": self.song1_id,
+                "title": "Song 1",
+                "artist": "Test Artist",
+                "artistId": "test_user_123",
+                "duration": "180"
+            },
+            {
+                "_id": self.song2_id,
+                "title": "Song 2",
+                "artist": "Test Artist",
+                "artistId": "test_user_123",
+                "duration": "200"
+            },
+            {
+                "_id": self.song3_id,
+                "title": "Song 3",
+                "artist": "Other Artist",
+                "artistId": "other_user_456",
+                "duration": "220"
+            }
+        ])
+        
+        # Create collections (albums, EPs, singles)
+        now = datetime.now(timezone.utc)
+        
+        # Album where artist is main artist
+        self.collection1_id = ObjectId()
+        self.db.collections.insert_one({
+            "_id": self.collection1_id,
+            "name": "Test Album",
+            "artistId": "test_user_123",
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Rock",
+            "coverUrl": "https://example.com/album.jpg",
+            "releaseDate": datetime(2023, 6, 15, tzinfo=timezone.utc),
+            "credits": [],
+            "availableCountries": []
+        })
+        
+        # Single where artist is in credits
+        self.collection2_id = ObjectId()
+        self.db.collections.insert_one({
+            "_id": self.collection2_id,
+            "name": "Featured Single",
+            "artistId": "other_user_456",
+            "artistName": "Other Artist",
+            "type": "single",
+            "genre": "Pop",
+            "coverUrl": "https://example.com/single.jpg",
+            "releaseDate": datetime(2024, 1, 10, tzinfo=timezone.utc),
+            "credits": ["Test Artist", "Another Artist"],
+            "availableCountries": []
+        })
+        
+        # EP where artist is main artist
+        self.collection3_id = ObjectId()
+        self.db.collections.insert_one({
+            "_id": self.collection3_id,
+            "name": "Test EP",
+            "artistId": "test_user_123",
+            "artistName": "Test Artist",
+            "type": "ep",
+            "genre": "Electronic",
+            "coverUrl": "https://example.com/ep.jpg",
+            "releaseDate": datetime(2024, 3, 20, tzinfo=timezone.utc),
+            "credits": [],
+            "availableCountries": []
+        })
+        
+        # Unpublished album (shouldn't appear)
+        self.collection4_id = ObjectId()
+        self.db.collections.insert_one({
+            "_id": self.collection4_id,
+            "name": "Future Album",
+            "artistId": "test_user_123",
+            "artistName": "Test Artist",
+            "type": "album",
+            "genre": "Rock",
+            "coverUrl": "https://example.com/future.jpg",
+            "releaseDate": datetime(2025, 12, 31, tzinfo=timezone.utc),
+            "credits": [],
+            "availableCountries": []
+        })
+        
+        # Create public playlists containing artist's songs
+        self.playlist1_id = ObjectId()
+        self.db.playlists.insert_one({
+            "_id": self.playlist1_id,
+            "name": "Rock Playlist",
+            "description": "Rock music",
+            "is_published": True,
+            "published_at": datetime(2024, 1, 1, tzinfo=timezone.utc),
+            "userId": "other_user_789",
+            "coverUrl": "https://example.com/playlist1.jpg",
+            "isLikedSongs": False,
+            "isMix": False
+        })
+        
+        # Add artist's songs to playlist
+        self.db.playlist_songs.insert_many([
+            {
+                "_id": ObjectId(),
+                "playlist_id": self.playlist1_id,
+                "song_id": self.song1_id,
+                "added_at": datetime.now(timezone.utc),
+                "order": 1
+            },
+            {
+                "_id": ObjectId(),
+                "playlist_id": self.playlist1_id,
+                "song_id": self.song2_id,
+                "added_at": datetime.now(timezone.utc),
+                "order": 2
+            }
+        ])
+        
+        # Private playlist (shouldn't appear)
+        self.playlist2_id = ObjectId()
+        self.db.playlists.insert_one({
+            "_id": self.playlist2_id,
+            "name": "Private Playlist",
+            "description": "Private",
+            "is_published": False,
+            "published_at": datetime(2024, 2, 1, tzinfo=timezone.utc),
+            "userId": "other_user_789",
+            "coverUrl": "https://example.com/playlist2.jpg",
+            "isLikedSongs": False,
+            "isMix": False
+        })
+        
+        self.db.playlist_songs.insert_one({
+            "_id": ObjectId(),
+            "playlist_id": self.playlist2_id,
+            "song_id": self.song1_id,
+            "added_at": datetime.now(timezone.utc),
+            "order": 1
+        })
+        
+        # Mix playlist (shouldn't appear)
+        self.playlist3_id = ObjectId()
+        self.db.playlists.insert_one({
+            "_id": self.playlist3_id,
+            "name": "Daily Mix",
+            "description": "Auto mix",
+            "is_published": True,
+            "published_at": datetime(2024, 2, 15, tzinfo=timezone.utc),
+            "userId": "test_user_123",
+            "coverUrl": "https://example.com/mix.jpg",
+            "isLikedSongs": False,
+            "isMix": True
+        })
+        
+        self.db.playlist_songs.insert_one({
+            "_id": ObjectId(),
+            "playlist_id": self.playlist3_id,
+            "song_id": self.song1_id,
+            "added_at": datetime.now(timezone.utc),
+            "order": 1
+        })
+    
+    def test_get_artist_appears_in_success(self):
+        """Test successful retrieval of artist appearances."""
+        response = self.client.get("/about/appears-in/test_user_123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "collections" in data["data"]
+        assert "playlists" in data["data"]
+        
+        # Should have 3 collections (not the unpublished one)
+        collections = data["data"]["collections"]
+        assert len(collections) == 3
+        
+        # Verify collections are sorted by release date descending
+        collection_names = [c["name"] for c in collections]
+        assert "Test EP" == collections[0]["name"]  # Most recent
+        assert "Featured Single" == collections[1]["name"]
+        assert "Test Album" == collections[2]["name"]  # Oldest
+        
+        # Should have 1 public playlist (not private or mix)
+        playlists = data["data"]["playlists"]
+        assert len(playlists) == 1
+        assert playlists[0]["name"] == "Rock Playlist"
+        assert playlists[0]["type"] == "playlist"
+    
+    def test_get_artist_appears_in_with_limit(self):
+        """Test limit parameter works correctly."""
+        response = self.client.get("/about/appears-in/test_user_123?limit=4")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Should respect the limit (max 4 items total)
+        total_items = len(data["data"]["collections"]) + len(data["data"]["playlists"])
+        assert total_items <= 4
+    
+    def test_get_artist_appears_in_no_about_page(self):
+        """Test error when artist has no about page."""
+        response = self.client.get("/about/appears-in/nonexistent_user")
+        
+        assert response.status_code == 404
+        data = response.json()
+        assert "not found" in data["detail"].lower()
+    
+    def test_get_artist_appears_in_collection_fields(self):
+        """Test that collection items have all required fields."""
+        response = self.client.get("/about/appears-in/test_user_123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        collections = data["data"]["collections"]
+        assert len(collections) > 0
+        
+        # Check first collection has all fields
+        collection = collections[0]
+        assert "id" in collection
+        assert "name" in collection
+        assert "artistName" in collection
+        assert "coverUrl" in collection
+        assert "type" in collection
+        assert "year" in collection
+        assert collection["type"] in ["album", "ep", "single"]
+        assert isinstance(collection["year"], int)
+    
+    def test_get_artist_appears_in_playlist_fields(self):
+        """Test that playlist items have all required fields."""
+        response = self.client.get("/about/appears-in/test_user_123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        playlists = data["data"]["playlists"]
+        assert len(playlists) > 0
+        
+        # Check first playlist has all fields
+        playlist = playlists[0]
+        assert "id" in playlist
+        assert "name" in playlist
+        assert "coverUrl" in playlist
+        assert "type" in playlist
+        assert "year" in playlist
+        assert playlist["type"] == "playlist"
+        assert isinstance(playlist["year"], int)
+    
+    def test_get_artist_appears_in_only_published_collections(self):
+        """Test that only published collections are returned."""
+        response = self.client.get("/about/appears-in/test_user_123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        collections = data["data"]["collections"]
+        collection_names = [c["name"] for c in collections]
+        
+        # Should not include unpublished "Future Album"
+        assert "Future Album" not in collection_names
+    
+    def test_get_artist_appears_in_only_public_playlists(self):
+        """Test that only public playlists are returned."""
+        response = self.client.get("/about/appears-in/test_user_123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        playlists = data["data"]["playlists"]
+        playlist_names = [p["name"] for p in playlists]
+        
+        # Should not include private or mix playlists
+        assert "Private Playlist" not in playlist_names
+        assert "Daily Mix" not in playlist_names
+    
+    def test_get_artist_appears_in_includes_credits(self):
+        """Test that collections where artist is in credits are included."""
+        response = self.client.get("/about/appears-in/test_user_123")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        collections = data["data"]["collections"]
+        collection_names = [c["name"] for c in collections]
+        
+        # Should include "Featured Single" where artist is in credits
+        assert "Featured Single" in collection_names
