@@ -112,6 +112,10 @@ def serialize_collection(collection, songs, user_country=None):
 
         availableCountries=collection.get("availableCountries", []),
 
+        # Admin block information
+        bloqueadoAdmin=collection.get("bloqueadoAdmin", False),
+        bloqueadoAdminData=collection.get("bloqueadoAdminData"),
+
         totalPlays=collection.get("totalPlays"),
         totalLikes=collection.get("totalLikes"),
         totalPlaylistSaves=collection.get("totalPlaylistSaves"),
