@@ -85,7 +85,8 @@ def client_other_user(mock_db):
              patch("controllers.search_controller.get_db", side_effect=_get_test_db), \
              patch("controllers.playlists_controller.get_db", side_effect=_get_test_db), \
              patch("auth.verify_token", side_effect=mock_verify_other_user), \
-             patch("controllers.search_controller.verify_token", side_effect=mock_verify_other_user):
+             patch("controllers.search_controller.verify_token", side_effect=mock_verify_other_user), \
+             patch("controllers.collections_controller.verify_token", side_effect=mock_verify_other_user):
             with TestClient(app) as test_client:
                 yield test_client
 
