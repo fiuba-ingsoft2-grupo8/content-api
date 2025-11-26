@@ -401,7 +401,12 @@ class TestCollectionAudit:
         collection_id = create_response.json()["data"]["id"]
         
         # Block collection as backoffice user
-        response = client_backoffice.post(f"/collections/{collection_id}/admin-block?blocked=true")
+        block_data = {
+            "blocked": True,
+            "scope": "global",
+            "reasonCode": "test_audit_reason"
+        }
+        response = client_backoffice.post(f"/collections/{collection_id}/admin-block", json=block_data)
         assert response.status_code == 200
         
         # Check audit entry
