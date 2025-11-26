@@ -589,12 +589,14 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
     try:
         collections = await collections_db.get_popular_collections(artistId=artistId, limit=limit, type=type, includeUnpublished=includeUnpublished)
         
-        # Filter collections by geographical access
+        # Filter collections by geographical access and admin block
+        # CA 2: bloqueado-admin collections should NOT appear in Popular
+        is_backoffice = user.get("user_type") == "backoffice"
         accessible_collections = [
             collection for collection in collections 
-            if _can_access_collection(user, collection)
+            if _can_access_collection(user, collection) and (is_backoffice or not collection.get("bloqueadoAdmin", False))
         ]
-        logger.info(f"Filtered {len(collections)} popular collections to {len(accessible_collections)} based on geographical restrictions")
+        logger.info(f"Filtered {len(collections)} popular collections to {len(accessible_collections)} based on geographical restrictions and admin blocks")
         
         serialized_collections = []
         for collection in accessible_collections:
@@ -1043,32 +1045,43 @@ async def configure_publication_window(
 @router.post("/{collection_id}/admin-block", status_code=200)
 async def set_admin_block(
     collection_id: str,
-    blocked: bool,
+    block_request: schemas.AdminBlockRequest,
     user: dict = Depends(verify_token)
 ):
     """
     Bloquear o desbloquear una colección como administrador.
     
     Este endpoint permite a usuarios backoffice bloquear o desbloquear
-    una colección. Cuando está bloqueada, la reproducción permanece
-    deshabilitada independientemente de otros estados.
+    una colección con alcance específico (global o por regiones) y motivo.
     
-    **Parámetros:**
+    **Parámetros en el body:**
     - blocked: true para bloquear, false para desbloquear
+    - scope: 'global' o 'regions' (requerido al bloquear)
+    - regions: lista de códigos de región (requerido si scope es 'regions')
+    - reasonCode: código del motivo del bloqueo (requerido al bloquear)
+    
+    **Comportamiento:**
+    - Bloqueado: el ítem no aparece en Popular/Búsqueda/Explorar
+    - En Colecciones: visible pero con acciones deshabilitadas e indicador
+    - Desbloqueo: revierte el override y aplica disponibilidad vigente
     
     **Prioridad de estados:**
     - Bloqueado-admin tiene la máxima prioridad
     - Incluso si está Publicado, si está bloqueado-admin, no se puede reproducir
+    
+    **Auditoría:**
+    - Se registra usuario, timestamp, alcance y motivo en el historial
     
     **Autorización:**
     - Solo usuarios backoffice pueden bloquear/desbloquear
     
     **Retorna:**
     - 200: Estado de bloqueo actualizado exitosamente
+    - 400: Parámetros inválidos
     - 403: No autorizado (no es backoffice)
     - 404: Colección no encontrada
     """
-    logger.info(f"Setting admin block for collection {collection_id} to {blocked} by user {user['user_id']}")
+    logger.info(f"Setting admin block for collection {collection_id} to {block_request.blocked} by user {user['user_id']}")
     
     # Verify backoffice access
     if user.get("user_type") != "backoffice":
@@ -1085,8 +1098,11 @@ async def set_admin_block(
     try:
         success, error = await collections_db.set_admin_block(
             collection_id=collection_id,
-            blocked=blocked,
-            user_id=user["user_id"]
+            blocked=block_request.blocked,
+            user_id=user["user_id"],
+            scope=block_request.scope,
+            regions=block_request.regions,
+            reason_code=block_request.reasonCode
         )
         
         if not success:
@@ -1115,7 +1131,7 @@ async def set_admin_block(
         collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
         songs = await collections_db.get_songs_from_collection(collection_id)
         
-        logger.info(f"Successfully {'blocked' if blocked else 'unblocked'} collection {collection_id}")
+        logger.info(f"Successfully {'blocked' if block_request.blocked else 'unblocked'} collection {collection_id}")
         return {"data": serialize_collection(collection, songs)}
         
     except Exception as e:

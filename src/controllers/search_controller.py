@@ -210,14 +210,17 @@ async def search(str_name: str, user: dict = Depends(verify_token), authorizatio
                 if song:
                     result["songs"].append(serialize_song(song))
 
-    # Albums (Collections) - Filter by geographical restrictions
+    # Albums (Collections) - Filter by geographical restrictions and admin block
+    # CA 2: bloqueado-admin collections should NOT appear in Search
+    is_backoffice = user.get("user_type") == "backoffice"
     for item in collection_ids.get("albums", []):
         aid = item.get("_id") if isinstance(item, dict) else item
         if aid:
             album = await collections_db.get_collection(aid)
             if album:
-                # Check geographical access before including
-                if _can_access_collection(user, album):
+                # Check geographical access and admin block before including
+                # Only backoffice users can see admin-blocked collections
+                if _can_access_collection(user, album) and (is_backoffice or not album.get("bloqueadoAdmin", False)):
                     # Get songs from the collection
                     songs = await collections_db.get_songs_from_collection(str(aid), include_unreleased=False)
                     result["albums"].append(serialize_collection(album, songs))

@@ -828,7 +828,14 @@ async def configure_publication_window(
         return (False, str(e))
 
 
-async def set_admin_block(collection_id: str, blocked: bool, user_id: str | None = None):
+async def set_admin_block(
+    collection_id: str, 
+    blocked: bool, 
+    user_id: str | None = None,
+    scope: str | None = None,
+    regions: list[str] | None = None,
+    reason_code: str | None = None
+):
     """
     Set or remove admin block on a collection.
     
@@ -836,6 +843,9 @@ async def set_admin_block(collection_id: str, blocked: bool, user_id: str | None
         collection_id: ID of the collection
         blocked: True to block, False to unblock
         user_id: ID of the admin user making the change
+        scope: 'global' or 'regions' (required when blocking)
+        regions: List of region codes (required when scope is 'regions')
+        reason_code: Reason code for the block (required when blocking)
         
     Returns:
         Tuple of (success: bool, error_message: str or None)
@@ -846,14 +856,40 @@ async def set_admin_block(collection_id: str, blocked: bool, user_id: str | None
         if not collection:
             return (False, "Collection not found")
         
+        # Validate required fields when blocking
+        if blocked:
+            if not scope:
+                return (False, "scope is required when blocking")
+            if not reason_code:
+                return (False, "reasonCode is required when blocking")
+            if scope == "regions" and not regions:
+                return (False, "regions is required when scope is 'regions'")
+        
         # Get previous state
         previous_state = calculate_effective_state(collection)
         previous_bloqueado_admin = collection.get("bloqueadoAdmin", False)
+        previous_block_data = collection.get("bloqueadoAdminData")
+        
+        # Prepare update
+        update_data = {"bloqueadoAdmin": blocked}
+        
+        if blocked:
+            # Store block metadata
+            update_data["bloqueadoAdminData"] = {
+                "scope": scope,
+                "regions": regions if scope == "regions" else None,
+                "reasonCode": reason_code,
+                "blockedAt": datetime.now(timezone.utc),
+                "blockedBy": user_id
+            }
+        else:
+            # Clear block metadata on unblock
+            update_data["bloqueadoAdminData"] = None
         
         # Update block status
         result = db.collections.update_one(
             {"_id": ObjectId(collection_id)},
-            {"$set": {"bloqueadoAdmin": blocked}}
+            {"$set": update_data}
         )
         
         if result.modified_count > 0:
@@ -863,6 +899,19 @@ async def set_admin_block(collection_id: str, blocked: bool, user_id: str | None
             
             # Log to audit
             if user_id:
+                metadata = {
+                    "action": "admin_block" if blocked else "admin_unblock",
+                }
+                if blocked:
+                    metadata.update({
+                        "scope": scope,
+                        "regions": regions,
+                        "reasonCode": reason_code
+                    })
+                elif previous_block_data:
+                    # Include previous block data when unblocking
+                    metadata["previous_block_data"] = previous_block_data
+                
                 await log_collection_change(
                     collection_id=collection_id,
                     user_id=user_id,
@@ -871,7 +920,7 @@ async def set_admin_block(collection_id: str, blocked: bool, user_id: str | None
                     new_state=new_state,
                     previous_bloqueado_admin=previous_bloqueado_admin,
                     new_bloqueado_admin=blocked,
-                    metadata={"action": "admin_block" if blocked else "admin_unblock"}
+                    metadata=metadata
                 )
             
             logger.info(f"Successfully {'blocked' if blocked else 'unblocked'} collection {collection_id}")

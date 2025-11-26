@@ -325,6 +325,12 @@ class Collection(CollectionBase):
     totalPlaylistSaves: Optional[int] = None
     totalShares: Optional[int] = None
     popularityScore: Optional[float] = None
+    # Admin block information
+    bloqueadoAdmin: Optional[bool] = None
+    bloqueadoAdminData: Optional[dict] = None  # Contains scope, regions, reasonCode, blockedAt, blockedBy
+    effectiveStatus: Optional[str] = None  # Effective state: publicado, programado, bloqueado-admin, no-disponible-region
+    noDisponibleDesde: Optional[datetime] = None
+    noDisponibleHasta: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -421,6 +427,28 @@ class PublicationWindowRequest(BaseModel):
                 "releaseDate": "2025-12-31T00:00:00Z",
                 "noDisponibleDesde": "2025-12-25T00:00:00Z",
                 "noDisponibleHasta": "2026-01-05T00:00:00Z"
+            }
+        }
+
+class AdminBlockScope(str, Enum):
+    """Scope for admin block."""
+    GLOBAL = "global"
+    REGIONS = "regions"
+
+class AdminBlockRequest(BaseModel):
+    """Request to block or unblock a collection as admin."""
+    blocked: bool
+    scope: Optional[AdminBlockScope] = None  # Required when blocking
+    regions: Optional[List[str]] = None  # Required when scope is 'regions'
+    reasonCode: Optional[str] = None  # Required when blocking
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "blocked": True,
+                "scope": "regions",
+                "regions": ["AR", "BR", "CL"],
+                "reasonCode": "copyright_issue"
             }
         }
 
