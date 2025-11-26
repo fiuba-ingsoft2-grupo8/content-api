@@ -726,3 +726,53 @@ class setArtistsRequest(BaseModel):
     Contains up to 3 artist identifiers.
     """
     data: List[str]
+
+# Artist appearances schemas
+class AppearsInCollection(BaseModel):
+    """Collection in which artist appears."""
+    id: str
+    name: str
+    artistName: str
+    coverUrl: str
+    type: str  # album, ep, single
+    year: int  # Release year
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "507f1f77bcf86cd799439011",
+                "name": "Abbey Road",
+                "artistName": "The Beatles",
+                "coverUrl": "https://example.com/cover.jpg",
+                "type": "album",
+                "year": 1969
+            }
+        }
+
+class AppearsInPlaylist(BaseModel):
+    """Playlist in which artist appears."""
+    id: str
+    name: str
+    coverUrl: Optional[str] = None
+    type: str = "playlist"
+    year: int  # Year from published_at
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "507f1f77bcf86cd799439012",
+                "name": "Rock Classics",
+                "coverUrl": "https://example.com/playlist.jpg",
+                "type": "playlist",
+                "year": 2024
+            }
+        }
+
+class ArtistAppearances(BaseModel):
+    """Collections and playlists where artist appears."""
+    collections: List[AppearsInCollection] = []
+    playlists: List[AppearsInPlaylist] = []
+
+class ArtistAppearancesResponse(BaseModel):
+    """Standard API response for artist appearances."""
+    data: ArtistAppearances

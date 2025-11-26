@@ -1,139 +1,242 @@
+from datetime import datetime, timezone
+from typing import Optional
 from bson import ObjectId
 from db.database import get_db
-from db.models import ArtistAbout
 from resources.logger import logger
+
 
 async def create_artist_about(artist_id: str, artist_name: str):
     """
-    Create a new artist about page with artistId and artist name.
-    All other fields are initialized as empty/null.
+    Create a new artist about page.
     
     Args:
-        artist_id: The user ID of the artist
-        artist_name: The stage name of the artist
-        
+        artist_id: User ID of the artist
+        artist_name: Stage name of the artist
+    
     Returns:
-        The created artist about document or None if it already exists
+        Created document or None if already exists
     """
     db = get_db()
+    
     try:
-        # Check if artist already has an about page
+        # Check if artist about page already exists
         existing = db.artist_about.find_one({"artist_id": artist_id})
         if existing:
-            logger.warning(f"Artist about page already exists for artist_id: {artist_id}")
+            logger.warning(f"Artist about page already exists for artist_id={artist_id}")
             return None
         
-        # Create new artist about document
-        about_doc = ArtistAbout(
-            artist_id=artist_id,
-            artist=artist_name,
-            bio=None,
-            social_media=None,
-            carousel_images=[],
-            artist_pick=None
-        )
+        # Create the document
+        about_doc = {
+            "artist_id": artist_id,
+            "artist": artist_name,
+            "bio": None,
+            "social_media": None,
+            "carousel_images": [],
+            "artist_pick": None
+        }
         
-        result = db.artist_about.insert_one(about_doc.model_dump(by_alias=True))
+        result = db.artist_about.insert_one(about_doc)
+        logger.info(f"Successfully created artist about page for artist_id={artist_id}")
         
-        if result.inserted_id:
-            created_doc = db.artist_about.find_one({"_id": result.inserted_id})
-            logger.info(f"Created artist about page for artist_id: {artist_id}")
-            return created_doc
-        
-        return None
+        # Return the created document
+        return db.artist_about.find_one({"_id": result.inserted_id})
         
     except Exception as e:
-        logger.error(f"Error generating artist about: {e}")
-        return None
-
-
-async def update_artist_about(artist_id: str, update_data: dict):
-    """
-    Update an artist's about page. Cannot update artistId or artist fields.
-    
-    Args:
-        artist_id: The user ID of the artist
-        update_data: Dictionary with fields to update (bio, social_media, carousel_images, artist_pick)
-        
-    Returns:
-        The updated artist about document or None if not found
-    """
-    db = get_db()
-    try:
-        # Remove any attempts to update protected fields
-        update_data.pop("artistId", None)
-        update_data.pop("artist_id", None)
-        update_data.pop("artist", None)
-        
-        # Convert field names to snake_case for database first
-        db_update_data = {}
-        if "bio" in update_data:
-            db_update_data["bio"] = update_data["bio"]
-        if "socialMedia" in update_data:
-            db_update_data["social_media"] = update_data["socialMedia"]
-        if "carousel_images" in update_data:
-            db_update_data["carousel_images"] = update_data["carousel_images"]
-        if "carouselImages" in update_data:
-            db_update_data["carousel_images"] = update_data["carouselImages"]
-        if "artistPick" in update_data:
-            db_update_data["artist_pick"] = update_data["artistPick"]
-        if "artist_pick" in update_data:
-            db_update_data["artist_pick"] = update_data["artist_pick"]
-        
-        # Now validate carousel images after conversion
-        if "carousel_images" in db_update_data and db_update_data["carousel_images"] is not None:
-            # Validate carousel images limit (max 5)
-            if len(db_update_data["carousel_images"]) > 5:
-                logger.error("Cannot have more than 5 carousel images")
-                return None
-            
-            # Ensure only one primary image
-            primary_count = sum(1 for img in db_update_data["carousel_images"] if img.get("isPrimary", False))
-            if primary_count > 1:
-                logger.error("Cannot have more than one primary image")
-                return None
-        
-        # Update the document
-        result = db.artist_about.find_one_and_update(
-            {"artist_id": artist_id},
-            {"$set": db_update_data},
-            return_document=True
-        )
-        
-        if result:
-            logger.info(f"Updated artist about page for artist_id: {artist_id}")
-            return result
-        
-        logger.warning(f"Artist about page not found for artist_id: {artist_id}")
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error updating artist about: {e}")
+        logger.error(f"Failed to create artist about page: {str(e)}")
         return None
 
 
 async def get_artist_about_by_id(artist_id: str):
     """
-    Get an artist's about page by their artist ID.
+    Get an artist about page by artist ID.
     
     Args:
-        artist_id: The user ID of the artist
-        
+        artist_id: User ID of the artist
+    
     Returns:
-        The artist about document or None if not found
+        Artist about document or None if not found
     """
     db = get_db()
+    
     try:
-        about = db.artist_about.find_one({"artist_id": artist_id})
+        about_doc = db.artist_about.find_one({"artist_id": artist_id})
         
-        if about:
-            logger.info(f"Retrieved artist about page for artist_id: {artist_id}")
-            return about
+        if about_doc:
+            logger.info(f"Successfully retrieved artist about page for artist_id={artist_id}")
+        else:
+            logger.warning(f"Artist about page not found for artist_id={artist_id}")
         
-        logger.warning(f"Artist about page not found for artist_id: {artist_id}")
-        return None
+        return about_doc
         
     except Exception as e:
-        logger.error(f"Error retrieving artist about: {e}")
+        logger.error(f"Failed to get artist about page: {str(e)}")
         return None
 
+
+async def update_artist_about(artist_id: str, update_data: dict):
+    """
+    Update an artist about page.
+    
+    Args:
+        artist_id: User ID of the artist
+        update_data: Dictionary containing fields to update
+    
+    Returns:
+        Updated document or None if not found
+    """
+    db = get_db()
+    
+    try:
+        # Convert camelCase keys to snake_case for database
+        db_update_data = {}
+        
+        if "bio" in update_data:
+            db_update_data["bio"] = update_data["bio"]
+        
+        if "socialMedia" in update_data:
+            db_update_data["social_media"] = update_data["socialMedia"]
+        
+        if "carouselImages" in update_data:
+            carousel_images = update_data["carouselImages"]
+            
+            # Validate max 5 images
+            if len(carousel_images) > 5:
+                logger.warning(f"Carousel images exceed maximum of 5 for artist_id={artist_id}")
+                return None
+            
+            # Validate only one primary image
+            primary_count = sum(1 for img in carousel_images if img.get("isPrimary", False))
+            if primary_count > 1:
+                logger.warning(f"Multiple primary images not allowed for artist_id={artist_id}")
+                return None
+            
+            db_update_data["carousel_images"] = carousel_images
+        
+        if "artistPick" in update_data:
+            db_update_data["artist_pick"] = update_data["artistPick"]
+        
+        if not db_update_data:
+            logger.warning(f"No valid fields to update for artist_id={artist_id}")
+            return None
+        
+        result = db.artist_about.update_one(
+            {"artist_id": artist_id},
+            {"$set": db_update_data}
+        )
+        
+        if result.matched_count == 0:
+            logger.warning(f"Artist about page not found for artist_id={artist_id}")
+            return None
+        
+        logger.info(f"Successfully updated artist about page for artist_id={artist_id}")
+        
+        # Return the updated document
+        return db.artist_about.find_one({"artist_id": artist_id})
+        
+    except Exception as e:
+        logger.error(f"Failed to update artist about page: {str(e)}")
+        return None
+
+
+async def get_artist_appearances(artist_id: str, stage_name: str, limit: int = 6):
+    """
+    Get collections and playlists where an artist appears (as main artist or in credits).
+    
+    Args:
+        artist_id: User ID of the artist
+        stage_name: Stage name of the artist (used for credits matching)
+        limit: Number of items to return (default 6, will be split 3-3 if both types exist)
+    
+    Returns:
+        Dictionary with 'collections' and 'playlists' lists
+    """
+    db = get_db()
+    
+    try:
+        now = datetime.now(timezone.utc)
+        
+        # Find collections where artist is main artist OR in credits
+        # Only published collections (releaseDate <= now)
+        collections_query = {
+            "$or": [
+                {"artistId": artist_id},
+                {"credits": stage_name}
+            ],
+            "releaseDate": {"$lte": now}
+        }
+        
+        # Get collections sorted by release date descending, then alphabetically
+        collections = list(
+            db.collections.find(collections_query)
+            .sort([("releaseDate", -1), ("name", 1)])
+            .limit(limit)
+        )
+        
+        # Find playlists containing songs by this artist
+        # First get all songs by this artist (by stage_name since that's in credits)
+        songs_query = {"artist": stage_name}
+        artist_songs = list(db.songs.find(songs_query, {"_id": 1}))
+        song_ids = [song["_id"] for song in artist_songs]
+        
+        playlists = []
+        if song_ids:
+            # Find playlists that contain at least one of these songs
+            playlist_ids = list(
+                db.playlist_songs.aggregate([
+                    {"$match": {"song_id": {"$in": song_ids}}},
+                    {"$group": {"_id": "$playlist_id"}},
+                    {"$limit": limit * 2}  # Get more to filter after
+                ])
+            )
+            
+            playlist_oids = [p["_id"] for p in playlist_ids]
+            
+            if playlist_oids:
+                # Get only published playlists, exclude mixes and liked songs
+                playlists_query = {
+                    "_id": {"$in": playlist_oids},
+                    "is_published": True,
+                    "isMix": {"$ne": True},
+                    "isLikedSongs": {"$ne": True}
+                }
+                
+                playlists = list(db.playlists.find(playlists_query))
+                
+                # Calculate popularity score for each playlist
+                # Based on: number of songs, number of followers (for now, simplified)
+                for playlist in playlists:
+                    # Count songs in this playlist
+                    song_count = db.playlist_songs.count_documents({
+                        "playlist_id": playlist["_id"]
+                    })
+                    
+                    # For now, use song count as popularity (can be extended later)
+                    # Could add: likes, shares, views, etc.
+                    playlist["_popularity"] = song_count
+                
+                # Sort by popularity descending, then alphabetically
+                playlists.sort(key=lambda p: (-p.get("_popularity", 0), p.get("name", "")))
+                
+                # Remove temporary popularity field
+                for playlist in playlists:
+                    playlist.pop("_popularity", None)
+                
+                # Limit results
+                playlists = playlists[:limit]
+        
+        logger.info(
+            f"Found {len(collections)} collections and {len(playlists)} playlists "
+            f"for artist {stage_name} (id={artist_id})"
+        )
+        
+        return {
+            "collections": collections,
+            "playlists": playlists
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get artist appearances: {str(e)}")
+        return {
+            "collections": [],
+            "playlists": []
+        }
