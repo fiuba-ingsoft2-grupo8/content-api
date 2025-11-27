@@ -34,7 +34,30 @@ async def create_playlist(name, description, is_published, userId, coverUrl=None
         logger.error(f"Failed to create playlist: {str(e)}")
         return (None, e)
     
-    
+async def create_mix_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False, isMix=True, songs=None):
+    db = get_db()
+    try:
+        publish_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        playlist_doc = {
+            "name": name,
+            "description": description,
+            "is_published": is_published,
+            "published_at": publish_time,
+            "userId": userId,
+            "songs": songs or [],
+            "coverUrl": coverUrl or "default_cover.png",
+            "isLikedSongs": isLikedSongs,
+            "isMix": isMix,
+        }
+        result = db.playlists.insert_one(playlist_doc)
+        logger.info(f"Successfully created mix playlist with id={result.inserted_id}")
+        playlist = db.playlists.find_one({"_id": result.inserted_id})
+        return (playlist, None)
+    except Exception as e:
+        logger.error(f"Failed to create mix playlist: {str(e)}")
+        return (None, e)
+
+
 async def get_playlists(published: bool, userId: str = None, state: str = "", published_from=None, published_to=None):
     """
     Filtros:
@@ -292,21 +315,30 @@ async def get_random_playlists(limit: int = 5):
     return random.sample(playlists, min(limit, len(playlists)))
 
 
-async def get_or_create_mix_playlist(user_id: str, name: str):
+async def get_or_create_mix_playlist(user_id: str, name: str, songs: list):
     db = get_db()
 
     playlist = db.playlists.find_one({"userId": user_id, "name": name})
     if playlist:
         return playlist
     
-    playlist_doc, err = await create_playlist(
+    if name == "Daily Mix":
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/daily-mix.png"
+    elif name == "Mood Mix":
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/discover-mix/discover-mix.png"
+    elif name == "Because You Listened To":
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/because-you-listened-to.png"
+    else:
+        raise ValueError(f"Unknown mix type: {name}")
+    
+    playlist_doc, err = await create_mix_playlist(
         name=name,
         description="",
         is_published=True,
         userId=user_id,
         coverUrl="https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/liked-songs.png",
         isLikedSongs=False,
-        isMix=True
+        isMix=True,
+        songs=songs
     )
     return playlist_doc
-
