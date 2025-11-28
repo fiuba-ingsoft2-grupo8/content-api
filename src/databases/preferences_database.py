@@ -58,3 +58,18 @@ async def get_user_artists(userId: str):
         logger.error(f"Failed to get artist preferences for user {userId}: {e}")
         return None
 
+async def get_random_genre():
+    db = get_db()
+    try:
+        pipeline = [
+            {"$unwind": "$genre_preferences"},
+            {"$sample": {"size": 1}},
+            {"$project": {"_id": 0, "genre": "$genre_preferences"}}
+        ]
+        result = list(db.user_preferences.aggregate(pipeline))
+        if result:
+            return result[0]["genre"]
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get random genre: {e}")
+        return None
