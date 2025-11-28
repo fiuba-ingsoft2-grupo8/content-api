@@ -653,7 +653,7 @@ async def _fetch_users_by_name(name: str, base_url: str = USER_API_BASE, token: 
         logger.info(f"Calling: {USER_API_BASE.rstrip('/')}/users/search?q={name} (token: {bool(token)})")
         resp = await client.get(url, params={"q": name}, headers=headers)
         resp.raise_for_status()
-        data = resp.json()
+        data = resp.json()  
         # La respuesta esperada es {"users": [...], "count": N}
         items = data.get("users") or data.get("result") or []
         return [{"id": u.get("id")} for u in items if u.get("id")]
@@ -887,8 +887,12 @@ async def set_admin_block(
             update = {"$unset": {"adminBlock": ""}, "$set": {"bloqueadoAdmin": False}}
 
         result = db.collections.update_one({"_id": ObjectId(collection_id)}, update)
-        if result.modified_count <= 0:
-            return (False, "Failed to update collection")
+
+        if result.matched_count == 0:
+            return (False, "Collection not found")
+
+        # si no modificó, igual está en el estado pedido => OK
+
 
         updated_collection = await get_collection(collection_id, includeUnpublished=True)
         new_state = calculate_effective_state(updated_collection, user_country=None) if updated_collection else previous_state

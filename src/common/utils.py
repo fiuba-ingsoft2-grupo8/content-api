@@ -1,3 +1,4 @@
+from datetime import timezone
 from resources.logger import logger
 import schemas
 from databases.collection_states import calculate_effective_state
@@ -86,45 +87,106 @@ def serialize_song(song: dict, is_liked: bool | None = None):
     return song
 
 
-def serialize_collection(collection, songs, user_country=None):
-    # calculamos el estado efectivo según las reglas de prioridad
-    effective_status = calculate_effective_state(collection, user_country)
+def _iso(dt):
+    if not dt:
+        return None
+    if getattr(dt, "tzinfo", None) is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def serialize_collection(collection_or_col, *args, user_country=None) -> schemas.Collection:
+    """
+    Soporta:
+      - serialize_collection(col, songs)
+      - serialize_collection(col, songs, user_country)
+      - serialize_collection(collection, col, songs)              (legacy)
+      - serialize_collection(collection, col, songs, user_country) (legacy)
+    """
+
+    # --- Resolver parámetros ---
+    if len(args) == 1:
+        # (col, songs)
+        col = collection_or_col
+        songs = args[0]
+    elif len(args) == 2:
+        # (collection, col, songs)  OR  (col, songs, user_country)?? -> acá asumimos legacy
+        col = args[0]
+        songs = args[1]
+    elif len(args) >= 3:
+        col = args[0]
+        songs = args[1]
+        user_country = args[2]
+    else:
+        raise TypeError(
+            "serialize_collection expected (col, songs[, user_country]) or (collection, col, songs[, user_country])"
+        )
+
+    # --- Admin block ---
+    admin_block = col.get("adminBlock") or {}
+    admin_block_enabled = isinstance(admin_block, dict) and admin_block.get("enabled") is True
+    legacy_blocked = bool(col.get("bloqueadoAdmin", False))
+
+    by_val = admin_block.get("by")
+
+    admin_block_out = None
+    if admin_block_enabled:
+        admin_block_out = {
+            "enabled": True,
+            "scope": admin_block.get("scope") or "global",
+            "regions": admin_block.get("regions") or [],
+            "reasonCode": admin_block.get("reasonCode"),
+            "by": None if by_val is None else str(by_val),  # ✅ acá
+            "at": _iso(admin_block.get("at")),
+        }
+
+    admin_blocked = legacy_blocked or admin_block_enabled
+
+    # --- Effective status (backend) ---
+    effective_status = calculate_effective_state(col, user_country)
+
+    # --- Serialize songs ---
+    songs_out = [
+        schemas.CollectionSong(
+            id=str(song.get("_id", "")),
+            title=str(song.get("title") or "(sin título)"),
+            artist=str(song.get("artist") or ""),
+            duration=str(int(song.get("duration"))) if str(song.get("duration", "")).isdigit() else str(song.get("duration") or "0"),
+            order=int(song.get("order") or 0),
+            earlyReleaseDate=song.get("early_release_date"),
+        )
+        for song in (songs or [])
+    ]
 
     return schemas.Collection(
-        id=str(collection.get("_id", "")),
-        name=_str_or_fallback(collection.get("name"), "(sin nombre)"),
-        artistId=_str_or_fallback(collection.get("artistId"), ""),
-        artistName=_str_or_fallback(collection.get("artistName"), ""),
-        type=_str_or_fallback(collection.get("type"), ""),
-        genre=_str_or_fallback(collection.get("genre"), "Unknown"),
-        coverUrl=collection.get("coverUrl"),
-        createdAt=collection.get("createdAt"),
-
-        credits=collection.get("credits", []),
-        releaseDate=collection.get("releaseDate"),
-
-        noDisponibleDesde=collection.get("noDisponibleDesde"),
-        noDisponibleHasta=collection.get("noDisponibleHasta"),
-
+        id=str(col.get("_id", "")),
+        name=str(col.get("name") or "(sin nombre)"),
+        artistId=str(col.get("artistId") or ""),
+        artistName=str(col.get("artistName") or ""),
+        type=str(col.get("type") or ""),
+        genre=str(col.get("genre") or "Unknown"),
+        coverUrl=col.get("coverUrl"),
+        createdAt=col.get("createdAt"),
+        credits=col.get("credits", []),
+        releaseDate=col.get("releaseDate"),
+        noDisponibleDesde=col.get("noDisponibleDesde"),
+        noDisponibleHasta=col.get("noDisponibleHasta"),
         effectiveStatus=effective_status,
 
-        availableCountries=collection.get("availableCountries", []),
+        # ✅ nuevos campos
+        adminBlock=admin_block_out,
+        adminBlocked=admin_blocked,
 
-        totalPlays=collection.get("totalPlays"),
-        totalLikes=collection.get("totalLikes"),
-        totalPlaylistSaves=collection.get("totalPlaylistSaves"),
-        totalShares=collection.get("totalShares"),
-        popularityScore=collection.get("popularityScore"),
+        # opcional legacy (si tu schema lo tiene; si no, borrá esta línea)
+        bloqueadoAdmin=legacy_blocked,
 
-        songs=[
-            schemas.CollectionSong(
-                id=str(song.get("_id", "")),
-                title=_str_or_fallback(song.get("title"), "(sin título)"),
-                artist=_str_or_fallback(song.get("artist"), ""),
-                duration=_str_num(song.get("duration"), "0"),  # string
-                order=_int_or_fallback(song.get("order"), 0),
-                earlyReleaseDate=song.get("early_release_date"),
-            )
-            for song in (songs or [])
-        ],
+        availableCountries=col.get("availableCountries", []),
+
+        totalPlays=col.get("totalPlays"),
+        totalLikes=col.get("totalLikes"),
+        totalPlaylistSaves=col.get("totalPlaylistSaves"),
+        totalShares=col.get("totalShares"),
+        popularityScore=col.get("popularityScore"),
+
+        songs=songs_out,
     )

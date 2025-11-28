@@ -599,7 +599,7 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         serialized_collections = []
         for collection in accessible_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
-            serialized_collections.append(serialize_collection(collection, songs))
+            serialized_collections.append(serialize_collection(collection, collection, songs))
         return {"data": serialized_collections}
 
     except Exception as e:
@@ -715,7 +715,7 @@ async def get_collections(
         serialized_collections = []
         for collection in accessible_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
-            serialized_collections.append(serialize_collection(collection, songs))
+            serialized_collections.append(serialize_collection(collection, collection, songs))
         return {"data": serialized_collections}
 
     except Exception as e:

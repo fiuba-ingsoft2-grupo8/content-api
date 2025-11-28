@@ -289,13 +289,17 @@ class CollectionSong(SongBase):
     class Config:
         from_attributes = True
 
+
+
+class AdminBlock(BaseModel):
+    enabled: bool
+    scope: Literal["global", "regions"]
+    regions: List[str] = []
+    reasonCode: Optional[str] = None
+    at: Optional[datetime] = None
+    by: Optional[str] = None
+
 class CollectionBase(BaseModel):
-    """
-    Base Pydantic model for playlist data with common fields.
-    
-    This base class contains the core attributes that all collecttion-related
-    schemas share, promoting code reuse and consistency.
-    """
     id: str
     name: str
     artistId: str
@@ -306,18 +310,19 @@ class CollectionBase(BaseModel):
     createdAt: datetime
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
-    availableCountries: Optional[List[str]] = None  # List of country codes where content is available
+    availableCountries: Optional[List[str]] = None
+
+    # ✅ faltaban (vos ya los serializás)
+    noDisponibleDesde: Optional[datetime] = None
+    noDisponibleHasta: Optional[datetime] = None
+    effectiveStatus: Optional[str] = None  # o Literal[...] si querés
+
+    adminBlocked: Optional[bool] = False
+    adminBlock: Optional[AdminBlock] = None
+    bloqueadoAdmin: Optional[bool] = None  # legacy si lo querés exponer
 
 class Collection(CollectionBase):
-    """
-    Complete playlist representation with all metadata and songs.
-    
-    Extends PlaylistBase with database ID, publication status, timestamps,
-    and the list of songs in the playlist. Used for API responses when
-    returning complete playlist data.
-    """
     songs: List[CollectionSong] = []
-    # Optional popularity metrics (only present in popular collections endpoint)
     totalPlays: Optional[int] = None
     totalLikes: Optional[int] = None
     totalPlaylistSaves: Optional[int] = None
@@ -696,9 +701,10 @@ class setArtistsRequest(BaseModel):
     Contains up to 3 artist identifiers.
     """
     data: List[str]
-    
+
 class AdminBlockRequest(BaseModel):
     blocked: bool
     scope: Optional[Literal["global", "regions"]] = None
     regions: Optional[List[str]] = None
     reasonCode: Optional[str] = None
+
