@@ -222,3 +222,45 @@ async def get_shortcuts(user: dict = Depends(verify_token)):
             content={"error": "Failed to fetch discover-more section"}
         )
 
+@router.get("/similar-artists")
+async def get_similar_artists(
+    user: dict = Depends(verify_token),
+    artist_id: str = None
+):
+    try:
+        if not artist_id:
+            return {"artists": []}
+
+        # Obtener colecciones del artista (solo publicadas si includeUnpublished=False)
+        artist_collections = await collections_db.get_collections(
+            artistId=artist_id,        
+            includeUnpublished=False   
+        )
+
+        genres = set()
+        for collection in artist_collections:
+            genre = collection.get("genre")
+            if genre:
+                genres.add(genre)
+
+        similar_artists = set()
+        for genre in genres:
+            logger.info(f"Artist {artist_id} has collection in genre: {genre}")
+            collections = await collections_db.get_collections(genre=genre, includeUnpublished=False)
+            # Ya vienen ordenadas por fecha de publicación descendente
+            for col in collections:
+                if col.get("artistId") and col.get("artistId") != artist_id:
+                    similar_artists.add(col.get("artistId"))
+
+
+        return {
+            "artists": similar_artists,
+            "count": len(similar_artists)
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get similar artists: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to fetch similar artists"}
+        )
