@@ -323,11 +323,11 @@ async def get_or_create_mix_playlist(user_id: str, name: str, songs: list):
         return playlist
     
     if name == "Daily Mix":
-        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/daily-mix.png"
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/recommendations/daily-mix.png"
     elif name == "Mood Mix":
-        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/discover-mix/discover-mix.png"
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/recommendations/mood-mix.png"
     elif name == "Because You Listened To":
-        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/because-you-listened-to.png"
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/recommendations/because-you-listened-to.png"
     else:
         raise ValueError(f"Unknown mix type: {name}")
     
@@ -336,7 +336,7 @@ async def get_or_create_mix_playlist(user_id: str, name: str, songs: list):
         description="",
         is_published=True,
         userId=user_id,
-        coverUrl="https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/liked-songs/liked-songs.png",
+        coverUrl=cover_url,
         isLikedSongs=False,
         isMix=True,
         songs=songs

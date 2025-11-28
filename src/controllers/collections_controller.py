@@ -491,6 +491,7 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         }
     }
 )
+
 async def get_album_recommendations(n: int = 10, user: dict = Depends(verify_token)):
     user_id = user["user_id"]
 

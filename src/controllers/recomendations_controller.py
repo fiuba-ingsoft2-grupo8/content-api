@@ -20,7 +20,7 @@ async def get_daily_mix(user: dict = Depends(verify_token)):
     try:
         user_id = user["user_id"]
         user_genres = await preferences_db.get_user_genres(user_id)
-        songs = await songs_db.get_songs_by_genre(user_genres or "pop", limit=10)
+        songs = await songs_db.get_songs_by_genre(user_genres[0] or "pop", limit=10)
         playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Daily Mix", songs)
         return { "data": serialize_playlist(playlist, []) }
 
@@ -144,6 +144,7 @@ async def get_discover_more_from_artist(
 ):
     try:
         if not artist_id:
+            logger.info(f"No artist found")
             return {"collections": []}
 
         # Obtener colecciones del artista (solo publicadas si includeUnpublished=False)
@@ -153,22 +154,29 @@ async def get_discover_more_from_artist(
         )
 
         genres = set()
+        if len(artist_collections) == 0:
+            logger.info(f"No collections found by artist")
         for collection in artist_collections:
-            genre = collection.get("genre")
+            genre = collection["genre"]
             if genre:
                 genres.add(genre)
         
         genre_collections = []
         for genre in genres:
             logger.info(f"Artist {artist_id} has collection in genre: {genre}")
-            genre_collections_to_add = await collections_db.get_public_collections_by_genre(genre, limit=5)
+            genre_collections_to_add = await collections_db.get_collections(genre=genre)
+            logger.info("0\n")
+            for collection in genre_collections_to_add:
+                logger.info(f"{collection}")
             genre_collections.extend(genre_collections_to_add)
 
         serialized_collections = []
         for collection in genre_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
+            logger.info("1\n")
             serialized_collections.append(serialize_collection(collection, songs))
         
+        logger.info(f"serialized collections: {serialized_collections}")
         return {"collections": serialized_collections}
 
     except Exception as e:
