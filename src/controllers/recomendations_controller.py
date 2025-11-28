@@ -20,7 +20,7 @@ async def get_daily_mix(user: dict = Depends(verify_token)):
     try:
         user_id = user["user_id"]
         user_genres = await preferences_db.get_user_genres(user_id)
-        songs = await songs_db.get_songs_by_genre(user_genres[0] or "pop", limit=10)
+        songs = await songs_db.get_songs_by_genre(user_genres or "pop", limit=10)
         playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Daily Mix", songs)
         return { "data": serialize_playlist(playlist, []) }
 
