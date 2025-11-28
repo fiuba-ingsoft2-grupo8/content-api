@@ -290,6 +290,7 @@ async def update_collection_cover(collection_id: str, cover_url: str):
     )
     return result.modified_count > 0
 
+
 async def update_collection(collection_id: str, update_data: dict, user_id: str | None = None):
     """
     Updates collection fields based on the provided update_data dictionary.
@@ -1005,6 +1006,7 @@ async def auto_activate_scheduled_collections():
         errors.append(str(e))
         return (activated_count, errors)
 
+
 async def get_random_collections(limit: int = 5):
     """
     Returns `limit` random published collections from ANY artist.
@@ -1031,4 +1033,69 @@ async def get_random_collections(limit: int = 5):
 
     except Exception as e:
         logger.error(f"Failed to fetch random collections: {str(e)}")
+        return []
+
+
+async def get_collection_from_song(song_id: str):
+    """
+    Given a song ID, returns the collection (album/EP/single) it belongs to, if any.
+    Only returns published collections.
+    """
+    db = get_db()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Find the collection_song entry
+        collection_song = db.collection_songs.find_one({
+            "song_id": ObjectId(song_id)
+        })
+
+        if not collection_song:
+            return None
+
+        collection_id = collection_song["collection_id"]
+
+        # Fetch the collection and ensure it's published
+        collection = db.collections.find_one({
+            "_id": collection_id,
+            "releaseDate": {"$lte": now}
+        })
+
+        return collection
+
+    except Exception as e:
+        logger.error(f"Failed to get collection from song {song_id}: {str(e)}")
+        return None
+
+
+async def get_new_releases_from_artist(artist_id: str, limit: int = 10):
+    """
+    Get collections released by the artist in the last 7 days.
+    """
+    db = get_db()
+    try:
+        now = datetime.now(timezone.utc)
+        one_week_ago = now - timedelta(days=7)
+
+        collections = list(
+            db.collections.find({
+                "artistId": artist_id,
+                "releaseDate": {
+                    "$lte": now,
+                    "$gte": one_week_ago
+                }
+            })
+            .sort("releaseDate", DESCENDING)
+            .limit(limit)
+        )
+
+        logger.info(
+            f"Retrieved {len(collections)} releases from artist {artist_id} in the last week"
+        )
+        return collections
+
+    except Exception as e:
+        logger.error(
+            f"Failed to get weekly releases from artist {artist_id}: {str(e)}"
+        )
         return []

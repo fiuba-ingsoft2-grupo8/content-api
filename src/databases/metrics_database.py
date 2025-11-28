@@ -662,3 +662,45 @@ async def get_artist_top_playlists(
         logger.error(f"Failed to get artist top playlists: {str(e)}")
         return []
 
+# ============= USER METRICS =============
+
+async def get_user_top_n_plays(user_id: str, n: int = 10):
+    """
+    Get top N most played songs by a user.
+    
+    Args:
+        user_id: User's ID
+        n: Number of top songs to return (default 10)
+    
+    Returns:
+        List of top songs with play counts
+    """
+    db = get_db()
+    try:
+        pipeline = [
+            {"$match": {"user_id": user_id}},
+            {"$group": {
+                "_id": "$song_id",
+                "playCount": {"$sum": 1}
+            }},
+            {"$sort": {"playCount": -1}},
+            {"$limit": n}
+        ]
+        
+        top_plays = list(db.plays.aggregate(pipeline))
+        
+        # Get song details
+        top_songs = []
+        for play in top_plays:
+            song = db.songs.find_one({"_id": play["_id"]})
+            if song:
+                top_songs.append({
+                    "songId": str(song["_id"]),
+                    "playCount": play["playCount"]
+                })
+        
+        return top_songs
+        
+    except Exception as e:
+        logger.error(f"Failed to get user top plays: {str(e)}")
+        return []
