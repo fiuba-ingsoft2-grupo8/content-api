@@ -6,7 +6,7 @@ import httpx
 import os
 
 
-async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = None):
+async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = None, requesting_user_id: str = None):
     """
     Get recent activity for a specific user.
     Returns combined list of likes, plays, and published playlists.
@@ -15,6 +15,7 @@ async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = 
         user_id: User ID to fetch activities for
         limit: Maximum number of activities to return
         activity_type: Optional filter by activity type ('like', 'play', 'playlist_published', 'share')
+        requesting_user_id: User ID of the person requesting the activity (for privacy filtering)
     """
     db = get_db()
     activities = []
@@ -71,11 +72,18 @@ async def get_user_activity(user_id: str, limit: int = 50, activity_type: str = 
                 }
                 activities.append(activity)
         
-        # Get shares
+        # Get shares with privacy filtering
         if activity_type is None or activity_type == "share":
-            shares = list(db.shares.find(
-                {"user_id": user_id}
-            ).sort("created_at", -1).limit(limit))
+            # If viewing own activity, show all shares
+            # If viewing someone else's activity, only show shares made to the requesting user
+            share_query = {"user_id": user_id}
+            
+            if requesting_user_id and requesting_user_id != user_id:
+                # Only show shares where the requesting user is the recipient
+                share_query["recipient_id"] = requesting_user_id
+                logger.info(f"Filtering shares: user {requesting_user_id} viewing {user_id}'s activity - only showing shares to {requesting_user_id}")
+            
+            shares = list(db.shares.find(share_query).sort("created_at", -1).limit(limit))
             
             for share in shares:
                 activity = {
