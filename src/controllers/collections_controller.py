@@ -3,6 +3,7 @@ import databases.collections_database as collections_db
 import databases.preferences_database as preferences_db
 import databases.audit_database as audit_db
 import schemas
+from schemas import AdminBlockRequest
 from fastapi import Depends
 from auth import verify_token, is_authorized
 from fastapi import APIRouter
@@ -13,6 +14,7 @@ from common.countries import validate_country_codes, calculate_available_countri
 from fastapi import UploadFile, File, Form
 from datetime import datetime, timezone
 from databases.collection_states import calculate_effective_state, is_collection_playable
+from enum import Enum as PyEnum
 
 router = APIRouter()
 
@@ -602,7 +604,7 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
         serialized_collections = []
         for collection in accessible_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
-            serialized_collections.append(serialize_collection(collection, songs))
+            serialized_collections.append(serialize_collection(collection, collection, songs))
         return {"data": serialized_collections}
 
     except Exception as e:
@@ -718,7 +720,7 @@ async def get_collections(
         serialized_collections = []
         for collection in accessible_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
-            serialized_collections.append(serialize_collection(collection, songs))
+            serialized_collections.append(serialize_collection(collection, collection, songs))
         return {"data": serialized_collections}
 
     except Exception as e:
@@ -1043,106 +1045,139 @@ async def configure_publication_window(
             ),
         )
 
+def _normalize_admin_scope(scope) -> str:
+    """
+    Devuelve exactamente 'global' o 'regions', aunque venga como:
+    - Enum (scope.value)
+    - 'AdminBlockScope.GLOBAL'
+    - 'GLOBAL'
+    - 'regiones'
+    """
+    if scope is None:
+        return "global"
+
+    if isinstance(scope, PyEnum):
+        scope = scope.value
+
+    if not isinstance(scope, str):
+        return "global"
+
+    s = scope.strip()
+
+    if s.startswith("AdminBlockScope."):
+        s = s.split(".", 1)[1]
+
+    s = s.lower()
+    if s == "global":
+        return "global"
+    if s in ("regions", "region", "regiones"):
+        return "regions"
+
+    return "global"
+
+
+def _normalize_admin_scope(scope) -> str:
+    if scope is None:
+        return "global"
+    if isinstance(scope, PyEnum):
+        scope = scope.value
+    if not isinstance(scope, str):
+        return "global"
+
+    s = scope.strip()
+    if s.startswith("AdminBlockScope."):
+        s = s.split(".", 1)[1]
+
+    s = s.lower()
+    if s == "global":
+        return "global"
+    if s in ("regions", "region", "regiones"):
+        return "regions"
+    return "global"
+
+
 @router.post("/{collection_id}/admin-block", status_code=200)
 async def set_admin_block(
     collection_id: str,
-    block_request: schemas.AdminBlockRequest,
+    req: schemas.AdminBlockRequest,
     user: dict = Depends(verify_token)
 ):
     """
     Bloquear o desbloquear una colección como administrador.
-    
-    Este endpoint permite a usuarios backoffice bloquear o desbloquear
-    una colección con alcance específico (global o por regiones) y motivo.
-    
-    **Parámetros en el body:**
-    - blocked: true para bloquear, false para desbloquear
-    - scope: 'global' o 'regions' (requerido al bloquear)
-    - regions: lista de códigos de región (requerido si scope es 'regions')
-    - reasonCode: código del motivo del bloqueo (requerido al bloquear)
-    
-    **Comportamiento:**
-    - Bloqueado: el ítem no aparece en Popular/Búsqueda/Explorar
-    - En Colecciones: visible pero con acciones deshabilitadas e indicador
-    - Desbloqueo: revierte el override y aplica disponibilidad vigente
-    
-    **Prioridad de estados:**
-    - Bloqueado-admin tiene la máxima prioridad
-    - Incluso si está Publicado, si está bloqueado-admin, no se puede reproducir
-    
-    **Auditoría:**
-    - Se registra usuario, timestamp, alcance y motivo en el historial
-    
-    **Autorización:**
-    - Solo usuarios backoffice pueden bloquear/desbloquear
-    
-    **Retorna:**
-    - 200: Estado de bloqueo actualizado exitosamente
-    - 400: Parámetros inválidos
-    - 403: No autorizado (no es backoffice)
-    - 404: Colección no encontrada
+
+    - Solo backoffice
+    - scope: global | regions
+    - regions obligatorio si scope=regions
+    - reasonCode obligatorio al bloquear
     """
-    logger.info(f"Setting admin block for collection {collection_id} to {block_request.blocked} by user {user['user_id']}")
-    
-    # Verify backoffice access
+    logger.info(f"Setting admin block for collection {collection_id} to {req.blocked} by user {user.get('user_id')}")
+
     if user.get("user_type") != "backoffice":
         return JSONResponse(
             status_code=403,
             content=create_error_response(
-                403,
-                "Forbidden",
-                "Only backoffice users can set admin blocks",
+                403, "Forbidden", "Only backoffice users can set admin blocks",
                 f"/collections/{collection_id}/admin-block",
             ),
         )
-    
+
+    scope_norm = _normalize_admin_scope(req.scope)
+
+    if req.blocked:
+        if req.scope is None or req.reasonCode is None:
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request", "scope and reasonCode are required when blocking",
+                    f"/collections/{collection_id}/admin-block",
+                ),
+            )
+        if scope_norm == "regions" and (not req.regions or len(req.regions) == 0):
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request", "regions is required when scope=regions",
+                    f"/collections/{collection_id}/admin-block",
+                ),
+            )
+
     try:
         success, error = await collections_db.set_admin_block(
             collection_id=collection_id,
-            blocked=block_request.blocked,
+            blocked=req.blocked,
+            scope=scope_norm,
+            regions=req.regions,
+            reason_code=req.reasonCode,
             user_id=user["user_id"],
-            scope=block_request.scope,
-            regions=block_request.regions,
-            reason_code=block_request.reasonCode
         )
-        
+
         if not success:
             if error == "Collection not found":
                 return JSONResponse(
                     status_code=404,
                     content=create_error_response(
-                        404,
-                        "Not Found",
-                        error,
+                        404, "Not Found", error,
                         f"/collections/{collection_id}/admin-block",
                     ),
                 )
-            else:
-                return JSONResponse(
-                    status_code=400,
-                    content=create_error_response(
-                        400,
-                        "Bad Request",
-                        error,
-                        f"/collections/{collection_id}/admin-block",
-                    ),
-                )
-        
-        # Get updated collection
+            return JSONResponse(
+                status_code=400,
+                content=create_error_response(
+                    400, "Bad Request", error or "Failed to update collection",
+                    f"/collections/{collection_id}/admin-block",
+                ),
+            )
+
         collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
         songs = await collections_db.get_songs_from_collection(collection_id)
-        
-        logger.info(f"Successfully {'blocked' if block_request.blocked else 'unblocked'} collection {collection_id}")
         return {"data": serialize_collection(collection, songs)}
-        
+
     except Exception as e:
         logger.error(f"Failed to set admin block for collection {collection_id}: {str(e)}")
         return JSONResponse(
             status_code=500,
             content=create_error_response(
-                500,
-                "Internal Server Error",
-                str(e),
+                500, "Internal Server Error", str(e),
                 f"/collections/{collection_id}/admin-block",
             ),
         )

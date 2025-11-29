@@ -15,60 +15,61 @@ def calculate_effective_state(
     now: datetime | None = None
 ) -> str:
     """
-    Calculate the effective state of a collection based on priority rules.
-    
-    Priority order:
-    1. Bloqueado-admin (highest priority)
-    2. No-disponible-región (if user's country is not in availableCountries)
-    3. Programado (if releaseDate > now)
-    4. Publicado (default, lowest priority)
-    
-    Args:
-        collection: Collection document from database
-        user_country: User's country code (for region-based availability)
-        now: Current datetime (defaults to now if not provided)
-        
-    Returns:
-        Effective state: 'bloqueado-admin', 'no-disponible-region', 'programado', or 'publicado'
+    Priority:
+    1) Bloqueado-admin (adminBlock con scope + legacy bloqueadoAdmin)
+    2) No-disponible-región (por availableCountries o ventana noDisponible)
+    3) Programado (releaseDate > now)
+    4) Publicado
     """
     if now is None:
         now = datetime.now(timezone.utc)
-    
-    # 1. Check Bloqueado-admin (highest priority)
-    if collection.get("bloqueadoAdmin", False):
+
+    # 1) Bloqueo admin (nuevo con alcance + legacy)
+    legacy_blocked = bool(collection.get("bloqueadoAdmin", False))
+    if legacy_blocked:
         return "bloqueado-admin"
-    
-    # 2. Check No-disponible-región
+
+    admin_block = collection.get("adminBlock")
+    if isinstance(admin_block, dict) and admin_block.get("enabled") is True:
+        scope = str(admin_block.get("scope") or "global").lower()
+
+        if scope == "global":
+            return "bloqueado-admin"
+
+        if scope == "regions":
+            regions = admin_block.get("regions") or []
+            # si user_country no viene, por seguridad lo tratamos como bloqueado
+            if not user_country or user_country in regions:
+                return "bloqueado-admin"
+
+    # 2) No-disponible-región por país
     available_countries = collection.get("availableCountries", [])
     if available_countries and user_country:
         if user_country not in available_countries:
             return "no-disponible-region"
-    
-    # Check No-disponible window (if configured)
+
+    # 2b) ventana no-disponible (global)
     no_disponible_desde = collection.get("noDisponibleDesde")
     no_disponible_hasta = collection.get("noDisponibleHasta")
-    
+
     if no_disponible_desde and no_disponible_hasta:
-        # Make timezone-aware if needed
         if no_disponible_desde.tzinfo is None:
             no_disponible_desde = no_disponible_desde.replace(tzinfo=timezone.utc)
         if no_disponible_hasta.tzinfo is None:
             no_disponible_hasta = no_disponible_hasta.replace(tzinfo=timezone.utc)
-        
+
         if no_disponible_desde <= now <= no_disponible_hasta:
             return "no-disponible-region"
-    
-    # 3. Check Programado (releaseDate > now)
+
+    # 3) Programado
     release_date = collection.get("releaseDate")
     if release_date:
-        # Make timezone-aware if needed
         if release_date.tzinfo is None:
             release_date = release_date.replace(tzinfo=timezone.utc)
-        
         if release_date > now:
             return "programado"
-    
-    # 4. Default: Publicado
+
+    # 4) Publicado
     return "publicado"
 
 
