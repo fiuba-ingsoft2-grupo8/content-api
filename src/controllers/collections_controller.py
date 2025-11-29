@@ -1,7 +1,6 @@
 import databases.storage_database as storage_db
 import databases.collections_database as collections_db
 import databases.preferences_database as preferences_db
-import databases.audit_database as audit_db
 import schemas
 from schemas import AdminBlockRequest
 from fastapi import Depends
@@ -492,7 +491,6 @@ async def update_collection(collection_id: str, update_request: schemas.UpdateCo
         }
     }
 )
-
 async def get_album_recommendations(n: int = 10, user: dict = Depends(verify_token)):
     user_id = user["user_id"]
 
@@ -591,14 +589,12 @@ async def get_popular_collections(artistId: str, limit: int = 50, type: str = No
     try:
         collections = await collections_db.get_popular_collections(artistId=artistId, limit=limit, type=type, includeUnpublished=includeUnpublished)
         
-        # Filter collections by geographical access and admin block
-        # CA 2: bloqueado-admin collections should NOT appear in Popular
-        is_backoffice = user.get("user_type") == "backoffice"
+        # Filter collections by geographical access
         accessible_collections = [
             collection for collection in collections 
-            if _can_access_collection(user, collection) and (is_backoffice or not collection.get("bloqueadoAdmin", False))
+            if _can_access_collection(user, collection)
         ]
-        logger.info(f"Filtered {len(collections)} popular collections to {len(accessible_collections)} based on geographical restrictions and admin blocks")
+        logger.info(f"Filtered {len(collections)} popular collections to {len(accessible_collections)} based on geographical restrictions")
         
         serialized_collections = []
         for collection in accessible_collections:
@@ -1047,45 +1043,19 @@ async def configure_publication_window(
 @router.post("/{collection_id}/admin-block", status_code=200)
 async def set_admin_block(
     collection_id: str,
-    block_request: schemas.AdminBlockRequest,
+    req: AdminBlockRequest,
     user: dict = Depends(verify_token)
 ):
     """
-    Bloquear o desbloquear una colección como administrador.
-    
-    Este endpoint permite a usuarios backoffice bloquear o desbloquear
-    una colección con alcance específico (global o por regiones) y motivo.
-    
-    **Parámetros en el body:**
-    - blocked: true para bloquear, false para desbloquear
-    - scope: 'global' o 'regions' (requerido al bloquear)
-    - regions: lista de códigos de región (requerido si scope es 'regions')
-    - reasonCode: código del motivo del bloqueo (requerido al bloquear)
-    
-    **Comportamiento:**
-    - Bloqueado: el ítem no aparece en Popular/Búsqueda/Explorar
-    - En Colecciones: visible pero con acciones deshabilitadas e indicador
-    - Desbloqueo: revierte el override y aplica disponibilidad vigente
-    
-    **Prioridad de estados:**
-    - Bloqueado-admin tiene la máxima prioridad
-    - Incluso si está Publicado, si está bloqueado-admin, no se puede reproducir
-    
-    **Auditoría:**
-    - Se registra usuario, timestamp, alcance y motivo en el historial
-    
-    **Autorización:**
-    - Solo usuarios backoffice pueden bloquear/desbloquear
-    
-    **Retorna:**
-    - 200: Estado de bloqueo actualizado exitosamente
-    - 400: Parámetros inválidos
-    - 403: No autorizado (no es backoffice)
-    - 404: Colección no encontrada
+    Bloquear o desbloquear una colección como administrador, con alcance + motivo.
+
+    CA1: en bloqueo requiere scope (global/regiones) y reasonCode (y regions si scope=regions)
+    CA3: desbloqueo revierte override y aplica disponibilidad vigente
+    CA4: auditoría usuario/timestamp/alcance/motivo
     """
-    logger.info(f"Setting admin block for collection {collection_id} to {block_request.blocked} by user {user['user_id']}")
-    
-    # Verify backoffice access
+    logger.info(f"Setting admin block for collection {collection_id} to {req.blocked} by user {user.get('user_id')}")
+
+    # Solo backoffice
     if user.get("user_type") != "backoffice":
         return JSONResponse(
             status_code=403,
@@ -1123,11 +1093,11 @@ async def set_admin_block(
     try:
         success, error = await collections_db.set_admin_block(
             collection_id=collection_id,
-            blocked=block_request.blocked,
+            blocked=req.blocked,
+            scope=req.scope,
+            regions=req.regions,
+            reason_code=req.reasonCode,
             user_id=user["user_id"],
-            scope=block_request.scope,
-            regions=block_request.regions,
-            reason_code=block_request.reasonCode
         )
 
         if not success:
@@ -1154,8 +1124,7 @@ async def set_admin_block(
         # devolver colección actualizada
         collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
         songs = await collections_db.get_songs_from_collection(collection_id)
-        
-        logger.info(f"Successfully {'blocked' if block_request.blocked else 'unblocked'} collection {collection_id}")
+
         return {"data": serialize_collection(collection, songs)}
 
     except Exception as e:
@@ -1170,139 +1139,6 @@ async def set_admin_block(
             ),
         )
 
-@router.get("/{collection_id}/audit", status_code=200)
-async def get_collection_audit_history(
-    collection_id: str,
-    limit: int = 10,
-    user: dict = Depends(verify_token)
-):
-    """
-    Obtener el historial de cambios de auditoría de una colección.
-    
-    Este endpoint retorna los últimos cambios registrados en la auditoría de una colección,
-    incluyendo cambios de estado, ediciones de campos, actualizaciones de ventana de publicación,
-    cambios en países disponibles, etc.
-    
-    **Parámetros de ruta:**
-    - collection_id: ID de la colección
-    
-    **Parámetros de consulta:**
-    - limit: Número máximo de cambios a retornar (por defecto: 10, máximo: 50)
-    
-    **Autorización:**
-    - Solo el artista dueño o usuarios backoffice pueden ver el historial de auditoría
-    
-    **Retorna:**
-    - 200: Lista de cambios ordenados por fecha (más recientes primero)
-    - 403: No autorizado para ver el historial
-    - 404: Colección no encontrada
-    """
-    logger.info(f"Fetching audit history for collection {collection_id} (limit={limit})")
-    
-    try:
-        # Validate limit
-        if limit > 50:
-            limit = 50
-        if limit < 1:
-            limit = 10
-        
-        # Get collection to verify access
-        collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
-        if not collection:
-            return JSONResponse(
-                status_code=404,
-                content=create_error_response(
-                    404,
-                    "Not Found",
-                    f"Collection with id {collection_id} not found",
-                    f"/collections/{collection_id}/audit",
-                ),
-            )
-        
-        # Verify authorization (owner or backoffice)
-        if not is_authorized(user, collection["artistId"]):
-            return JSONResponse(
-                status_code=403,
-                content=create_error_response(
-                    403,
-                    "Forbidden",
-                    "You are not authorized to view audit history for this collection",
-                    f"/collections/{collection_id}/audit",
-                ),
-            )
-        
-        # Get audit log entries
-        audit_entries = await audit_db.get_collection_audit_log(collection_id, limit=limit)
-        
-        # Serialize audit entries
-        serialized_entries = []
-        for entry in audit_entries:
-            serialized_entry = {
-                "id": str(entry["_id"]),
-                "collectionId": str(entry["collection_id"]),
-                "userId": entry["user_id"],
-                "action": entry["action"],
-                "timestamp": entry["timestamp"].isoformat() if entry.get("timestamp") else None,
-            }
-            
-            # Add state changes if present
-            if entry.get("previous_state") or entry.get("new_state"):
-                serialized_entry["stateChange"] = {
-                    "previous": entry.get("previous_state"),
-                    "new": entry.get("new_state")
-                }
-            
-            # Add publication window changes if present
-            publication_changes = {}
-            if entry.get("previous_release_date") or entry.get("new_release_date"):
-                publication_changes["releaseDate"] = {
-                    "previous": entry.get("previous_release_date").isoformat() if entry.get("previous_release_date") else None,
-                    "new": entry.get("new_release_date").isoformat() if entry.get("new_release_date") else None
-                }
-            if entry.get("previous_no_disponible_desde") or entry.get("new_no_disponible_desde"):
-                publication_changes["noDisponibleDesde"] = {
-                    "previous": entry.get("previous_no_disponible_desde").isoformat() if entry.get("previous_no_disponible_desde") else None,
-                    "new": entry.get("new_no_disponible_desde").isoformat() if entry.get("new_no_disponible_desde") else None
-                }
-            if entry.get("previous_no_disponible_hasta") or entry.get("new_no_disponible_hasta"):
-                publication_changes["noDisponibleHasta"] = {
-                    "previous": entry.get("previous_no_disponible_hasta").isoformat() if entry.get("previous_no_disponible_hasta") else None,
-                    "new": entry.get("new_no_disponible_hasta").isoformat() if entry.get("new_no_disponible_hasta") else None
-                }
-            if entry.get("previous_bloqueado_admin") is not None or entry.get("new_bloqueado_admin") is not None:
-                publication_changes["bloqueadoAdmin"] = {
-                    "previous": entry.get("previous_bloqueado_admin"),
-                    "new": entry.get("new_bloqueado_admin")
-                }
-            if publication_changes:
-                serialized_entry["publicationChanges"] = publication_changes
-            
-            # Add metadata if present
-            if entry.get("metadata"):
-                serialized_entry["metadata"] = entry["metadata"]
-            
-            serialized_entries.append(serialized_entry)
-        
-        logger.info(f"Retrieved {len(serialized_entries)} audit entries for collection {collection_id}")
-        return {
-            "data": {
-                "collectionId": collection_id,
-                "collectionName": collection.get("name"),
-                "auditHistory": serialized_entries
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to fetch audit history for collection {collection_id}: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content=create_error_response(
-                500,
-                "Internal Server Error",
-                str(e),
-                f"/collections/{collection_id}/audit",
-            ),
-        )
 
 @router.post("/auto-activate", status_code=200)
 async def auto_activate_collections():
