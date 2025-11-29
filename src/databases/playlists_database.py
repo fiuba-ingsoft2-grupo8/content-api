@@ -7,10 +7,11 @@ from db.database import get_db
 from db.models import PlaylistSong
 from resources.logger import logger
 from auth import is_authorized  # usado en get_playlist (acceso privado)
+import random
 
 # ----------------- CRUD y consultas ----------------- #
 
-async def create_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False):
+async def create_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False, isMix=False):
     db = get_db()
     try:
         publish_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -22,7 +23,8 @@ async def create_playlist(name, description, is_published, userId, coverUrl=None
             "userId": userId,
             "songs": [],
             "coverUrl": coverUrl or "default_cover.png",
-            "isLikedSongs": isLikedSongs
+            "isLikedSongs": isLikedSongs,
+            "isMix": isMix,
         }
         result = db.playlists.insert_one(playlist_doc)
         logger.info(f"Successfully created playlist with id={result.inserted_id}")
@@ -32,7 +34,30 @@ async def create_playlist(name, description, is_published, userId, coverUrl=None
         logger.error(f"Failed to create playlist: {str(e)}")
         return (None, e)
     
-    
+async def create_mix_playlist(name, description, is_published, userId, coverUrl=None, isLikedSongs=False, isMix=True, songs=None):
+    db = get_db()
+    try:
+        publish_time = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        playlist_doc = {
+            "name": name,
+            "description": description,
+            "is_published": is_published,
+            "published_at": publish_time,
+            "userId": userId,
+            "songs": songs or [],
+            "coverUrl": coverUrl or "default_cover.png",
+            "isLikedSongs": isLikedSongs,
+            "isMix": isMix,
+        }
+        result = db.playlists.insert_one(playlist_doc)
+        logger.info(f"Successfully created mix playlist with id={result.inserted_id}")
+        playlist = db.playlists.find_one({"_id": result.inserted_id})
+        return (playlist, None)
+    except Exception as e:
+        logger.error(f"Failed to create mix playlist: {str(e)}")
+        return (None, e)
+
+
 async def get_playlists(published: bool, userId: str = None, state: str = "", published_from=None, published_to=None):
     """
     Filtros:
@@ -66,6 +91,9 @@ async def get_playlists(published: bool, userId: str = None, state: str = "", pu
             if published_to:
                 range_q["$lte"] = published_to
             query["published_at"] = range_q
+
+        # No traigo los mixes del inicio
+        query["isMix"] = False
 
         playlists = list(
             db.playlists.find(query)
@@ -273,3 +301,77 @@ async def update_playlist_description(playlist_id: str, description: str) -> boo
     except Exception as e:
         logger.error(f"Failed to update description for playlist {playlist_id}: {e}")
         return False
+
+
+
+async def get_random_playlists(limit: int = 5):
+    db = get_db()
+    playlists = list(
+        db.playlists.find({"is_published": True})
+        .sort([("_id", 1)])
+    )
+    if not playlists:
+        return []
+    return random.sample(playlists, min(limit, len(playlists)))
+
+
+async def get_or_create_mix_playlist(user_id: str, name: str, songs: list):
+    db = get_db()
+
+    playlist = db.playlists.find_one({"userId": user_id, "name": name})
+    if playlist:
+        # Update songs in the existing playlist
+        playlist_id = playlist["_id"]
+        
+        # Clear existing songs
+        db.playlist_songs.delete_many({"playlist_id": playlist_id})
+        
+        # Add new songs
+        for order, song in enumerate(songs, start=1):
+            playlist_song = PlaylistSong(
+                song_id=ObjectId(song["_id"]),
+                playlist_id=playlist_id,
+                order=order
+            )
+            db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
+        
+        logger.info(f"Updated mix playlist '{name}' with {len(songs)} songs")
+        return playlist
+    
+    if name == "Daily Mix":
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/recommendations/daily-mix.png"
+    elif name == "Mood Mix":
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/recommendations/mood-mix.png"
+    elif name == "Because You Listened To":
+        cover_url = "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/recommendations/because-you-listened-to.png"
+    else:
+        raise ValueError(f"Unknown mix type: {name}")
+    
+    # Create playlist without songs
+    playlist_doc, err = await create_mix_playlist(
+        name=name,
+        description="",
+        is_published=True,
+        userId=user_id,
+        coverUrl=cover_url,
+        isLikedSongs=False,
+        isMix=True,
+        songs=[]  # Don't store songs in the document
+    )
+    
+    if err:
+        logger.error(f"Error creating mix playlist: {err}")
+        return None
+    
+    # Add songs to playlist_songs collection
+    playlist_id = playlist_doc["_id"]
+    for order, song in enumerate(songs, start=1):
+        playlist_song = PlaylistSong(
+            song_id=ObjectId(song["_id"]),
+            playlist_id=playlist_id,
+            order=order
+        )
+        db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
+    
+    logger.info(f"Created mix playlist '{name}' with {len(songs)} songs")
+    return playlist_doc

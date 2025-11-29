@@ -234,3 +234,55 @@ async def delete_song(existing_song):
         return None
     except Exception as e:
         logger.error(f"Failed to delete song with id={existing_song['_id']}: {str(e)}")
+
+async def get_random_songs():
+    try:
+        db = get_db()
+        all_songs = list(db.songs.find().limit(20))
+        return all_songs
+    except Exception as e:
+        logger.error(f"Failed to retrieve test songs: {str(e)}")
+        return []
+
+async def get_songs_by_genre(genre: str, limit: int = 10):
+    """
+    Retrieve songs that belong to collections of a specific genre.
+    
+    Args:
+        genre: The genre to filter collections by
+        limit: Maximum number of songs to return
+    
+    Returns:
+        List of song dicts
+    """
+    db = get_db()
+    try:
+        # Find collections matching the genre
+        collections = list(db.collections.find({"genre": genre}, {"_id": 1}))
+        collection_ids = [col["_id"] for col in collections]
+        
+        if not collection_ids:
+            logger.info(f"No collections found for genre '{genre}'")
+            return []
+        
+        # Find songs in those collections
+        collection_songs = list(db.collection_songs.find(
+            {"collection_id": {"$in": collection_ids}},
+            {"song_id": 1}
+        ).limit(limit))
+        
+        song_ids = [cs["song_id"] for cs in collection_songs]
+        
+        if not song_ids:
+            logger.info(f"No songs found in collections for genre '{genre}'")
+            return []
+        
+        # Retrieve song details
+        songs = list(db.songs.find({"_id": {"$in": song_ids}}).limit(limit))
+        
+        logger.info(f"Retrieved {len(songs)} songs for genre '{genre}'")
+        return songs
+    
+    except Exception as e:
+        logger.error(f"Failed to retrieve songs by genre '{genre}': {str(e)}")
+        return []

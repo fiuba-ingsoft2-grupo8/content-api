@@ -83,6 +83,7 @@ class PlaylistBase(BaseModel):
     userId: str
     coverUrl: Optional[str] = None
     isLikedSongs: Optional[bool] = False
+    isMix: Optional[bool] = False
 
 
 class CreatePlaylistRequest(BaseModel):
@@ -90,6 +91,7 @@ class CreatePlaylistRequest(BaseModel):
     description: str
     coverUrl: Optional[str] = None
     isLikedSongs: Optional[bool] = False
+    isMix: Optional[bool] = False
     
 
 
@@ -328,6 +330,12 @@ class Collection(CollectionBase):
     totalPlaylistSaves: Optional[int] = None
     totalShares: Optional[int] = None
     popularityScore: Optional[float] = None
+    # Admin block information
+    bloqueadoAdmin: Optional[bool] = None
+    bloqueadoAdminData: Optional[dict] = None  # Contains scope, regions, reasonCode, blockedAt, blockedBy
+    effectiveStatus: Optional[str] = None  # Effective state: publicado, programado, bloqueado-admin, no-disponible-region
+    noDisponibleDesde: Optional[datetime] = None
+    noDisponibleHasta: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -424,6 +432,28 @@ class PublicationWindowRequest(BaseModel):
                 "releaseDate": "2025-12-31T00:00:00Z",
                 "noDisponibleDesde": "2025-12-25T00:00:00Z",
                 "noDisponibleHasta": "2026-01-05T00:00:00Z"
+            }
+        }
+
+class AdminBlockScope(str, Enum):
+    """Scope for admin block."""
+    GLOBAL = "global"
+    REGIONS = "regions"
+
+class AdminBlockRequest(BaseModel):
+    """Request to block or unblock a collection as admin."""
+    blocked: bool
+    scope: Optional[AdminBlockScope] = None  # Required when blocking
+    regions: Optional[List[str]] = None  # Required when scope is 'regions'
+    reasonCode: Optional[str] = None  # Required when blocking
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "blocked": True,
+                "scope": "regions",
+                "regions": ["AR", "BR", "CL"],
+                "reasonCode": "copyright_issue"
             }
         }
 
@@ -702,9 +732,52 @@ class setArtistsRequest(BaseModel):
     """
     data: List[str]
 
-class AdminBlockRequest(BaseModel):
-    blocked: bool
-    scope: Optional[Literal["global", "regions"]] = None
-    regions: Optional[List[str]] = None
-    reasonCode: Optional[str] = None
+# Artist appearances schemas
+class AppearsInCollection(BaseModel):
+    """Collection in which artist appears."""
+    id: str
+    name: str
+    artistName: str
+    coverUrl: str
+    type: str  # album, ep, single
+    year: int  # Release year
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "507f1f77bcf86cd799439011",
+                "name": "Abbey Road",
+                "artistName": "The Beatles",
+                "coverUrl": "https://example.com/cover.jpg",
+                "type": "album",
+                "year": 1969
+            }
+        }
 
+class AppearsInPlaylist(BaseModel):
+    """Playlist in which artist appears."""
+    id: str
+    name: str
+    coverUrl: Optional[str] = None
+    type: str = "playlist"
+    year: int  # Year from published_at
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "507f1f77bcf86cd799439012",
+                "name": "Rock Classics",
+                "coverUrl": "https://example.com/playlist.jpg",
+                "type": "playlist",
+                "year": 2024
+            }
+        }
+
+class ArtistAppearances(BaseModel):
+    """Collections and playlists where artist appears."""
+    collections: List[AppearsInCollection] = []
+    playlists: List[AppearsInPlaylist] = []
+
+class ArtistAppearancesResponse(BaseModel):
+    """Standard API response for artist appearances."""
+    data: ArtistAppearances

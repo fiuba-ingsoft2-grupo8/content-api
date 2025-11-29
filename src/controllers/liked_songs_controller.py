@@ -232,6 +232,7 @@ async def remove_from_liked_songs(song_id: str, user: dict = Depends(verify_toke
                             "userId": "user_123",
                             "is_published": True,
                             "isLikedSongs": True,
+                            "isMix": False,
                             "coverUrl": "https://example.com/liked-songs.png",
                             "songs": [
                                 {

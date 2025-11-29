@@ -9,6 +9,7 @@ from db.models import CollectionSong
 from bson import ObjectId
 from databases.collection_states import calculate_effective_state, should_auto_activate
 from databases.audit_database import log_collection_change
+import random
 
 USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
 
@@ -289,6 +290,7 @@ async def update_collection_cover(collection_id: str, cover_url: str):
     )
     return result.modified_count > 0
 
+
 async def update_collection(collection_id: str, update_data: dict, user_id: str | None = None):
     """
     Updates collection fields based on update_data.
@@ -328,16 +330,68 @@ async def update_collection(collection_id: str, update_data: dict, user_id: str 
         previous_no_disponible_desde = current_collection.get("noDisponibleDesde")
         previous_no_disponible_hasta = current_collection.get("noDisponibleHasta")
         previous_bloqueado_admin = current_collection.get("bloqueadoAdmin", False)
-        previous_admin_block = current_collection.get("adminBlock")
-        previous_available_countries = current_collection.get("availableCountries", [])
-
-        # Update
+        
+        # Track all field changes for metadata
+        field_changes = {}
+        for field, new_value in update_data.items():
+            old_value = current_collection.get(field)
+            # Special handling for lists (like availableCountries)
+            if isinstance(old_value, list) and isinstance(new_value, list):
+                if set(old_value) != set(new_value):
+                    field_changes[field] = {
+                        "previous": old_value,
+                        "new": new_value
+                    }
+            elif old_value != new_value:
+                field_changes[field] = {
+                    "previous": str(old_value) if old_value is not None else None,
+                    "new": str(new_value) if new_value is not None else None
+                }
+        
+        # Update collection
         result = db.collections.update_one(
             {"_id": ObjectId(collection_id)},
             {"$set": update_data}
         )
-
-        if result.modified_count <= 0:
+        
+        if result.modified_count > 0:
+            logger.info(f"Successfully updated collection {collection_id} with fields: {list(update_data.keys())}")
+            
+            # Get updated collection and calculate new state
+            updated_collection = await get_collection(collection_id, includeUnpublished=True)
+            if updated_collection:
+                new_state = calculate_effective_state(updated_collection)
+                
+                # Log changes to audit (always log if user_id is provided and there were changes)
+                if user_id and field_changes:
+                    # Determine action type
+                    if any(k in update_data for k in ["releaseDate", "noDisponibleDesde", "noDisponibleHasta"]):
+                        action = "publication_window_update"
+                    elif "bloqueadoAdmin" in update_data:
+                        action = "state_change"
+                    else:
+                        action = "collection_edit"
+                    
+                    await log_collection_change(
+                        collection_id=collection_id,
+                        user_id=user_id,
+                        action=action,
+                        previous_state=previous_state,
+                        new_state=new_state,
+                        previous_release_date=previous_release_date,
+                        new_release_date=update_data.get("releaseDate"),
+                        previous_no_disponible_desde=previous_no_disponible_desde,
+                        new_no_disponible_desde=update_data.get("noDisponibleDesde"),
+                        previous_no_disponible_hasta=previous_no_disponible_hasta,
+                        new_no_disponible_hasta=update_data.get("noDisponibleHasta"),
+                        previous_bloqueado_admin=previous_bloqueado_admin,
+                        new_bloqueado_admin=update_data.get("bloqueadoAdmin"),
+                        metadata={
+                            "updated_fields": list(update_data.keys()),
+                            "field_changes": field_changes
+                        }
+                    )
+        else:
             logger.info(f"No changes made to collection {collection_id}")
             return True
 
@@ -839,50 +893,102 @@ async def configure_publication_window(
 
 
 async def set_admin_block(
-    collection_id: str,
-    blocked: bool,
+    collection_id: str, 
+    blocked: bool, 
+    user_id: str | None = None,
     scope: str | None = None,
     regions: list[str] | None = None,
-    reason_code: str | None = None,
-    user_id: str | None = None
+    reason_code: str | None = None
 ):
     """
-    Set or remove admin block on a collection, with scope + reason code.
-
-    - blocked=True: requiere scope + reason_code. Si scope="regions", requiere regions.
-    - blocked=False: elimina el override (adminBlock) y vuelve a aplicar la disponibilidad vigente.
-
-    Auditoría (CA4): usuario, timestamp, alcance(scope/regions) y motivo(reasonCode)
+    Set or remove admin block on a collection.
+    
+    Args:
+        collection_id: ID of the collection
+        blocked: True to block, False to unblock
+        user_id: ID of the admin user making the change
+        scope: 'global' or 'regions' (required when blocking)
+        regions: List of region codes (required when scope is 'regions')
+        reason_code: Reason code for the block (required when blocking)
+        
+    Returns:
+        Tuple of (success: bool, error_message: str or None)
     """
     db = get_db()
     try:
         collection = await get_collection(collection_id, includeUnpublished=True)
         if not collection:
             return (False, "Collection not found")
-
-        # Validaciones CA1 (en backend por seguridad)
+        
+        # Validate required fields when blocking
         if blocked:
-            if not scope or not reason_code:
-                return (False, "scope and reasonCode are required when blocking")
-            if scope == "regions" and (not regions or len(regions) == 0):
-                return (False, "regions is required when scope=regions")
-
-        previous_state = calculate_effective_state(collection, user_country=None)
+            if not scope:
+                return (False, "scope is required when blocking")
+            if not reason_code:
+                return (False, "reasonCode is required when blocking")
+            if scope == "regions" and not regions:
+                return (False, "regions is required when scope is 'regions'")
+        
+        # Get previous state
+        previous_state = calculate_effective_state(collection)
         previous_bloqueado_admin = collection.get("bloqueadoAdmin", False)
-        previous_admin_block = collection.get("adminBlock")
-
-        now = datetime.now(timezone.utc)
-
+        previous_block_data = collection.get("bloqueadoAdminData")
+        
+        # Prepare update
+        update_data = {"bloqueadoAdmin": blocked}
+        
         if blocked:
-            admin_block = {
-                "enabled": True,
-                "scope": (scope or "global"),
-                "regions": regions or [],
+            # Store block metadata
+            update_data["bloqueadoAdminData"] = {
+                "scope": scope,
+                "regions": regions if scope == "regions" else None,
                 "reasonCode": reason_code,
-                "by": user_id,
-                "at": now,
+                "blockedAt": datetime.now(timezone.utc),
+                "blockedBy": user_id
             }
-            update = {"$set": {"adminBlock": admin_block, "bloqueadoAdmin": True}}
+        else:
+            # Clear block metadata on unblock
+            update_data["bloqueadoAdminData"] = None
+        
+        # Update block status
+        result = db.collections.update_one(
+            {"_id": ObjectId(collection_id)},
+            {"$set": update_data}
+        )
+        
+        if result.modified_count > 0:
+            # Get new state
+            updated_collection = await get_collection(collection_id, includeUnpublished=True)
+            new_state = calculate_effective_state(updated_collection) if updated_collection else previous_state
+            
+            # Log to audit
+            if user_id:
+                metadata = {
+                    "action": "admin_block" if blocked else "admin_unblock",
+                }
+                if blocked:
+                    metadata.update({
+                        "scope": scope,
+                        "regions": regions,
+                        "reasonCode": reason_code
+                    })
+                elif previous_block_data:
+                    # Include previous block data when unblocking
+                    metadata["previous_block_data"] = previous_block_data
+                
+                await log_collection_change(
+                    collection_id=collection_id,
+                    user_id=user_id,
+                    action="state_change",
+                    previous_state=previous_state,
+                    new_state=new_state,
+                    previous_bloqueado_admin=previous_bloqueado_admin,
+                    new_bloqueado_admin=blocked,
+                    metadata=metadata
+                )
+            
+            logger.info(f"Successfully {'blocked' if blocked else 'unblocked'} collection {collection_id}")
+            return (True, None)
         else:
             update = {"$unset": {"adminBlock": ""}, "$set": {"bloqueadoAdmin": False}}
 
@@ -998,3 +1104,97 @@ async def auto_activate_scheduled_collections():
         logger.error(f"Failed to auto-activate scheduled collections: {str(e)}")
         errors.append(str(e))
         return (activated_count, errors)
+
+
+async def get_random_collections(limit: int = 5):
+    """
+    Returns `limit` random published collections from ANY artist.
+    Used only for mock sections like Daily Mix, Mood Mix, etc.
+    """
+    db = get_db()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Only published collections
+        collections = list(
+            db.collections.find({
+                "releaseDate": {"$lte": now}
+            })
+        )
+
+        if not collections:
+            return []
+
+        if len(collections) <= limit:
+            return collections
+
+        return random.sample(collections, limit)
+
+    except Exception as e:
+        logger.error(f"Failed to fetch random collections: {str(e)}")
+        return []
+
+
+async def get_collection_from_song(song_id: str):
+    """
+    Given a song ID, returns the collection (album/EP/single) it belongs to, if any.
+    Only returns published collections.
+    """
+    db = get_db()
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Find the collection_song entry
+        collection_song = db.collection_songs.find_one({
+            "song_id": ObjectId(song_id)
+        })
+
+        if not collection_song:
+            return None
+
+        collection_id = collection_song["collection_id"]
+
+        # Fetch the collection and ensure it's published
+        collection = db.collections.find_one({
+            "_id": collection_id,
+            "releaseDate": {"$lte": now}
+        })
+
+        return collection
+
+    except Exception as e:
+        logger.error(f"Failed to get collection from song {song_id}: {str(e)}")
+        return None
+
+
+async def get_new_releases_from_artist(artist_id: str, limit: int = 10):
+    """
+    Get collections released by the artist in the last 7 days.
+    """
+    db = get_db()
+    try:
+        now = datetime.now(timezone.utc)
+        one_week_ago = now - timedelta(days=7)
+
+        collections = list(
+            db.collections.find({
+                "artistId": artist_id,
+                "releaseDate": {
+                    "$lte": now,
+                    "$gte": one_week_ago
+                }
+            })
+            .sort("releaseDate", DESCENDING)
+            .limit(limit)
+        )
+
+        logger.info(
+            f"Retrieved {len(collections)} releases from artist {artist_id} in the last week"
+        )
+        return collections
+
+    except Exception as e:
+        logger.error(
+            f"Failed to get weekly releases from artist {artist_id}: {str(e)}"
+        )
+        return []
