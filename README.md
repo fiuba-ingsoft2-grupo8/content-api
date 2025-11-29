@@ -1,348 +1,293 @@
 # Content API
 
-## Requisitos
+Microservicio Content API para manejo de contenido musical:
+canciones, playlists, colecciones (álbumes, EPs, singles), historial, likes, plays y popularidad.
 
-- Docker y Docker Compose
-- Python 3.9+ (para desarrollo local y testing)
-- Make
+Construido con FastAPI (Python) y MongoDB, con soporte para:
+	•	Lanzamientos programados (release dates futuras)
+	•	Métricas permanentes de reproducción
+	•	Popularidad basada en múltiples señales (plays, likes, saves, shares)
+	•	Sincronización de base remota → local para desarrollo
 
-## Configuración del Proyecto
+⸻
 
-### 1. Configuración con Base de Datos Local
+# 🧱 Stack y decisiones de diseño
 
-Para desarrollo y testing con una base de datos PostgreSQL local:
-
-```bash
-# Construir y levantar los servicios (API + PostgreSQL local)
-make up-local
-
-# Para parar los servicios
-make down-local
-```
-
-Esta configuración:
-- Levanta un contenedor PostgreSQL con credenciales predefinidas
-- Inicializa la base de datos con el script `src/db/init.sql`
-- La API estará disponible en `http://localhost:8080`
-- PostgreSQL estará disponible en `localhost:5432`
-
-### 2. Configuración con Base de Datos Remota
-
-Para conectar a una base de datos PostgreSQL remota:
-
-```bash
-# Crear archivo .env con las variables necesarias (ver sección de Variables de Entorno)
-cp .env.example .env
-
-# Construir y levantar solo la API
-make up-remote
-
-# Para parar el servicio
-make down-remote
-```
-
-Esta configuración solo levanta el contenedor de la API y se conecta a la base de datos especificada en las variables de entorno.
-
-## Variables de Entorno
-
-Para la configuración remota, crear un archivo `.env` en la raíz del proyecto con las siguientes variables:
-
-```env
-DATABASE_HOST=your_remote_host
-DATABASE_NAME=your_database_name
-DATABASE_PORT=5432
-DATABASE_USER=your_username
-DATABASE_PASSWORD=your_password
-DATABASE_SSLMODE=require
-```
-
-**📝 Nota:** Las credenciales de las bases de datos remotas están disponibles en Notion.
-
-## Justificación del stack utilizado
-
-### ¿Por qué Python?
-
-Se eligió Python para la parte de gestión del contenido por ventajas como:
-
-- Facilidad y rapidez: ya es un lenguaje muy conocido por el equipo, lo que nos permitió empezar a desarrollar sin tener que invertir tiempo en aprender algo nuevo. Esto hizo que pudiéramos enfocarnos directamente en la lógica del servicio.
-
-- Ecosistema backend sólido: con frameworks como FastAPI es sencillo armar una API REST bien estructurada y con buen soporte de documentación, validación y testing.
-
-- Sintaxis clara y legible: escribir en Python es simple, y eso acelera el prototipado y facilita hacer cambios frecuentes durante el desarrollo.
-
-- Integración sencilla: Python se conecta fácilmente con distintos motores de base de datos y con otros servicios, lo que nos da flexibilidad para adaptar esta parte del sistema al resto del stack.
+### ¿Por qué Python + FastAPI?
+	•	Velocidad de desarrollo: el equipo ya conoce Python, lo que permitió enfocarse en modelar el dominio (canciones, playlists, colecciones) sin curva de aprendizaje extra.
+	•	FastAPI:
+	•	Tipado fuerte y validación con Pydantic
+	•	Documentación automática (/docs y /openapi.json)
+	•	Manejo sencillo de dependencias (e.g. verify_token)
+	•	Ecosistema sólido: fácil integración con otros servicios (user-api, player-api, etc.) y herramientas de testing (pytest, testcontainers).
 
 ### ¿Por qué MongoDB?
+	•	Modelo flexible: álbumes, singles, playlists, colecciones y métricas tienen estructuras que evolucionan rápido. Documentos JSON en Mongo encajan muy bien sin migraciones complejas.
+	•	Consultas ricas: facilita traer toda la información de una colección (metadatos + canciones + métricas) en una sola consulta.
+	•	Escalabilidad: replica sets y sharding nativo para crecer con el volumen de reproducciones.
+	•	Integración con Python: pymongo y herramientas de admin (Atlas) simplifican la operación.
 
-En cuanto al almacenamiento, elegimos MongoDB por las siguientes razones:
+⸻
 
-- Modelo flexible para colecciones: álbumes, singles y playlists pueden variar en estructura, tamaño y atributos. En MongoDB esto se representa naturalmente con documentos JSON, sin necesidad de un esquema fijo, lo que permite adaptabilidad y polimorfismo en el modelo de datos.
+## ✅ Requisitos
+	•	Docker y Docker Compose
+	•	Python 3.9+ (para desarrollo local y testing sin Docker)
+	•	Make (para usar los comandos abreviados)
 
-- Consultas prácticas: permite traer toda la información del contenido en una sola consulta, reduciendo la complejidad en el backend.
+⸻
 
-- Facilidad de evolución: si en el futuro se agregan nuevos campos, el modelo se puede extender sin migraciones complejas.
+# ⚙️ Configuración y Ejecución
 
-- Escalabilidad natural: ofrece particionamiento y replicación nativos, lo que facilita crecer horizontalmente en escenarios con más usuarios o mayor volumen de datos.
+## 1. Modo Local con base de datos local (PostgreSQL para pruebas + Mongo local)
 
-- Compatibilidad con Python: librerías como pymongo hacen que la integración sea directa y sin necesidad de configuraciones complejas.
+Para desarrollo y testing con la base local definida en el repo:
+
+### Construir y levantar servicios (API + PostgreSQL local)
+* make up-local 
+* make down-local
 
 
-## Documentación
-Para correr la documentación se utiliza en este repositorio FastAPI, por lo que para ver información sobre los endpoints, basta con acceder a la documentación de localhost. Pasos:
-```bash
-# Levantar Docker local
-make-up local
+Esta configuración:
+	•	Levanta un contenedor PostgreSQL con credenciales predefinidas
+	•	Inicializa la DB con src/db/init.sql (donde aplique)
+	•	Expone la API en http://localhost:8080
+	•	Expone PostgreSQL en localhost:5432
+	•	MongoDB local (si está definido en tu docker-compose-local.yaml) se usa como datastore principal de contenido.
 
-# Correr el servicio
-python src/main.py
+## 2. Modo Remoto (conectar a DB remota)
 
-# Acceder por buscador a la FastAPI
-localhost:8080/docs
+Para conectar la API a una base remota (ej. Mongo Atlas + Postgres remoto):
+
+### Crear .env a partir del ejemplo
+	cp .env.example .env
+
+### Levantar solo la API, apuntando a DB remotas
+* make up-remote
+* make down-remote
+
+
+⸻
+
+## 🌍 Variables de Entorno
+
+Para configuración remota (Postgres) se usan variables como:
+
+	DATABASE_HOST=your_remote_host
+	DATABASE_NAME=your_database_name
+	DATABASE_PORT=5432
+	DATABASE_USER=your_username
+	DATABASE_PASSWORD=your_password
+	DATABASE_SSLMODE=require
+
+Para MongoDB usualmente se usa un DATABASE_URL / MONGODB_URI en el .env (definido en Notion).
+
+📝 Las credenciales reales (remotas) se documentan en Notion y no viven en el repo.
+
+⸻
+
+# 📍 Rutas Principales (visión general)
+
+La documentación completa de endpoints se puede consultar en
+http://localhost:8080/docs (Swagger UI) una vez levantada la API.
+
+Principales “bloques” funcionales:
+
+###	•	Songs
+	•	GET /songs → Lista de canciones
+	•	POST /songs → Crear canción
+###	•	Playlists
+	•	GET /playlists
+	•	POST /playlists
+	•	POST /playlists/{playlist_id}/songs/{song_id}
+###	•	Collections (álbumes, EPs, singles)
+	•	POST /collections → Crear colección (soporta releaseDate futura)
+	•	GET /collections (con filtros por tipo, artista, etc.)
+	•	GET /collections/{collection_id}
+	•	GET /collections/popular/{artistId} → colecciones ordenadas por popularidad
+	•	POST /collections/{collection_id}/publish → publicación inmediata
+###	•	History & Plays
+	•	POST /history → registrar reproducción
+	•	GET /history → historial del usuario
+	•	DELETE /history → limpiar historial
+	•	Likes / Shares / Saves
+	•	likes y shares se registran a nivel canción; playlist saves impactan en popularidad de colecciones
+
+Ejemplos rápidos (supuestos):
+#### Obtener canciones
+	curl -s http://localhost:8080/songs
+
+#### Crear playlist simple
+	curl -X POST http://localhost:8080/playlists \
+	  -H "Content-Type: application/json" \
+	  -H "Authorization: Bearer <JWT_USER>" \
+	  -d '{
+	    "name": "Mi Playlist",
+	    "description": "Hecha con Content API"
+	  }'
+
+#### Ver colecciones populares de un artista
+	curl -s http://localhost:8080/collections/popular/<artistId>
+
+
+⸻
+
+# 🔐 Autenticación
+
+La Content API usa un mecanismo de autenticación similar al resto de Melodia:
+
+•	Dependencia verify_token en los endpoints que requieren usuario autenticado.
+•	JWT consumido desde Authorization: Bearer <token>.
+
+Reglas importantes:
+
+•	Endpoints de usuario final (ej. /history, /playlists, likes, etc.) se consumen con token de listener.
+•	Endpoints de artista (ej. POST /collections) requieren que el usuario tenga stage_name → si el JWT corresponde a un listener, la API responde:
+
+```
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "User is not an artist",
+  "instance": "/collections"
+}
 ```
 
-## Testing
 
-### Configuración para Tests
+⸻
 
-Los tests utilizan `testcontainers` para crear un contenedor PostgreSQL temporal durante la ejecución:
+# 🧪 Testing
 
-```bash
-# Instalar dependencias de testing
+Tests con testcontainers
+
+Los tests usan testcontainers para montar un contenedor de PostgreSQL temporal:
+
+### Instalar dependencias de testing
 pip install -r requirements-tests.txt
 
-# Ejecutar tests
+### Ejecutar tests
 make test
-```
 
-### Desarrollo Local
+## Desarrollo Local (sin Docker)
 
-Para desarrollo local sin Docker:
-
-```bash
-# Instalar dependencias
+### Instalar dependencias
 pip install -r requirements.txt
 pip install -r requirements-tests.txt
 
-# Levantar solo PostgreSQL
+#### Levantar solo PostgreSQL local
 docker compose -f docker-compose-local.yaml up postgres -d
 
-# Ejecutar la API localmente
+### Configurar envs para apuntar a Postgres local
+```
 export DATABASE_HOST=localhost
 export DATABASE_NAME=postgres
 export DATABASE_PORT=5432
 export DATABASE_USER=postgres
 export DATABASE_PASSWORD=password
 export DATABASE_SSLMODE=disable
-
-python src/main.py
 ```
 
-## Sistema de Métricas de Reproducción
+# Ejecutar API
+python src/main.py   # → http://localhost:8080
 
-### Arquitectura de Dos Tablas
 
-El sistema utiliza dos colecciones separadas en MongoDB para gestionar reproducciones:
+⸻
 
-1. **`history`** - Historial personal del usuario
-   - Contiene el historial de reproducción de cada usuario
-   - Puede ser limpiado por el usuario (DELETE /history)
-   - Usado para mostrar "Escuchado recientemente"
+# 🎧 Sistema de Métricas de Reproducción
 
-2. **`plays`** - Métricas permanentes
-   - Almacena todas las reproducciones de forma permanente
-   - NUNCA se elimina, ni siquiera cuando el usuario limpia su historial
-   - Usado para calcular popularidad, métricas de artistas y analytics
+Arquitectura de dos colecciones (MongoDB)
 
-### Flujo de Reproducción
+Para separar historial de usuario de métricas permanentes se usan dos colecciones:
 
-Cuando un usuario reproduce una canción (POST /history):
+1.	History
+
+	•	Historial personal (por usuario)
+
+	•	El usuario lo puede limpiar (DELETE /history)
+
+	•	Usado para “Escuchado recientemente”
+2.	Plays
+
+	•	Métrica permanente de reproducciones
+
+	•	Nunca se elimina (aunque el usuario limpie su historial)
+
+	•	Usado para popularidad, analytics y métricas de artistas
+
+### Flujo típico:
+
+POST /history
+  → inserta en history
+  → inserta en plays
+
+DELETE /history
+  → borra entradas en history
+  → NO toca plays
+
+### Índices recomendados en Mongo
+
+  db.plays.createIndex({ "song_id": 1 });
+
+  db.plays.createIndex({ "user_id": 1, "played_at": -1 });
+
+  db.plays.createIndex({ "song_id": 1, "played_at": -1 });
+
+**Esto optimiza:**
+
+•	Consultas por canción (popularidad)
+
+•	Consultas por usuario (historial reciente)
+
+•	Agregaciones por período (played_at)
+
+⸻
+
+## ⏰ Sistema de Lanzamientos Programados
+
+Las colecciones (album/EP/single) soportan releaseDate:
+
+	•	Si releaseDate no se envía → la colección se considera publicada desde “ahora”.
+	•	Si releaseDate es futura → la colección queda “programada” (no pública por defecto).
+
+### Comportamiento de visibilidad
+•	GET /collections → por defecto solo colecciones publicadas (releaseDate ≤ now).
+
+•	includeUnpublished=true permite incluir colecciones no publicadas, ej.:
 ```
-1. Se registra en `history` (historial personal)
-2. Se registra en `plays` (métrica permanente)
-```
-
-Cuando un usuario limpia su historial (DELETE /history):
-```
-1. Se elimina de `history` ✓
-2. Se mantiene en `plays` ✓
-```
-
-### Índices Recomendados
-
-Para optimizar el rendimiento, ejecuta el script de índices:
-
-```bash
-docker exec -it mongodb mongosh userdb /docker-entrypoint-initdb.d/mongo-indexes.js
-```
-
-O manualmente:
-```bash
-docker exec -it mongodb mongosh -u admin -p admin_password --authenticationDatabase admin userdb
-```
-
-```javascript
-db.plays.createIndex({ "song_id": 1 });
-db.plays.createIndex({ "user_id": 1, "played_at": -1 });
-db.plays.createIndex({ "song_id": 1, "played_at": -1 });
-```
-
-### Migración de Datos Existentes
-
-Si tienes datos existentes en `history` que quieres preservar en `plays`:
-
-```javascript
-db.history.find().forEach(function(doc) {
-    db.plays.insert({
-        user_id: doc.userId,
-        song_id: doc.songId,
-        played_at: doc.playedAt
-    });
-});
-```
-
-Para más detalles, consulta [MIGRATION_NOTES.md](./MIGRATION_NOTES.md)
-
-## Sistema de Lanzamientos Programados
-
-### Descripción
-
-Las colecciones (álbumes, singles, EPs) ahora soportan lanzamientos programados. Esto permite a los artistas crear colecciones con una fecha de lanzamiento futura, manteniéndolas ocultas hasta que llegue esa fecha.
-
-### Características
-
-1. **Fecha de lanzamiento opcional**
-   - Al crear una colección, puedes especificar un campo `releaseDate`
-   - Si no se especifica, la colección se publica inmediatamente (fecha = ahora)
-   - Las colecciones con fecha futura no son visibles por defecto
-
-2. **Control de visibilidad**
-   - Por defecto, solo las colecciones publicadas (releaseDate ≤ ahora) son visibles
-   - Parámetro `includeUnpublished=true` permite ver colecciones no publicadas
-   - Aplica a todos los endpoints de obtención de colecciones
-
-3. **Publicación anticipada**
-   - Endpoint especial para publicar una colección inmediatamente
-   - Solo el artista propietario puede publicar su colección
-   - No se puede "despublicar" una colección ya lanzada
-
-### Endpoints Actualizados
-
-#### Crear colección con fecha de lanzamiento
-```bash
-POST /collections/
-{
-  "name": "Mi Nuevo Álbum",
-  "type": "album",
-  "songIds": ["song_id_1", "song_id_2"],
-  "releaseDate": "2025-12-31T00:00:00Z"  # Opcional
-}
-```
-
-#### Obtener colecciones (solo publicadas por defecto)
-```bash
-GET /collections/
-GET /collections/?type=album
-GET /collections/?artistId=artist_123
-GET /collections/{collection_id}
-GET /collections/popular/{artistId}
-```
-
-#### Obtener colecciones incluyendo no publicadas
-```bash
 GET /collections/?includeUnpublished=true
 GET /collections/{collection_id}?includeUnpublished=true
 GET /collections/popular/{artistId}?includeUnpublished=true
 ```
+Publicación inmediata
 
-#### Publicar colección inmediatamente
-```bash
+Para adelantar un lanzamiento programado:
+
 POST /collections/{collection_id}/publish
-```
 
-Responde con:
-- `200 OK` - Colección publicada exitosamente
-- `400 Bad Request` - Colección ya está publicada
-- `403 Forbidden` - No eres el propietario de la colección
-- `404 Not Found` - Colección no encontrada
+#### Respuestas típicas:
 
-### Casos de Uso
+	•	200 OK – Colección publicada
+	•	400 Bad Request – Ya estaba publicada
+	•	403 Forbidden – Usuario no es el propietario / artista
+	•	404 Not Found – Colección inexistente
 
-**Artista programa un lanzamiento:**
-```bash
-# 1. Crear colección con fecha futura
-POST /collections/
-{
-  "name": "Summer Hits 2025",
-  "type": "album",
-  "songIds": [...],
-  "releaseDate": "2025-06-21T00:00:00Z"
-}
+⸻
 
-# 2. Verificar que no es visible públicamente
-GET /collections/  # No aparece
+## ⭐ Sistema de Popularidad Mejorado
 
-# 3. Verificar como artista (con includeUnpublished)
-GET /collections/?includeUnpublished=true  # Sí aparece
+El endpoint:
 
-# 4. Publicar anticipadamente si es necesario
-POST /collections/{collection_id}/publish
-```
+**GET /collections/popular/{artistId}**
+Calcula popularidad de colecciones combinando múltiples métricas:
 
-### Tests
+	•	Plays (reproducciones) – peso 1.0
+	•	Likes – peso 2.0
+	•	Playlist Saves – peso 3.0
+	•	Shares – peso 5.0
 
-Se agregaron 12 tests completos que cubren:
-- ✅ Creación de colecciones con fecha futura
-- ✅ Creación de colecciones sin fecha (publicación inmediata)
-- ✅ Visibilidad de colecciones no publicadas
-- ✅ Filtrado con parámetro includeUnpublished
-- ✅ Publicación inmediata de colecciones
-- ✅ Validación de permisos de publicación
-- ✅ Colecciones con fechas pasadas (ya publicadas)
-- ✅ Endpoints populares con/sin includeUnpublished
+Las métricas se agregan a nivel de colección sumando todas las canciones que pertenecen a esa colección.
 
-Ejecutar tests:
-```bash
-# Todos los tests de colecciones
-pytest tests/test_collections_controller.py -v
-
-# Solo tests de lanzamientos programados
-pytest tests/test_collections_controller.py -k "release_date or unpublished or publish" -v
-```
-
-## Sistema de Popularidad Mejorado
-
-### Descripción
-
-El endpoint `/collections/popular/{artistId}` ahora calcula la popularidad usando múltiples métricas en lugar de solo reproducciones:
-
-### Métricas Consideradas
-
-1. **Plays** (reproducciones) - peso: 1.0
-2. **Likes** (me gusta) - peso: 2.0
-3. **Playlist Saves** (guardado en playlists) - peso: 3.0
-4. **Shares** (compartidos) - peso: 5.0
-
-### Fórmula de Popularidad
-
-```python
-popularityScore = (
-    totalPlays * 1.0 +
-    totalLikes * 2.0 +
-    totalPlaylistSaves * 3.0 +
-    totalShares * 5.0
-)
-```
-
-Los pesos reflejan el valor relativo de cada acción:
-- **Plays**: acción pasiva, menor peso
-- **Likes**: indica interés moderado
-- **Playlist Saves**: indica alto interés (quiere volver a escuchar)
-- **Shares**: máximo valor (potencial viral, recomienda a otros)
-
-### Respuesta del Endpoint
-
-```json
-GET /collections/popular/{artistId}
+Respuesta típica:
 
 {
   "data": [
@@ -357,95 +302,7 @@ GET /collections/popular/{artistId}
       "totalPlaylistSaves": 89,
       "totalShares": 45,
       "popularityScore": 2443.0,
-      "songs": [...]
+      "songs": [ /* ... */ ]
     }
   ]
 }
-```
-
-### Notas Importantes
-
-- Las métricas se calculan sumando los valores de **todas las canciones** de la colección
-- Los likes son a nivel de canción, no de colección
-- Las colecciones se ordenan por `popularityScore` descendente
-- Los pesos pueden ajustarse según las necesidades del negocio
-
-## 📦 Copiar Base de Datos Remota a Local
-
-### Descripción
-
-Script de utilidad para copiar todos los datos desde la base de datos remota (MongoDB Atlas) a la base de datos local. Útil para:
-- Desarrollo con datos reales
-- Testing con datos de producción
-- Depuración de problemas
-- Sincronización de entornos
-
-### Uso
-
-```bash
-# 1. Asegurarse que la base de datos local esté corriendo
-make up-local
-
-# 2. Copiar datos desde remoto
-make copy
-```
-
-### ¿Qué hace el comando?
-
-1. ✅ Se conecta a la base de datos remota (usando `DATABASE_URL` del `.env`)
-2. ✅ Se conecta a la base de datos local (Docker)
-3. ✅ Copia todas las colecciones:
-   - songs
-   - playlists
-   - playlist_songs
-   - collections
-   - collection_songs
-   - likes
-   - shares
-   - plays
-   - history
-   - artist_about
-
-4. ⚠️ **Importante**: Elimina el contenido local de cada colección antes de copiar
-
-### Ejemplo de Salida
-
-```
-📦 Copying database from remote to local...
-⚠️  Make sure your local MongoDB is running first!
-
-============================================================
-  📦 MongoDB Database Copy Tool
-  Remote → Local
-============================================================
-
-🔌 Connecting to databases...
-✅ Connected to REMOTE database: mongodb+srv://...
-✅ Connected to LOCAL database: mongodb://admin:admin_password@localhost:27017/...
-
-📋 Starting copy process...
-
-  ✅ songs: Copied 150 documents
-  ✅ playlists: Copied 45 documents
-  ✅ playlist_songs: Copied 320 documents
-  ✅ collections: Copied 25 documents
-  ✅ collection_songs: Copied 180 documents
-  ✅ likes: Copied 500 documents
-  ✅ shares: Copied 120 documents
-  ✅ plays: Copied 2500 documents
-  ⚠️  history: No documents found (skipping)
-  ✅ artist_about: Copied 10 documents
-
-============================================================
-  ✨ Copy completed successfully!
-  Total documents copied: 3850
-============================================================
-```
-
-### ⚠️ Advertencias
-
-- **Este script BORRA los datos existentes en la base de datos local** antes de copiar
-- No lo ejecutes si tienes cambios locales que quieras conservar
-- Solo copia datos, no copia índices ni configuraciones especiales de MongoDB
-
-Para más detalles, consulta [scripts/README.md](./scripts/README.md)
