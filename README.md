@@ -33,8 +33,6 @@ Construido con FastAPI (Python) y MongoDB, con soporte para:
 
 ⸻
 
-Si querés, puedo autogenerarte todas las secciones completas del README siguiendo este índice.
-
 # 🧱 Stack y decisiones de diseño
 
 ### ¿Por qué Python + FastAPI?
