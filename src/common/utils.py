@@ -2,6 +2,7 @@ from datetime import timezone
 from resources.logger import logger
 import schemas
 from databases.collection_states import calculate_effective_state
+from enum import Enum as PyEnum
 # Portadas por defecto (se usan si no se pasa cover explícito)
 DEFAULT_COVERS = [
     "https://qalwnsoihhprqeppeloi.supabase.co/storage/v1/object/public/images/playlists/default/default-green.png",
@@ -95,22 +96,63 @@ def _iso(dt):
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def serialize_collection(collection_or_col, *args, user_country=None) -> schemas.Collection:
-    """
-    Soporta:
-      - serialize_collection(col, songs)
-      - serialize_collection(col, songs, user_country)
-      - serialize_collection(collection, col, songs)              (legacy)
-      - serialize_collection(collection, col, songs, user_country) (legacy)
-    """
+def _normalize_scope(scope) -> str:
+    if scope is None:
+        return "global"
 
-    # --- Resolver parámetros ---
+    if isinstance(scope, PyEnum):
+        scope = scope.value
+
+    if not isinstance(scope, str):
+        return "global"
+
+    s = scope.strip()
+    if s.startswith("AdminBlockScope."):
+        s = s.split(".", 1)[1]
+
+    s = s.lower()
+    if s == "global":
+        return "global"
+    if s in ("regions", "region", "regiones"):
+        return "regions"
+
+    return "global"
+
+
+def _normalize_regions(regions):
+    if regions is None:
+        return []
+    if isinstance(regions, (list, tuple)):
+        return [str(x) for x in regions if str(x)]
+    # si por algún bug vino como string "AR,UY"
+    if isinstance(regions, str):
+        return [r.strip() for r in regions.split(",") if r.strip()]
+    return []
+
+
+def _ensure_dt(dt):
+    """Para que AdminBlock.at sea datetime (Pydantic lo espera), no string."""
+    if not dt:
+        return None
+    # si viene datetime
+    if hasattr(dt, "tzinfo"):
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    # si viene ISO string
+    if isinstance(dt, str):
+        try:
+            d = dt.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(d)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
+    return None
+
+
+def serialize_collection(collection_or_col, *args, user_country=None) -> schemas.Collection:
     if len(args) == 1:
-        # (col, songs)
         col = collection_or_col
         songs = args[0]
     elif len(args) == 2:
-        # (collection, col, songs)  OR  (col, songs, user_country)?? -> acá asumimos legacy
         col = args[0]
         songs = args[1]
     elif len(args) >= 3:
@@ -122,30 +164,29 @@ def serialize_collection(collection_or_col, *args, user_country=None) -> schemas
             "serialize_collection expected (col, songs[, user_country]) or (collection, col, songs[, user_country])"
         )
 
-    # --- Admin block ---
     admin_block = col.get("adminBlock") or {}
     admin_block_enabled = isinstance(admin_block, dict) and admin_block.get("enabled") is True
     legacy_blocked = bool(col.get("bloqueadoAdmin", False))
 
-    by_val = admin_block.get("by")
-
     admin_block_out = None
     if admin_block_enabled:
+        scope_norm = _normalize_scope(admin_block.get("scope"))
+        regions_norm = _normalize_regions(admin_block.get("regions"))
+
+        by_val = admin_block.get("by")
         admin_block_out = {
             "enabled": True,
-            "scope": admin_block.get("scope") or "global",
-            "regions": admin_block.get("regions") or [],
+            "scope": scope_norm,                 # ✅ siempre "global" o "regions"
+            "regions": regions_norm,             # ✅ siempre lista
             "reasonCode": admin_block.get("reasonCode"),
-            "by": None if by_val is None else str(by_val),  # ✅ acá
-            "at": _iso(admin_block.get("at")),
+            "by": None if by_val is None else str(by_val),
+            "at": _ensure_dt(admin_block.get("at")),  # ✅ datetime o None
         }
 
     admin_blocked = legacy_blocked or admin_block_enabled
 
-    # --- Effective status (backend) ---
     effective_status = calculate_effective_state(col, user_country)
 
-    # --- Serialize songs ---
     songs_out = [
         schemas.CollectionSong(
             id=str(song.get("_id", "")),
@@ -173,11 +214,8 @@ def serialize_collection(collection_or_col, *args, user_country=None) -> schemas
         noDisponibleHasta=col.get("noDisponibleHasta"),
         effectiveStatus=effective_status,
 
-        # ✅ nuevos campos
         adminBlock=admin_block_out,
         adminBlocked=admin_blocked,
-
-        # opcional legacy (si tu schema lo tiene; si no, borrá esta línea)
         bloqueadoAdmin=legacy_blocked,
 
         availableCountries=col.get("availableCountries", []),

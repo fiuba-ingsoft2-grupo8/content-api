@@ -13,6 +13,7 @@ from common.countries import validate_country_codes, calculate_available_countri
 from fastapi import UploadFile, File, Form
 from datetime import datetime, timezone
 from databases.collection_states import calculate_effective_state, is_collection_playable
+from enum import Enum as PyEnum
 
 router = APIRouter()
 
@@ -1040,20 +1041,45 @@ async def configure_publication_window(
             ),
         )
 
+def _normalize_admin_scope(scope) -> str:
+    """
+    Devuelve exactamente 'global' o 'regions', aunque venga como:
+    - Enum (scope.value)
+    - 'AdminBlockScope.GLOBAL'
+    - 'GLOBAL'
+    - 'regiones'
+    """
+    if scope is None:
+        return "global"
+
+    if isinstance(scope, PyEnum):
+        scope = scope.value
+
+    if not isinstance(scope, str):
+        return "global"
+
+    s = scope.strip()
+
+    if s.startswith("AdminBlockScope."):
+        s = s.split(".", 1)[1]
+
+    s = s.lower()
+    if s == "global":
+        return "global"
+    if s in ("regions", "region", "regiones"):
+        return "regions"
+
+    return "global"
+
 @router.post("/{collection_id}/admin-block", status_code=200)
 async def set_admin_block(
     collection_id: str,
     req: AdminBlockRequest,
     user: dict = Depends(verify_token)
 ):
-    """
-    Bloquear o desbloquear una colección como administrador, con alcance + motivo.
-
-    CA1: en bloqueo requiere scope (global/regiones) y reasonCode (y regions si scope=regions)
-    CA3: desbloqueo revierte override y aplica disponibilidad vigente
-    CA4: auditoría usuario/timestamp/alcance/motivo
-    """
-    logger.info(f"Setting admin block for collection {collection_id} to {req.blocked} by user {user.get('user_id')}")
+    logger.info(
+        f"Setting admin block for collection {collection_id} to {req.blocked} by user {user.get('user_id')}"
+    )
 
     # Solo backoffice
     if user.get("user_type") != "backoffice":
@@ -1067,6 +1093,9 @@ async def set_admin_block(
             ),
         )
 
+    # ✅ normalizar scope para que no explote ni validaciones ni DB
+    scope_norm = _normalize_admin_scope(req.scope)
+
     # Validación CA1
     if req.blocked:
         if not req.scope or not req.reasonCode:
@@ -1079,7 +1108,9 @@ async def set_admin_block(
                     f"/collections/{collection_id}/admin-block",
                 ),
             )
-        if req.scope == "regions" and (not req.regions or len(req.regions) == 0):
+
+        # usar el scope normalizado (y no el raw)
+        if scope_norm == "regions" and (not req.regions or len(req.regions) == 0):
             return JSONResponse(
                 status_code=400,
                 content=create_error_response(
@@ -1094,7 +1125,7 @@ async def set_admin_block(
         success, error = await collections_db.set_admin_block(
             collection_id=collection_id,
             blocked=req.blocked,
-            scope=req.scope,
+            scope=scope_norm,          # ✅ acá también
             regions=req.regions,
             reason_code=req.reasonCode,
             user_id=user["user_id"],
@@ -1121,7 +1152,6 @@ async def set_admin_block(
                 ),
             )
 
-        # devolver colección actualizada
         collection = await collections_db.get_collection(collection_id, includeUnpublished=True)
         songs = await collections_db.get_songs_from_collection(collection_id)
 

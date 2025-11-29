@@ -9,6 +9,7 @@ from db.models import CollectionSong
 from bson import ObjectId
 from databases.collection_states import calculate_effective_state, should_auto_activate
 from databases.audit_database import log_collection_change
+from enum import Enum as PyEnum
 
 USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
 
@@ -837,6 +838,36 @@ async def configure_publication_window(
         logger.error(f"Failed to configure publication window for collection {collection_id}: {str(e)}")
         return (False, str(e))
 
+def _normalize_admin_scope(scope) -> str:
+    """
+    Normaliza scope a los únicos valores permitidos por schema:
+    "global" | "regions"
+    Soporta: Enum (AdminBlockScope.GLOBAL), strings "AdminBlockScope.GLOBAL", etc.
+    """
+    if scope is None:
+        return "global"
+
+    # Enum -> value
+    if isinstance(scope, PyEnum):
+        scope = scope.value
+
+    if not isinstance(scope, str):
+        return "global"
+
+    s = scope.strip()
+
+    # "AdminBlockScope.GLOBAL" -> "GLOBAL"
+    if s.startswith("AdminBlockScope."):
+        s = s.split(".", 1)[1]
+
+    s = s.lower()
+
+    if s == "global":
+        return "global"
+    if s in ("regions", "region", "regiones"):
+        return "regions"
+
+    return "global"
 
 async def set_admin_block(
     collection_id: str,
@@ -846,37 +877,31 @@ async def set_admin_block(
     reason_code: str | None = None,
     user_id: str | None = None
 ):
-    """
-    Set or remove admin block on a collection, with scope + reason code.
-
-    - blocked=True: requiere scope + reason_code. Si scope="regions", requiere regions.
-    - blocked=False: elimina el override (adminBlock) y vuelve a aplicar la disponibilidad vigente.
-
-    Auditoría (CA4): usuario, timestamp, alcance(scope/regions) y motivo(reasonCode)
-    """
     db = get_db()
     try:
         collection = await get_collection(collection_id, includeUnpublished=True)
         if not collection:
             return (False, "Collection not found")
 
+        scope_norm = _normalize_admin_scope(scope)
+
         # Validaciones CA1 (en backend por seguridad)
         if blocked:
             if not scope or not reason_code:
                 return (False, "scope and reasonCode are required when blocking")
-            if scope == "regions" and (not regions or len(regions) == 0):
+            if scope_norm == "regions" and (not regions or len(regions) == 0):
                 return (False, "regions is required when scope=regions")
 
         previous_state = calculate_effective_state(collection, user_country=None)
         previous_bloqueado_admin = collection.get("bloqueadoAdmin", False)
-        previous_admin_block = collection.get("adminBlock")
+        previous_admin_block = collection.get("adminBlock") or {}
 
         now = datetime.now(timezone.utc)
 
         if blocked:
             admin_block = {
                 "enabled": True,
-                "scope": (scope or "global"),
+                "scope": scope_norm,          # ✅ SIEMPRE "global" | "regions"
                 "regions": regions or [],
                 "reasonCode": reason_code,
                 "by": user_id,
@@ -887,23 +912,19 @@ async def set_admin_block(
             update = {"$unset": {"adminBlock": ""}, "$set": {"bloqueadoAdmin": False}}
 
         result = db.collections.update_one({"_id": ObjectId(collection_id)}, update)
-
         if result.matched_count == 0:
             return (False, "Collection not found")
-
-        # si no modificó, igual está en el estado pedido => OK
-
 
         updated_collection = await get_collection(collection_id, includeUnpublished=True)
         new_state = calculate_effective_state(updated_collection, user_country=None) if updated_collection else previous_state
 
         # Auditoría CA4 (incluye alcance + motivo)
         if user_id:
-            # motivo en desbloqueo: usar el anterior o UNBLOCK
-            unblock_reason = reason_code or (previous_admin_block or {}).get("reasonCode") or "UNBLOCK"
+            unblock_reason = reason_code or previous_admin_block.get("reasonCode") or "UNBLOCK"
+
             meta = {
-                "scope": (scope or (previous_admin_block or {}).get("scope") or "global"),
-                "regions": regions or (previous_admin_block or {}).get("regions") or [],
+                "scope": scope_norm if blocked else _normalize_admin_scope(previous_admin_block.get("scope")),
+                "regions": (regions or []) if blocked else (previous_admin_block.get("regions") or []),
                 "reasonCode": reason_code if blocked else unblock_reason,
                 "action": "admin_block" if blocked else "admin_unblock",
             }
@@ -925,7 +946,6 @@ async def set_admin_block(
     except Exception as e:
         logger.error(f"Failed to set admin block for collection {collection_id}: {str(e)}")
         return (False, str(e))
-
 
 async def auto_activate_scheduled_collections():
     """
