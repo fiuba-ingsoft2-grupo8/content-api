@@ -129,7 +129,7 @@ class TestGetUserActivity:
 
     @pytest.mark.asyncio
     async def test_get_user_activity_with_shares(self, mock_db):
-        """Test getting activity for a user with shares."""
+        """Test getting activity for a user with shares (viewing own activity)."""
         user_id = "user_share"
         target_id = ObjectId()
         
@@ -152,7 +152,8 @@ class TestGetUserActivity:
         ])
         
         with patch("databases.activity_database.get_db", return_value=mock_db):
-            activities = await get_user_activity(user_id)
+            # When viewing own activity, should see all shares
+            activities = await get_user_activity(user_id, requesting_user_id=user_id)
             
             assert len(activities) == 2
             
@@ -166,6 +167,89 @@ class TestGetUserActivity:
             assert activities[1]["type"] == "share"
             assert activities[1]["targetType"] == "playlist"
             assert activities[1]["recipientId"] == "recipient_123"
+
+    @pytest.mark.asyncio
+    async def test_get_user_activity_shares_privacy_filter(self, mock_db):
+        """Test that shares are filtered when viewing another user's activity."""
+        user_id = "user_with_shares"
+        requesting_user_id = "requesting_user"
+        other_user_id = "other_user"
+        target_id = ObjectId()
+        
+        now = datetime.now(timezone.utc)
+        
+        # User has shared to multiple recipients
+        mock_db.shares.insert_many([
+            {
+                "user_id": user_id,
+                "target_id": target_id,
+                "target_type": "song",
+                "recipient_id": requesting_user_id,  # Share to requesting user
+                "created_at": now - timedelta(hours=1)
+            },
+            {
+                "user_id": user_id,
+                "target_id": target_id,
+                "target_type": "playlist",
+                "recipient_id": other_user_id,  # Share to someone else
+                "created_at": now - timedelta(hours=2)
+            },
+            {
+                "user_id": user_id,
+                "target_id": target_id,
+                "target_type": "collection",
+                "recipient_id": requesting_user_id,  # Another share to requesting user
+                "created_at": now - timedelta(hours=3)
+            }
+        ])
+        
+        with patch("databases.activity_database.get_db", return_value=mock_db):
+            # When requesting user views another user's activity, 
+            # should only see shares made to them
+            activities = await get_user_activity(user_id, requesting_user_id=requesting_user_id)
+            
+            assert len(activities) == 2  # Only 2 shares to requesting_user_id
+            
+            # All returned shares should have requesting_user_id as recipient
+            for activity in activities:
+                assert activity["type"] == "share"
+                assert activity["userId"] == user_id
+                assert activity["recipientId"] == requesting_user_id
+    
+    @pytest.mark.asyncio
+    async def test_get_user_activity_shares_no_matching_recipient(self, mock_db):
+        """Test viewing another user's activity when no shares were made to you."""
+        user_id = "user_with_shares"
+        requesting_user_id = "requesting_user"
+        other_user_id = "other_user"
+        target_id = ObjectId()
+        
+        now = datetime.now(timezone.utc)
+        
+        # User has only shared to other users, not to requesting user
+        mock_db.shares.insert_many([
+            {
+                "user_id": user_id,
+                "target_id": target_id,
+                "target_type": "song",
+                "recipient_id": other_user_id,
+                "created_at": now - timedelta(hours=1)
+            },
+            {
+                "user_id": user_id,
+                "target_id": target_id,
+                "target_type": "playlist",
+                "recipient_id": "another_user",
+                "created_at": now - timedelta(hours=2)
+            }
+        ])
+        
+        with patch("databases.activity_database.get_db", return_value=mock_db):
+            # When requesting user views another user's activity,
+            # should not see any shares
+            activities = await get_user_activity(user_id, requesting_user_id=requesting_user_id)
+            
+            assert len(activities) == 0
 
     @pytest.mark.asyncio
     async def test_get_user_activity_mixed_types(self, mock_db):
@@ -206,7 +290,8 @@ class TestGetUserActivity:
         })
         
         with patch("databases.activity_database.get_db", return_value=mock_db):
-            activities = await get_user_activity(user_id)
+            # Viewing own activity - should see all activities including shares
+            activities = await get_user_activity(user_id, requesting_user_id=user_id)
             
             assert len(activities) == 4
             
@@ -357,7 +442,8 @@ class TestGetUserActivity:
         })
         
         with patch("databases.activity_database.get_db", return_value=mock_db):
-            activities = await get_user_activity(user_id, activity_type="share")
+            # Viewing own activity with filter
+            activities = await get_user_activity(user_id, activity_type="share", requesting_user_id=user_id)
             
             assert len(activities) == 1
             assert all(a["type"] == "share" for a in activities)

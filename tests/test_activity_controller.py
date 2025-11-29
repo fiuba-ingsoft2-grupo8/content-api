@@ -273,3 +273,258 @@ class TestActivityEndpoints:
             assert isinstance(data, list)
             assert len(data) == 0
 
+    def test_share_privacy_own_activity(self, client, mock_db):
+        """Test that viewing own activity shows all shares."""
+        from datetime import datetime, timezone
+        from bson import ObjectId
+        
+        # Create some songs
+        song1 = client.post("/songs", json={"title": "Song 1", "duration": "180"}).json()["data"]
+        song2 = client.post("/songs", json={"title": "Song 2", "duration": "200"}).json()["data"]
+        
+        # Manually insert shares to different recipients (simulating shares made by test_user_123)
+        now = datetime.now(timezone.utc)
+        mock_db.shares.insert_many([
+            {
+                "user_id": "test_user_123",
+                "target_id": ObjectId(song1["_id"]),
+                "target_type": "song",
+                "recipient_id": "other_user_456",
+                "created_at": now
+            },
+            {
+                "user_id": "test_user_123",
+                "target_id": ObjectId(song2["_id"]),
+                "target_type": "song",
+                "recipient_id": "another_user_789",
+                "created_at": now
+            }
+        ])
+        
+        # Get own activity - should see all shares
+        response = client.get("/activity/test_user_123")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        
+        share_activities = [a for a in data if a["type"] == "share"]
+        assert len(share_activities) == 2
+        
+        # Verify both shares are present
+        recipient_ids = {a["recipientId"] for a in share_activities}
+        assert "other_user_456" in recipient_ids
+        assert "another_user_789" in recipient_ids
+
+    def test_share_privacy_other_user_activity(self, mock_db):
+        """Test that viewing another user's activity only shows shares made to you."""
+        from datetime import datetime, timezone, timedelta
+        from bson import ObjectId
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        from main import app
+        from auth import verify_token
+        
+        # Create test client
+        def _get_test_db():
+            return mock_db
+        
+        with patch("db.database.get_db", side_effect=_get_test_db), \
+             patch("databases.songs_database.get_db", side_effect=_get_test_db), \
+             patch("databases.activity_database.get_db", side_effect=_get_test_db), \
+             patch("databases.share_database.get_db", side_effect=_get_test_db):
+            
+            client = TestClient(app)
+            
+            # Create some songs as the first user (test_user_123)
+            song1 = client.post("/songs", json={"title": "Shared Song 1", "duration": "180"}).json()["data"]
+            song2 = client.post("/songs", json={"title": "Shared Song 2", "duration": "200"}).json()["data"]
+            song3 = client.post("/songs", json={"title": "Shared Song 3", "duration": "220"}).json()["data"]
+            
+            now = datetime.now(timezone.utc)
+            
+            # User test_user_123 shares songs to multiple recipients
+            mock_db.shares.insert_many([
+                {
+                    "user_id": "test_user_123",
+                    "target_id": ObjectId(song1["_id"]),
+                    "target_type": "song",
+                    "recipient_id": "other_user_456",  # Share to other_user_456
+                    "created_at": now - timedelta(hours=1)
+                },
+                {
+                    "user_id": "test_user_123",
+                    "target_id": ObjectId(song2["_id"]),
+                    "target_type": "song",
+                    "recipient_id": "someone_else",  # Share to someone else
+                    "created_at": now - timedelta(hours=2)
+                },
+                {
+                    "user_id": "test_user_123",
+                    "target_id": ObjectId(song3["_id"]),
+                    "target_type": "song",
+                    "recipient_id": "other_user_456",  # Another share to other_user_456
+                    "created_at": now - timedelta(hours=3)
+                }
+            ])
+            
+            # Override verify_token dependency to return other_user_456
+            async def mock_verify_other_user():
+                return {"user_id": "other_user_456", "stage_name": "Other Artist", "user_type": "artist", "country": "GB"}
+            
+            app.dependency_overrides[verify_token] = mock_verify_other_user
+            
+            try:
+                # other_user_456 views test_user_123's activity
+                # Should only see shares where other_user_456 is the recipient
+                response = client.get("/activity/test_user_123")
+                assert response.status_code == 200
+                data = response.json()["data"]
+                
+                share_activities = [a for a in data if a["type"] == "share"]
+                
+                # Should only see 2 shares (the ones made to other_user_456)
+                assert len(share_activities) == 2
+                
+                # All returned shares should have other_user_456 as recipient
+                for share in share_activities:
+                    assert share["recipientId"] == "other_user_456"
+                    assert share["userId"] == "test_user_123"
+                
+                # Verify the specific songs
+                shared_song_ids = {a["targetId"] for a in share_activities}
+                assert song1["_id"] in shared_song_ids
+                assert song3["_id"] in shared_song_ids
+                assert song2["_id"] not in shared_song_ids  # This was shared to someone_else
+            finally:
+                # Clean up dependency override
+                app.dependency_overrides.clear()
+
+    def test_share_privacy_no_shares_to_requesting_user(self, mock_db):
+        """Test that viewing another user's activity shows no shares if none were made to you."""
+        from datetime import datetime, timezone
+        from bson import ObjectId
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        from main import app
+        from auth import verify_token
+        
+        # Create test client
+        def _get_test_db():
+            return mock_db
+        
+        with patch("db.database.get_db", side_effect=_get_test_db), \
+             patch("databases.songs_database.get_db", side_effect=_get_test_db), \
+             patch("databases.activity_database.get_db", side_effect=_get_test_db), \
+             patch("databases.share_database.get_db", side_effect=_get_test_db):
+            
+            client = TestClient(app)
+            
+            # Create a song as the first user
+            song = client.post("/songs", json={"title": "Private Share", "duration": "180"}).json()["data"]
+            
+            now = datetime.now(timezone.utc)
+            
+            # test_user_123 shares song to someone else (not to other_user_456)
+            mock_db.shares.insert_one({
+                "user_id": "test_user_123",
+                "target_id": ObjectId(song["_id"]),
+                "target_type": "song",
+                "recipient_id": "completely_different_user",
+                "created_at": now
+            })
+            
+            # Override verify_token dependency to return other_user_456
+            async def mock_verify_other_user():
+                return {"user_id": "other_user_456", "stage_name": "Other Artist", "user_type": "artist", "country": "GB"}
+            
+            app.dependency_overrides[verify_token] = mock_verify_other_user
+            
+            try:
+                # other_user_456 views test_user_123's activity
+                # Should not see any shares
+                response = client.get("/activity/test_user_123")
+                assert response.status_code == 200
+                data = response.json()["data"]
+                
+                share_activities = [a for a in data if a["type"] == "share"]
+                
+                # Should see no shares since none were made to other_user_456
+                assert len(share_activities) == 0
+            finally:
+                # Clean up dependency override
+                app.dependency_overrides.clear()
+
+    def test_share_privacy_with_activity_type_filter(self, mock_db):
+        """Test that share privacy filtering works with activity_type filter."""
+        from datetime import datetime, timezone
+        from bson import ObjectId
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        from main import app
+        from auth import verify_token
+        
+        # Create test client
+        def _get_test_db():
+            return mock_db
+        
+        with patch("db.database.get_db", side_effect=_get_test_db), \
+             patch("databases.songs_database.get_db", side_effect=_get_test_db), \
+             patch("databases.activity_database.get_db", side_effect=_get_test_db), \
+             patch("databases.share_database.get_db", side_effect=_get_test_db):
+            
+            client = TestClient(app)
+            
+            # Create songs
+            song1 = client.post("/songs", json={"title": "Song A", "duration": "180"}).json()["data"]
+            song2 = client.post("/songs", json={"title": "Song B", "duration": "200"}).json()["data"]
+            
+            now = datetime.now(timezone.utc)
+            
+            # Add shares to different recipients
+            mock_db.shares.insert_many([
+                {
+                    "user_id": "test_user_123",
+                    "target_id": ObjectId(song1["_id"]),
+                    "target_type": "song",
+                    "recipient_id": "other_user_456",
+                    "created_at": now
+                },
+                {
+                    "user_id": "test_user_123",
+                    "target_id": ObjectId(song2["_id"]),
+                    "target_type": "song",
+                    "recipient_id": "someone_else",
+                    "created_at": now
+                }
+            ])
+            
+            # Also add a like activity
+            mock_db.likes.insert_one({
+                "user_id": "test_user_123",
+                "target_id": ObjectId(song1["_id"]),
+                "target_type": "song",
+                "created_at": now
+            })
+            
+            # Override verify_token dependency to return other_user_456
+            async def mock_verify_other_user():
+                return {"user_id": "other_user_456", "stage_name": "Other Artist", "user_type": "artist", "country": "GB"}
+            
+            app.dependency_overrides[verify_token] = mock_verify_other_user
+            
+            try:
+                # other_user_456 views test_user_123's activity with share filter
+                response = client.get("/activity/test_user_123?activity_type=share")
+                assert response.status_code == 200
+                data = response.json()["data"]
+                
+                # Should only see shares
+                assert all(a["type"] == "share" for a in data)
+                
+                # Should only see 1 share (the one made to other_user_456)
+                assert len(data) == 1
+                assert data[0]["recipientId"] == "other_user_456"
+                assert data[0]["targetId"] == song1["_id"]
+            finally:
+                # Clean up dependency override
+                app.dependency_overrides.clear()
+
