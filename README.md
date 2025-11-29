@@ -11,6 +11,30 @@ Construido con FastAPI (Python) y MongoDB, con soporte para:
 
 ⸻
 
+# Índice
+1. [Stack y decisiones de diseño](#-stack-y-decisiones-de-diseño)
+
+2. [Configuración y Ejecución](#️-configuración-y-ejecución)
+   1. [Modo Local con base de datos local (PostgreSQL para pruebas + Mongo local)](#1-modo-local-con-base-de-datos-local-postgresql-para-pruebas--mongo-local)
+   2. [Modo Remoto (conectar a DB remota)](#2-modo-remoto-conectar-a-db-remota)
+   3. [Variables de Entorno](#-variables-de-entorno)
+
+3. [📍 Rutas Principales (visión general)](#-rutas-principales-visión-general)
+
+4. [Autenticación](#-autenticación)
+
+5. [Testing](#-testing)
+
+6. [Ejecutar](#-ejecutar)
+
+7. [Sistema de Métricas de Reproducción](#-sistema-de-métricas-de-reproducción)
+   1. [Sistema de Lanzamientos Programados](#-sistema-de-lanzamientos-programados)
+   2. [Sistema de Popularidad Mejorado](#-sistema-de-popularidad-mejorado)
+
+⸻
+
+Si querés, puedo autogenerarte todas las secciones completas del README siguiendo este índice.
+
 # 🧱 Stack y decisiones de diseño
 
 ### ¿Por qué Python + FastAPI?
