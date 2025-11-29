@@ -62,8 +62,11 @@ class TestDailyMixEndpoint:
             assert result.status_code == 201
 
         # Set user preferences to Rock
-        with patch("databases.preferences_database.get_user_genres") as mock_get_genres:
+        with patch("databases.preferences_database.get_user_genres") as mock_get_genres, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_get_genres.return_value = "Rock"
+            # Mock filter to return all songs (no geographic restrictions in test)
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/daily-mix")
             
@@ -83,9 +86,11 @@ class TestDailyMixEndpoint:
             })
 
         with patch("databases.preferences_database.get_user_genres") as mock_get_genres, \
-             patch("databases.preferences_database.get_available_genres") as mock_get_available:
+             patch("databases.preferences_database.get_available_genres") as mock_get_available, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_get_genres.return_value = None
             mock_get_available.return_value = ["Pop", "Rock"]
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/daily-mix")
             
@@ -96,9 +101,11 @@ class TestDailyMixEndpoint:
     def test_daily_mix_creates_new_playlist(self, client):
         """Test daily mix creates a new playlist if none exists."""
         with patch("databases.preferences_database.get_user_genres") as mock_get_genres, \
-             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs:
+             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_get_genres.return_value = "Pop"
             mock_get_songs.return_value = []
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/daily-mix")
             
@@ -110,9 +117,11 @@ class TestDailyMixEndpoint:
     def test_daily_mix_returns_existing_playlist(self, client):
         """Test daily mix returns existing playlist instead of creating duplicate."""
         with patch("databases.preferences_database.get_user_genres") as mock_get_genres, \
-             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs:
+             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_get_genres.return_value = "Pop"
             mock_get_songs.return_value = []
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             # First call creates playlist
             response1 = client.get("/recommendations/daily-mix")
@@ -136,8 +145,10 @@ class TestMoodMixEndpoint:
                 "duration": song["duration"]
             })
 
-        with patch("databases.preferences_database.get_random_genre") as mock_random_genre:
+        with patch("databases.preferences_database.get_random_genre") as mock_random_genre, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_random_genre.return_value = "Jazz"
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/mood-mix")
             
@@ -150,10 +161,12 @@ class TestMoodMixEndpoint:
         """Test mood mix falls back to available genres when random returns None."""
         with patch("databases.preferences_database.get_random_genre") as mock_random_genre, \
              patch("databases.preferences_database.get_available_genres") as mock_available, \
-             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs:
+             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_random_genre.return_value = None
             mock_available.return_value = ["Pop", "Rock"]
             mock_get_songs.return_value = []
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/mood-mix")
             
@@ -171,9 +184,11 @@ class TestMoodMixEndpoint:
             })
 
         with patch("databases.preferences_database.get_random_genre") as mock_random, \
-             patch("databases.preferences_database.get_available_genres") as mock_available:
+             patch("databases.preferences_database.get_available_genres") as mock_available, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_random.return_value = "Jazz"  # This won't have songs
             mock_available.return_value = ["Rock", "Pop"]  # Rock will have songs
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/mood-mix")
             
@@ -185,10 +200,12 @@ class TestMoodMixEndpoint:
         """Test mood mix handles case when no songs are found."""
         with patch("databases.preferences_database.get_random_genre") as mock_random, \
              patch("databases.preferences_database.get_available_genres") as mock_available, \
-             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs:
+             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_random.return_value = "Jazz"
             mock_available.return_value = []
             mock_get_songs.return_value = []
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/mood-mix")
             
@@ -211,9 +228,11 @@ class TestBecauseYouListenedEndpoint:
             })
 
         with patch("databases.metrics_database.get_user_top_n_plays") as mock_top_plays, \
-             patch("databases.collections_database.get_collections") as mock_get_collections:
+             patch("databases.collections_database.get_collections") as mock_get_collections, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_top_plays.return_value = [{"artist": "Test Artist", "song_id": str(ObjectId())}]
             mock_get_collections.return_value = [sample_collection]
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/because-you-listened")
             
@@ -226,10 +245,12 @@ class TestBecauseYouListenedEndpoint:
         """Test because you listened when user has no play history."""
         with patch("databases.metrics_database.get_user_top_n_plays") as mock_top_plays, \
              patch("databases.preferences_database.get_available_genres") as mock_available, \
-             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs:
+             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_top_plays.return_value = []
             mock_available.return_value = ["Pop"]
             mock_get_songs.return_value = []
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/because-you-listened")
             
@@ -261,9 +282,11 @@ class TestBecauseYouListenedEndpoint:
         ]
 
         with patch("databases.metrics_database.get_user_top_n_plays") as mock_top_plays, \
-             patch("databases.collections_database.get_collections") as mock_get_collections:
+             patch("databases.collections_database.get_collections") as mock_get_collections, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_top_plays.return_value = [{"artist": "Test Artist", "song_id": str(ObjectId())}]
             mock_get_collections.return_value = collections
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/because-you-listened")
             
@@ -276,11 +299,13 @@ class TestBecauseYouListenedEndpoint:
         with patch("databases.metrics_database.get_user_top_n_plays") as mock_top_plays, \
              patch("databases.collections_database.get_collections") as mock_get_collections, \
              patch("databases.preferences_database.get_available_genres") as mock_available, \
-             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs:
+             patch("databases.songs_database.get_songs_by_genre") as mock_get_songs, \
+             patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
             mock_top_plays.return_value = [{"artist": "Test Artist", "song_id": str(ObjectId())}]
             mock_get_collections.return_value = [{"genre": "Jazz"}]
             mock_available.return_value = ["Pop"]
             mock_get_songs.return_value = []
+            mock_filter.side_effect = lambda user, songs, db=None: songs
             
             response = client.get("/recommendations/because-you-listened")
             
@@ -616,13 +641,15 @@ class TestRecommendationsIntegration:
                  patch("databases.preferences_database.get_available_genres") as mock_available, \
                  patch("databases.songs_database.get_songs_by_genre") as mock_songs, \
                  patch("databases.metrics_database.get_user_top_n_plays") as mock_plays, \
-                 patch("databases.collections_database.get_collections") as mock_collections:
+                 patch("databases.collections_database.get_collections") as mock_collections, \
+                 patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
                 mock_genres.return_value = "Pop"
                 mock_random.return_value = "Rock"
                 mock_available.return_value = ["Pop"]
                 mock_songs.return_value = []
                 mock_plays.return_value = []
                 mock_collections.return_value = []
+                mock_filter.side_effect = lambda user, songs, db=None: songs
                 
                 response = client.get(endpoint)
                 
@@ -650,13 +677,15 @@ class TestRecommendationsIntegration:
                  patch("databases.preferences_database.get_available_genres") as mock_available, \
                  patch("databases.songs_database.get_songs_by_genre") as mock_songs, \
                  patch("databases.metrics_database.get_user_top_n_plays") as mock_plays, \
-                 patch("databases.collections_database.get_collections") as mock_collections:
+                 patch("databases.collections_database.get_collections") as mock_collections, \
+                 patch("controllers.recomendations_controller._filter_songs_by_geography") as mock_filter:
                 mock_genres.return_value = "Pop"
                 mock_random.return_value = "Rock"
                 mock_available.return_value = ["Pop"]
                 mock_songs.return_value = []
                 mock_plays.return_value = []
                 mock_collections.return_value = []
+                mock_filter.side_effect = lambda user, songs, db=None: songs
                 
                 response = client.get(endpoint)
                 
