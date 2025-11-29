@@ -5,6 +5,7 @@ import httpx
 from auth import verify_token
 from resources.logger import logger
 import os
+from bson import ObjectId
 
 import databases.songs_database as songs_db
 import databases.metrics_database as metrics_db
@@ -12,17 +13,113 @@ import databases.collections_database as collections_db
 import databases.playlists_database as playlists_db
 from common.utils import serialize_collection, serialize_playlist, serialize_song
 import databases.preferences_database as preferences_db
+from db.database import get_db
+
 router = APIRouter()
 USER_API_BASE = os.getenv("USER_API_BASE", "http://host.docker.internal:8081")
+
+
+async def _filter_songs_by_geography(user: dict, songs: list, db=None) -> list:
+    """
+    Filter songs based on geographical restrictions of their collections.
+    
+    A song is accessible if:
+    - User is backoffice
+    - User is the owner of the song
+    - Song is not in any collection (standalone - available everywhere)
+    - Song is in at least one collection available in user's country
+    
+    Args:
+        user: User dictionary from verify_token
+        songs: List of song documents
+        db: Database instance (optional, will use get_db() if not provided)
+        
+    Returns:
+        list: Filtered list of accessible songs
+    """
+    # Backoffice users can access all songs
+    if user.get("user_type") == "backoffice":
+        return songs
+    
+    if db is None:
+        db = get_db()
+    
+    accessible_songs = []
+    user_country = user.get("country", "")
+    
+    for song in songs:
+        song_id = song.get("_id")
+        
+        # Check if user owns the song
+        if song.get("artistId") == user.get("user_id"):
+            accessible_songs.append(song)
+            continue
+        
+        # Get collections this song belongs to
+        collection_songs = list(db.collection_songs.find(
+            {"song_id": ObjectId(song_id)},
+            {"collection_id": 1}
+        ))
+        
+        # If song is not in any collection (standalone), it's available everywhere
+        if not collection_songs:
+            accessible_songs.append(song)
+            continue
+        
+        # Check if song is in at least one collection available in user's country
+        collection_ids = [cs["collection_id"] for cs in collection_songs]
+        
+        collections = list(db.collections.find(
+            {"_id": {"$in": collection_ids}},
+            {"availableCountries": 1}
+        ))
+        
+        is_accessible = False
+        for collection in collections:
+            available_countries = collection.get("availableCountries", [])
+            
+            # If collection has no restrictions, song is accessible
+            if not available_countries:
+                is_accessible = True
+                break
+            
+            # If user's country is in the available countries, song is accessible
+            if user_country in available_countries:
+                is_accessible = True
+                break
+        
+        if is_accessible:
+            accessible_songs.append(song)
+    
+    return accessible_songs
 
 @router.get("/daily-mix")
 async def get_daily_mix(user: dict = Depends(verify_token)):
     try:
         user_id = user["user_id"]
         user_genres = await preferences_db.get_user_genres(user_id)
-        songs = await songs_db.get_songs_by_genre(user_genres or "pop", limit=10)
-        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Daily Mix", songs)
-        return { "data": serialize_playlist(playlist, []) }
+        
+        # Get available genres from database as fallback
+        available_genres = await preferences_db.get_available_genres()
+        fallback_genres = available_genres if available_genres else ["pop", "rock", "hip-hop", "electronic"]
+        
+        genres_to_try = [user_genres] if user_genres else []
+        genres_to_try.extend(fallback_genres)
+        
+        songs = []
+        for genre in genres_to_try:
+            if genre:
+                songs = await songs_db.get_songs_by_genre(genre, limit=10)
+                if songs:
+                    logger.info(f"Found {len(songs)} songs for genre '{genre}'")
+                    break
+        
+        # Filter songs based on geographical restrictions
+        filtered_songs = await _filter_songs_by_geography(user, songs)
+        logger.info(f"Filtered {len(songs)} songs to {len(filtered_songs)} available in user's country")
+        
+        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Daily Mix", filtered_songs)
+        return { "data": serialize_playlist(playlist, filtered_songs) }
 
     except Exception as e:
         logger.error(f"Failed to fetch Daily Mix: {str(e)}")
@@ -32,12 +129,30 @@ async def get_daily_mix(user: dict = Depends(verify_token)):
 @router.get("/mood-mix")
 async def get_mood_mix(user: dict = Depends(verify_token)):
     try:
-        
         user_id = user["user_id"]
         playlist_genre = await preferences_db.get_random_genre()
-        songs = await songs_db.get_songs_by_genre(playlist_genre or "pop", limit=10)
-        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Mood Mix", songs)
-        return { "data": serialize_playlist(playlist, []) }
+        
+        # Get available genres from database as fallback
+        available_genres = await preferences_db.get_available_genres()
+        fallback_genres = available_genres if available_genres else ["pop", "rock", "hip-hop", "electronic"]
+        
+        genres_to_try = [playlist_genre] if playlist_genre else []
+        genres_to_try.extend(fallback_genres)
+        
+        songs = []
+        for genre in genres_to_try:
+            if genre:
+                songs = await songs_db.get_songs_by_genre(genre, limit=10)
+                if songs:
+                    logger.info(f"Found {len(songs)} songs for genre '{genre}'")
+                    break
+        
+        # Filter songs based on geographical restrictions
+        filtered_songs = await _filter_songs_by_geography(user, songs)
+        logger.info(f"Filtered {len(songs)} songs to {len(filtered_songs)} available in user's country")
+        
+        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Mood Mix", filtered_songs)
+        return { "data": serialize_playlist(playlist, filtered_songs) }
 
     except Exception as e:
         logger.error(f"Failed to fetch Mood Mix: {str(e)}")
@@ -67,11 +182,29 @@ async def get_because_you_listened_to(user: dict = Depends(verify_token)):
         songs = []
         for genre in genres:
             logger.info(f"Top artist {top_artist} has collection in genre: {genre}")
-            songs = await songs_db.get_songs_by_genre(genre or "pop", limit=10)
-            songs.extend(songs)
+            genre_songs = await songs_db.get_songs_by_genre(genre or "pop", limit=10)
+            if genre_songs:
+                songs.extend(genre_songs)
+        
+        # If no songs found from artist genres, try fallback genres
+        if not songs:
+            # Get available genres from database as fallback
+            available_genres = await preferences_db.get_available_genres()
+            fallback_genres = available_genres if available_genres else ["pop", "rock", "hip-hop", "electronic"]
+            
+            for genre in fallback_genres:
+                genre_songs = await songs_db.get_songs_by_genre(genre, limit=10)
+                if genre_songs:
+                    logger.info(f"Found {len(genre_songs)} songs for fallback genre '{genre}'")
+                    songs = genre_songs
+                    break
 
-        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Because You Listened To", songs)
-        return { "data": serialize_playlist(playlist, []) }
+        # Filter songs based on geographical restrictions
+        filtered_songs = await _filter_songs_by_geography(user, songs)
+        logger.info(f"Filtered {len(songs)} songs to {len(filtered_songs)} available in user's country")
+
+        playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Because You Listened To", filtered_songs)
+        return { "data": serialize_playlist(playlist, filtered_songs) }
 
     except Exception as e:
         logger.error(f"Failed to fetch BYL Mix: {str(e)}")
@@ -144,6 +277,7 @@ async def get_discover_more_from_artist(
 ):
     try:
         if not artist_id:
+            logger.info(f"No artist found")
             return {"collections": []}
 
         # Obtener colecciones del artista (solo publicadas si includeUnpublished=False)
@@ -153,22 +287,29 @@ async def get_discover_more_from_artist(
         )
 
         genres = set()
+        if len(artist_collections) == 0:
+            logger.info(f"No collections found by artist")
         for collection in artist_collections:
-            genre = collection.get("genre")
+            genre = collection["genre"]
             if genre:
                 genres.add(genre)
         
         genre_collections = []
         for genre in genres:
             logger.info(f"Artist {artist_id} has collection in genre: {genre}")
-            genre_collections_to_add = await collections_db.get_public_collections_by_genre(genre, limit=5)
+            genre_collections_to_add = await collections_db.get_collections(genre=genre)
+            logger.info("0\n")
+            for collection in genre_collections_to_add:
+                logger.info(f"{collection}")
             genre_collections.extend(genre_collections_to_add)
 
         serialized_collections = []
         for collection in genre_collections:
             songs = await collections_db.get_songs_from_collection(collection["_id"])
+            logger.info("1\n")
             serialized_collections.append(serialize_collection(collection, songs))
         
+        logger.info(f"serialized collections: {serialized_collections}")
         return {"collections": serialized_collections}
 
     except Exception as e:
@@ -192,7 +333,7 @@ async def get_shortcuts(user: dict = Depends(verify_token)):
             playlists = []
             collections = []
             for play in user_top_plays:
-                song = await songs_db.get_song_by_id(play["song_id"])
+                song = await songs_db.get_song(play["song_id"])
                 if not song:
                     continue
 
