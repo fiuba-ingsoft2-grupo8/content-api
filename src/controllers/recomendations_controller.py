@@ -32,12 +32,26 @@ async def get_daily_mix(user: dict = Depends(verify_token)):
 @router.get("/mood-mix")
 async def get_mood_mix(user: dict = Depends(verify_token)):
     try:
-        
         user_id = user["user_id"]
         playlist_genre = await preferences_db.get_random_genre()
-        songs = await songs_db.get_songs_by_genre(playlist_genre or "pop", limit=10)
+        
+        # Get available genres from database as fallback
+        available_genres = await preferences_db.get_available_genres()
+        fallback_genres = available_genres if available_genres else ["pop", "rock", "hip-hop", "electronic"]
+        
+        genres_to_try = [playlist_genre] if playlist_genre else []
+        genres_to_try.extend(fallback_genres)
+        
+        songs = []
+        for genre in genres_to_try:
+            if genre:
+                songs = await songs_db.get_songs_by_genre(genre, limit=10)
+                if songs:
+                    logger.info(f"Found {len(songs)} songs for genre '{genre}'")
+                    break
+        
         playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Mood Mix", songs)
-        return { "data": serialize_playlist(playlist, []) }
+        return { "data": serialize_playlist(playlist, songs) }
 
     except Exception as e:
         logger.error(f"Failed to fetch Mood Mix: {str(e)}")
@@ -67,11 +81,25 @@ async def get_because_you_listened_to(user: dict = Depends(verify_token)):
         songs = []
         for genre in genres:
             logger.info(f"Top artist {top_artist} has collection in genre: {genre}")
-            songs = await songs_db.get_songs_by_genre(genre or "pop", limit=10)
-            songs.extend(songs)
+            genre_songs = await songs_db.get_songs_by_genre(genre or "pop", limit=10)
+            if genre_songs:
+                songs.extend(genre_songs)
+        
+        # If no songs found from artist genres, try fallback genres
+        if not songs:
+            # Get available genres from database as fallback
+            available_genres = await preferences_db.get_available_genres()
+            fallback_genres = available_genres if available_genres else ["pop", "rock", "hip-hop", "electronic"]
+            
+            for genre in fallback_genres:
+                genre_songs = await songs_db.get_songs_by_genre(genre, limit=10)
+                if genre_songs:
+                    logger.info(f"Found {len(genre_songs)} songs for fallback genre '{genre}'")
+                    songs = genre_songs
+                    break
 
         playlist = await playlists_db.get_or_create_mix_playlist(user_id, "Because You Listened To", songs)
-        return { "data": serialize_playlist(playlist, []) }
+        return { "data": serialize_playlist(playlist, songs) }
 
     except Exception as e:
         logger.error(f"Failed to fetch BYL Mix: {str(e)}")
@@ -200,7 +228,7 @@ async def get_shortcuts(user: dict = Depends(verify_token)):
             playlists = []
             collections = []
             for play in user_top_plays:
-                song = await songs_db.get_song_by_id(play["song_id"])
+                song = await songs_db.get_song(play["song_id"])
                 if not song:
                     continue
 

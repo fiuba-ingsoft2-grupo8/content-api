@@ -45,6 +45,8 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
     - Forzamos tipos para que Pydantic no falle (description siempre str).
     - Campos opcionales con fallback.
     """
+    from datetime import datetime, timezone
+    
     cover_url = playlist.get("coverUrl")
     is_liked_songs = bool(playlist.get("isLikedSongs", False))
     is_mix = bool(playlist.get("isMix", False))
@@ -70,7 +72,7 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
                 title=_str_or_fallback(song.get("title"), "(sin título)"),
                 artist=_str_or_fallback(song.get("artist"), ""),
                 duration=_str_num(song.get("duration"), "0"),  # string (no int)
-                addedAt=song.get("added_at"),
+                addedAt=song.get("added_at") or datetime.now(timezone.utc),
                 order=_int_or_fallback(song.get("order"), 0),
             )
             for song in (songs or [])

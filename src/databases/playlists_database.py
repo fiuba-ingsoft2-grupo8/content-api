@@ -320,6 +320,22 @@ async def get_or_create_mix_playlist(user_id: str, name: str, songs: list):
 
     playlist = db.playlists.find_one({"userId": user_id, "name": name})
     if playlist:
+        # Update songs in the existing playlist
+        playlist_id = playlist["_id"]
+        
+        # Clear existing songs
+        db.playlist_songs.delete_many({"playlist_id": playlist_id})
+        
+        # Add new songs
+        for order, song in enumerate(songs, start=1):
+            playlist_song = PlaylistSong(
+                song_id=ObjectId(song["_id"]),
+                playlist_id=playlist_id,
+                order=order
+            )
+            db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
+        
+        logger.info(f"Updated mix playlist '{name}' with {len(songs)} songs")
         return playlist
     
     if name == "Daily Mix":
@@ -331,6 +347,7 @@ async def get_or_create_mix_playlist(user_id: str, name: str, songs: list):
     else:
         raise ValueError(f"Unknown mix type: {name}")
     
+    # Create playlist without songs
     playlist_doc, err = await create_mix_playlist(
         name=name,
         description="",
@@ -339,6 +356,22 @@ async def get_or_create_mix_playlist(user_id: str, name: str, songs: list):
         coverUrl=cover_url,
         isLikedSongs=False,
         isMix=True,
-        songs=songs
+        songs=[]  # Don't store songs in the document
     )
+    
+    if err:
+        logger.error(f"Error creating mix playlist: {err}")
+        return None
+    
+    # Add songs to playlist_songs collection
+    playlist_id = playlist_doc["_id"]
+    for order, song in enumerate(songs, start=1):
+        playlist_song = PlaylistSong(
+            song_id=ObjectId(song["_id"]),
+            playlist_id=playlist_id,
+            order=order
+        )
+        db.playlist_songs.insert_one(playlist_song.model_dump(by_alias=True))
+    
+    logger.info(f"Created mix playlist '{name}' with {len(songs)} songs")
     return playlist_doc
