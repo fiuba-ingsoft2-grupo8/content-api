@@ -224,7 +224,7 @@ async def get_new_releases(user: dict = Depends(verify_token), authorization: st
             headers["Authorization"] = authorization
 
         # timeouts: 5s connect, 20s total lectura
-        timeout = httpx.Timeout(20.0, connect=5.0)
+        timeout = httpx.Timeout(30.0, connect=10.0)
 
         followed_artists = []
 
