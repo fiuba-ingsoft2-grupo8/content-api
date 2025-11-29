@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime
 from fastapi import UploadFile, File
 from enum import Enum
@@ -291,13 +291,17 @@ class CollectionSong(SongBase):
     class Config:
         from_attributes = True
 
+
+
+class AdminBlock(BaseModel):
+    enabled: bool
+    scope: Literal["global", "regions"]
+    regions: List[str] = []
+    reasonCode: Optional[str] = None
+    at: Optional[datetime] = None
+    by: Optional[str] = None
+
 class CollectionBase(BaseModel):
-    """
-    Base Pydantic model for playlist data with common fields.
-    
-    This base class contains the core attributes that all collecttion-related
-    schemas share, promoting code reuse and consistency.
-    """
     id: str
     name: str
     artistId: str
@@ -308,18 +312,19 @@ class CollectionBase(BaseModel):
     createdAt: datetime
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
-    availableCountries: Optional[List[str]] = None  # List of country codes where content is available
+    availableCountries: Optional[List[str]] = None
+
+    # ✅ faltaban (vos ya los serializás)
+    noDisponibleDesde: Optional[datetime] = None
+    noDisponibleHasta: Optional[datetime] = None
+    effectiveStatus: Optional[str] = None  # o Literal[...] si querés
+
+    adminBlocked: Optional[bool] = False
+    adminBlock: Optional[AdminBlock] = None
+    bloqueadoAdmin: Optional[bool] = None  # legacy si lo querés exponer
 
 class Collection(CollectionBase):
-    """
-    Complete playlist representation with all metadata and songs.
-    
-    Extends PlaylistBase with database ID, publication status, timestamps,
-    and the list of songs in the playlist. Used for API responses when
-    returning complete playlist data.
-    """
     songs: List[CollectionSong] = []
-    # Optional popularity metrics (only present in popular collections endpoint)
     totalPlays: Optional[int] = None
     totalLikes: Optional[int] = None
     totalPlaylistSaves: Optional[int] = None
@@ -712,7 +717,6 @@ class TopPlaylistsResponse(BaseModel):
     """Response for top playlists endpoint."""
     data: List[TopPlaylist]
 
-# Preferences schemas
 class setGenresRequest(BaseModel):
     """
     Request body for setting user genre preferences.
@@ -720,12 +724,14 @@ class setGenresRequest(BaseModel):
     """
     data: List[str]
 
+
 class setArtistsRequest(BaseModel):
     """
     Request body for setting user artist preferences.
     Contains up to 3 artist identifiers.
     """
     data: List[str]
+
 
 # Artist appearances schemas
 class AppearsInCollection(BaseModel):
@@ -736,7 +742,7 @@ class AppearsInCollection(BaseModel):
     coverUrl: str
     type: str  # album, ep, single
     year: int  # Release year
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -745,9 +751,10 @@ class AppearsInCollection(BaseModel):
                 "artistName": "The Beatles",
                 "coverUrl": "https://example.com/cover.jpg",
                 "type": "album",
-                "year": 1969
+                "year": 1969,
             }
         }
+
 
 class AppearsInPlaylist(BaseModel):
     """Playlist in which artist appears."""
@@ -756,7 +763,7 @@ class AppearsInPlaylist(BaseModel):
     coverUrl: Optional[str] = None
     type: str = "playlist"
     year: int  # Year from published_at
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -764,14 +771,16 @@ class AppearsInPlaylist(BaseModel):
                 "name": "Rock Classics",
                 "coverUrl": "https://example.com/playlist.jpg",
                 "type": "playlist",
-                "year": 2024
+                "year": 2024,
             }
         }
+
 
 class ArtistAppearances(BaseModel):
     """Collections and playlists where artist appears."""
     collections: List[AppearsInCollection] = []
     playlists: List[AppearsInPlaylist] = []
+
 
 class ArtistAppearancesResponse(BaseModel):
     """Standard API response for artist appearances."""
