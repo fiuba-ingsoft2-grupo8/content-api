@@ -255,15 +255,17 @@ async def get_new_releases(user: dict = Depends(verify_token), authorization: st
             collections.extend(artist_collections)
 
         # Serializar colecciones
+        serialized_collections = []
+        for col in collections:
+            songs = await collections_db.get_songs_from_collection(col["_id"])
+            serialized_collections.append(serialize_collection(col, songs))
+        
         return {
-            "data": [
-                serialize_collection(col, await collections_db.get_songs_from_collection(col["_id"]))
-                for col in collections
-            ]
+            "data": serialized_collections
         }
 
     except Exception as e:
-        logger.error(f"Failed to get new releases: {str(e)}")
+        logger.error(f"Failed to get new releases: {type(e).__name__}: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=500,
             content={"error": "Failed to fetch new releases"}
