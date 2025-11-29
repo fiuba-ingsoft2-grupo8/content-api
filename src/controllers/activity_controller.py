@@ -86,6 +86,10 @@ async def get_user_activity(
     - `limit`: Número máximo de actividades a retornar (1-100, por defecto: 50)
     - `activity_type`: Filtro opcional por tipo. Valores válidos: 'like', 'play', 'playlist_published', 'share'
     
+    **Nota sobre privacidad de shares:**
+    - Si consultas tu propia actividad, verás todos tus shares
+    - Si consultas la actividad de otro usuario, solo verás los shares que ese usuario te hizo a ti
+    
     **Nota:** Las actividades se ordenan de más reciente a más antigua.
     
     **Retorna:**
@@ -93,10 +97,11 @@ async def get_user_activity(
     - 400: Error en los parámetros de la solicitud
     """
     try:
-        logger.info(f"Fetching activity for user {user_id} (limit={limit}, type={activity_type})")
+        requesting_user_id = user["user_id"]
+        logger.info(f"User {requesting_user_id} fetching activity for user {user_id} (limit={limit}, type={activity_type})")
         
-        # Get activities
-        activities = await activity_db.get_user_activity(user_id, limit, activity_type)
+        # Get activities with privacy filtering for shares
+        activities = await activity_db.get_user_activity(user_id, limit, activity_type, requesting_user_id)
         
         # Enrich with full details
         enriched_activities = await activity_db.enrich_activity_with_details(activities)
