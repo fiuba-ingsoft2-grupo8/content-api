@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime
 from fastapi import UploadFile, File
 from enum import Enum
@@ -291,49 +291,39 @@ class CollectionSong(SongBase):
     class Config:
         from_attributes = True
 
+
+
+      
 class CollectionBase(BaseModel):
-    """
-    Base Pydantic model for playlist data with common fields.
-    
-    This base class contains the core attributes that all collecttion-related
-    schemas share, promoting code reuse and consistency.
-    """
     id: str
     name: str
     artistId: str
     artistName: str
-    type: CollectionType
+    type: str
     genre: str
-    coverUrl: str
+    coverUrl: Optional[str] = None
     createdAt: datetime
     releaseDate: Optional[datetime] = None
     credits: Optional[List[str]] = None
-    availableCountries: Optional[List[str]] = None  # List of country codes where content is available
+    availableCountries: Optional[List[str]] = None
+
+    noDisponibleDesde: Optional[datetime] = None
+    noDisponibleHasta: Optional[datetime] = None
+    effectiveStatus: Optional[str] = None
+
+    adminBlocked: Optional[bool] = False
+    adminBlock: Optional[AdminBlock] = None
+
+    bloqueadoAdmin: Optional[bool] = None
+    bloqueadoAdminData: Optional[dict] = None
 
 class Collection(CollectionBase):
-    """
-    Complete playlist representation with all metadata and songs.
-    
-    Extends PlaylistBase with database ID, publication status, timestamps,
-    and the list of songs in the playlist. Used for API responses when
-    returning complete playlist data.
-    """
-    songs: List[CollectionSong] = []
-    # Optional popularity metrics (only present in popular collections endpoint)
+    songs: List["CollectionSong"] = []
     totalPlays: Optional[int] = None
     totalLikes: Optional[int] = None
     totalPlaylistSaves: Optional[int] = None
     totalShares: Optional[int] = None
     popularityScore: Optional[float] = None
-    # Admin block information
-    bloqueadoAdmin: Optional[bool] = None
-    bloqueadoAdminData: Optional[dict] = None  # Contains scope, regions, reasonCode, blockedAt, blockedBy
-    effectiveStatus: Optional[str] = None  # Effective state: publicado, programado, bloqueado-admin, no-disponible-region
-    noDisponibleDesde: Optional[datetime] = None
-    noDisponibleHasta: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 class SongWithEarlyRelease(BaseModel):
     """Song ID with optional early release date for collections."""
@@ -776,3 +766,23 @@ class ArtistAppearances(BaseModel):
 class ArtistAppearancesResponse(BaseModel):
     """Standard API response for artist appearances."""
     data: ArtistAppearances
+
+      
+class AdminBlock(BaseModel):
+    enabled: bool
+    scope: Literal["global", "regions"]
+    regions: List[str] = []
+    reasonCode: Optional[str] = None
+    at: Optional[datetime] = None
+    by: Optional[str] = None
+
+class AdminBlockScope(str, Enum):
+    GLOBAL = "global"
+    REGIONS = "regions"
+
+class AdminBlockRequest(BaseModel):
+    blocked: bool
+    scope: Optional[AdminBlockScope] = None
+    regions: Optional[List[str]] = None
+    reasonCode: Optional[str] = None
+
