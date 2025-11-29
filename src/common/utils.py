@@ -46,11 +46,8 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
     - Forzamos tipos para que Pydantic no falle (description siempre str).
     - Campos opcionales con fallback.
     """
-    from datetime import datetime, timezone
-    
     cover_url = playlist.get("coverUrl")
     is_liked_songs = bool(playlist.get("isLikedSongs", False))
-    is_mix = bool(playlist.get("isMix", False))
 
     # Fallbacks seguros para Pydantic
     _id = str(playlist.get("_id", ""))
@@ -73,14 +70,13 @@ def serialize_playlist(playlist: dict, songs: list) -> schemas.Playlist:
                 title=_str_or_fallback(song.get("title"), "(sin título)"),
                 artist=_str_or_fallback(song.get("artist"), ""),
                 duration=_str_num(song.get("duration"), "0"),  # string (no int)
-                addedAt=song.get("added_at") or datetime.now(timezone.utc),
+                addedAt=song.get("added_at"),
                 order=_int_or_fallback(song.get("order"), 0),
             )
             for song in (songs or [])
         ],
         coverUrl=cover_url,
         isLikedSongs=is_liked_songs,
-        isMix=is_mix,
     )
 
 
@@ -140,7 +136,7 @@ def serialize_collection(collection_or_col, *args, user_country=None) -> schemas
             "scope": admin_block.get("scope") or "global",
             "regions": admin_block.get("regions") or [],
             "reasonCode": admin_block.get("reasonCode"),
-            "by": None if by_val is None else str(by_val),
+            "by": None if by_val is None else str(by_val),  
             "at": _iso(admin_block.get("at")),
         }
 
@@ -178,12 +174,17 @@ def serialize_collection(collection_or_col, *args, user_country=None) -> schemas
         effectiveStatus=effective_status,
         adminBlock=admin_block_out,
         adminBlocked=admin_blocked,
+
+        # opcional legacy (si tu schema lo tiene; si no, borrá esta línea)
         bloqueadoAdmin=legacy_blocked,
+
         availableCountries=col.get("availableCountries", []),
+
         totalPlays=col.get("totalPlays"),
         totalLikes=col.get("totalLikes"),
         totalPlaylistSaves=col.get("totalPlaylistSaves"),
         totalShares=col.get("totalShares"),
         popularityScore=col.get("popularityScore"),
+
         songs=songs_out,
     )
