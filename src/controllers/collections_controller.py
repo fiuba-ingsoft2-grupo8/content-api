@@ -442,7 +442,7 @@ async def get_popular_collections(
             if not _can_access_collection(user, c):
                 continue
 
-            if not is_backoffice:
+            if not is_backoffice and not includeUnpublished:
                 # CA2: no debe aparecer si no es efectivamente "publicado" para ese país
                 st = calculate_effective_state(c, user_country)
                 if st != "publicado":
