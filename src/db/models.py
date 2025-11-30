@@ -71,6 +71,7 @@ class PlaylistSong(BaseModel):
     playlist_id: ObjectIdStr
     song_id: ObjectIdStr
     added_at: datetime = Field(default_factory=datetime.utcnow)
+    order: int
 
     model_config = {"populate_by_name": True, "arbitrary_types_allowed": True}
 
