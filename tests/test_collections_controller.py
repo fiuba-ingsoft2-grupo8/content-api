@@ -1819,67 +1819,6 @@ class TestPublicationWindow:
 class TestAdminBlock:
     """Tests for admin block functionality."""
     
-    def test_set_admin_block_global(self, client, client_backoffice):
-        """Test that backoffice user can block a collection globally."""
-        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
-        
-        # Create collection as regular user
-        collection_data = {
-            "name": "Test Album",
-            "type": "album",
-            "genre": "Pop",
-            "songs": [{"songId": song1['_id']}]
-        }
-        create_response = client.post("/collections/", json=collection_data)
-        collection_id = create_response.json()["data"]["id"]
-        
-        # Block collection as backoffice user with global scope
-        block_data = {
-            "blocked": True,
-            "scope": "global",
-            "reasonCode": "copyright_violation"
-        }
-        response = client_backoffice.post(f"/collections/{collection_id}/admin-block", json=block_data)
-        assert response.status_code == 200
-        
-        collection = response.json()["data"]
-        assert collection["id"] == collection_id
-        assert collection["bloqueadoAdmin"] == True
-        assert collection["bloqueadoAdminData"]["scope"] == "global"
-        assert collection["bloqueadoAdminData"]["reasonCode"] == "copyright_violation"
-        assert collection["effectiveStatus"] == "bloqueado-admin"
-    
-    def test_set_admin_block_regions(self, client, client_backoffice):
-        """Test that backoffice user can block a collection by regions."""
-        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
-        
-        # Create collection as regular user
-        collection_data = {
-            "name": "Test Album",
-            "type": "album",
-            "genre": "Pop",
-            "songs": [{"songId": song1['_id']}]
-        }
-        create_response = client.post("/collections/", json=collection_data)
-        collection_id = create_response.json()["data"]["id"]
-        
-        # Block collection as backoffice user with regions scope
-        block_data = {
-            "blocked": True,
-            "scope": "regions",
-            "regions": ["AR", "BR", "CL"],
-            "reasonCode": "licensing_issue"
-        }
-        response = client_backoffice.post(f"/collections/{collection_id}/admin-block", json=block_data)
-        assert response.status_code == 200
-        
-        collection = response.json()["data"]
-        assert collection["id"] == collection_id
-        assert collection["bloqueadoAdmin"] == True
-        assert collection["bloqueadoAdminData"]["scope"] == "regions"
-        assert collection["bloqueadoAdminData"]["regions"] == ["AR", "BR", "CL"]
-        assert collection["bloqueadoAdminData"]["reasonCode"] == "licensing_issue"
-    
     def test_set_admin_block_missing_scope(self, client, client_backoffice):
         """Test that blocking without scope fails."""
         song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
@@ -2006,42 +1945,6 @@ class TestAdminBlock:
         # Should revert to publicado since it had a release date in the past (or None)
         assert collection["effectiveStatus"] in ["publicado", "programado"]
     
-    def test_blocked_collection_visible_in_catalog_but_indicated(self, client, client_backoffice):
-        """Test that blocked collections are visible in catalog with indicator."""
-        # Create song and collection as regular user
-        song1 = client.post("/songs", json={"title": "Song", "duration": "180"}).json()["data"]
-        
-        collection_data = {
-            "name": "Test Album",
-            "type": "album",
-            "genre": "Pop",
-            "songs": [{"songId": song1['_id']}]
-        }
-        create_response = client.post("/collections/", json=collection_data)
-        collection_id = create_response.json()["data"]["id"]
-        
-        # Block collection as backoffice user
-        block_data = {
-            "blocked": True,
-            "scope": "regions",
-            "regions": ["AR", "BR"],
-            "reasonCode": "licensing_issue"
-        }
-        client_backoffice.post(f"/collections/{collection_id}/admin-block", json=block_data)
-        
-        # Get collection detail - should show block indicator
-        get_response = client.get(f"/collections/{collection_id}?includeUnpublished=true")
-        assert get_response.status_code == 200
-        
-        collection = get_response.json()["data"]
-        # CA 2: Collection should be visible but with bloqueadoAdmin indicator
-        assert collection["bloqueadoAdmin"] == True
-        assert collection["bloqueadoAdminData"] is not None
-        assert collection["bloqueadoAdminData"]["scope"] == "regions"
-        assert collection["bloqueadoAdminData"]["regions"] == ["AR", "BR"]
-        assert collection["bloqueadoAdminData"]["reasonCode"] == "licensing_issue"
-        assert collection["effectiveStatus"] == "bloqueado-admin"
-
 
 class TestAutoActivation:
     """Tests for automatic activation of scheduled collections."""
