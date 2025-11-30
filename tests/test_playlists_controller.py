@@ -328,6 +328,66 @@ class TestPlaylistController:
         final_playlist = client.get(f"/playlists/{playlist['id']}").json()["data"]
         assert len(final_playlist["songs"]) == 5
 
+    def test_songs_order_field_increments_correctly(self, client):
+        """Test that the order field increments correctly when adding songs to a playlist.
+        
+        This test verifies the fix for the bug where all songs had order=1 because
+        the order field wasn't defined in the PlaylistSong model.
+        """
+        from db.database import get_db
+        from bson import ObjectId
+        
+        # Create a playlist
+        playlist = client.post("/playlists", json={
+            "name": "Order Test Playlist",
+            "description": "Testing order field",
+            "userId": "test_user"
+        }).json()["data"]
+        
+        playlist_id = playlist['id']
+        
+        # Create and add 3 songs
+        song_ids = []
+        for i in range(3):
+            song = client.post("/songs", json={
+                "title": f"Song {i+1}",
+                "artist": f"Artist {i+1}",
+                "duration": "180"
+            }).json()["data"]
+            song_ids.append(song['_id'])
+            
+            # Add to playlist
+            response = client.post(f"/playlists/{playlist_id}/songs/{song['_id']}")
+            assert response.status_code == 200
+        
+        # Directly query the database to verify the order field
+        db = get_db()
+        playlist_songs = list(db.playlist_songs.find(
+            {"playlist_id": ObjectId(playlist_id)}
+        ).sort("order", 1))
+        
+        # Verify we have 3 songs
+        assert len(playlist_songs) == 3
+        
+        # Verify each song has the correct order field
+        for idx, ps in enumerate(playlist_songs):
+            expected_order = idx + 1
+            assert "order" in ps, f"Song {idx} is missing 'order' field"
+            assert ps["order"] == expected_order, \
+                f"Song {idx} has order={ps['order']}, expected {expected_order}"
+        
+        # Verify orders are 1, 2, 3 (not all 1s)
+        orders = [ps["order"] for ps in playlist_songs]
+        assert orders == [1, 2, 3], f"Expected orders [1, 2, 3], got {orders}"
+        
+        # Also verify through the API that songs are returned in correct order
+        final_playlist = client.get(f"/playlists/{playlist_id}").json()["data"]
+        assert len(final_playlist["songs"]) == 3
+        
+        # Verify the songs are in the correct order in the API response
+        api_orders = [song["order"] for song in final_playlist["songs"]]
+        assert api_orders == [1, 2, 3], f"API returned orders {api_orders}, expected [1, 2, 3]"
+
     def test_create_playlist_validation(self, client):
         """Test playlist creation with invalid data."""
         # Missing name
